@@ -27,6 +27,7 @@ describe('fsEvictionScanner', () => {
   beforeEach(async () => {
     jest.spyOn(Date, 'now').mockReturnValue(now)
     await initializeDB()
+    await app().settings.setIndexerURL(indexerURL)
     await app().storage.setItem('fsEvictionLastRun', '0')
   })
 

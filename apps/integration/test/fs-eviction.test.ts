@@ -4,6 +4,7 @@ import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
 import * as crypto from 'crypto'
 import * as nodeFs from 'fs'
 import { createTestApp, generateTestFiles, type TestApp } from './app'
+import { waitForCondition } from './utils'
 
 const INDEXER_URL = 'https://test.indexer'
 const ONE_HOUR = 60 * 60 * 1000
@@ -219,6 +220,67 @@ describe('FS Cache Eviction', () => {
       expect(await app.app.fs.readMeta(file.id)).not.toBeNull()
     }
   }, 60_000)
+
+  describe('after an indexer switch', () => {
+    const NEXT_INDEXER = 'https://next.indexer'
+
+    async function uploadedThenSwitched(count = 1) {
+      const files = await app.addFiles(generateTestFiles(count, { startId: 1, sizeBytes: 500 }))
+      await app.waitForNoActiveUploads()
+      // Offline, so the uploader cannot copy the file to the new indexer and the
+      // only object stays on the old one.
+      app.setConnected(false)
+      await app.app.settings.setIndexerURL(NEXT_INDEXER)
+      return files
+    }
+
+    it('keeps a file whose only object is on the previous indexer, through every pass', async () => {
+      const [file] = await uploadedThenSwitched()
+
+      const result = await runCacheEviction(app.app, EVICT_ALL_BACKED_UP)
+
+      expect(result!.evictedFileIds).toEqual([])
+      expect(await app.app.fs.readMeta(file.id)).not.toBeNull()
+    }, 60_000)
+
+    it('keeps a trashed file whose only object is on the previous indexer', async () => {
+      const [file] = await uploadedThenSwitched()
+      await app.app.files.trashFile(file.id)
+
+      const result = await runCacheEviction(app.app, EVICT_ALL_BACKED_UP)
+
+      expect(result!.evictedFileIds).toEqual([])
+      expect(await app.app.fs.readMeta(file.id)).not.toBeNull()
+    }, 60_000)
+
+    it('evicts a superseded version whose only object is on the previous indexer', async () => {
+      const [file] = await uploadedThenSwitched()
+      const record = (await app.app.files.getById(file.id))!
+      await supersedeFile(app, record, { id: 'newer' })
+
+      const result = await runCacheEviction(app.app, EVICT_ALL_BACKED_UP)
+
+      expect(result!.evictedFileIds).toContain(file.id)
+      expect(await app.app.fs.readMeta(file.id)).toBeNull()
+    }, 60_000)
+
+    it('evicts the file once the uploader has copied it to the new indexer', async () => {
+      const [file] = await uploadedThenSwitched()
+      app.setConnected(true)
+      await waitForCondition(
+        async () =>
+          (await app.app.localObjects.getRefsForFile(file.id)).some(
+            (ref) => ref.indexerURL === NEXT_INDEXER,
+          ),
+        { timeout: 30_000, message: 'the file to reach the new indexer' },
+      )
+
+      const result = await runCacheEviction(app.app, EVICT_ALL_BACKED_UP)
+
+      expect(result!.evictedFileIds).toEqual([file.id])
+      expect(await app.app.fs.readMeta(file.id)).toBeNull()
+    }, 60_000)
+  })
 
   it('LRU does not evict files younger than minAge', async () => {
     await app.addFiles(generateTestFiles(2, { startId: 1, sizeBytes: 2000 }))

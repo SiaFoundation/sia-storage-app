@@ -3,10 +3,18 @@ import { DEFAULT_INDEXER_URL, DEFAULT_MAX_DOWNLOADS, MAX_DOWNLOADS_SETTING } fro
 import { uniqueId } from '../../lib/uniqueId'
 import type { AppCaches, AppService } from '../service'
 
-/** Builds the settings namespace: typed getters/setters backed by key-value storage. */
+/**
+ * Builds the settings namespace: typed getters/setters backed by key-value storage.
+ *
+ * `onIndexerURLChanged` runs after a new indexer URL is stored, because whether
+ * a file counts as uploaded is relative to it, and the file browser has to
+ * re-read every file's upload state. If it throws, the previous URL is stored
+ * again and the error is rethrown.
+ */
 export function buildSettingsNamespace(
   storage: StorageAdapter,
   caches: AppCaches,
+  onIndexerURLChanged: () => Promise<void> = async () => {},
 ): AppService['settings'] {
   async function getBool(key: string, defaultValue: boolean): Promise<boolean> {
     const raw = await storage.getItem(key)
@@ -36,7 +44,19 @@ export function buildSettingsNamespace(
 
   return {
     getIndexerURL: () => getStr('indexerURL', DEFAULT_INDEXER_URL),
-    setIndexerURL: (v) => setStr('indexerURL', v),
+    setIndexerURL: async (v) => {
+      const previous = await getStr('indexerURL', DEFAULT_INDEXER_URL)
+      if (previous === v) return
+      await setStr('indexerURL', v)
+      // A failure keeps the old URL, so a retry with the same URL counts as a
+      // change and runs the callback again instead of returning here.
+      try {
+        await onIndexerURLChanged()
+      } catch (e) {
+        await setStr('indexerURL', previous)
+        throw e
+      }
+    },
     getHasOnboarded: () => getBool('hasOnboarded', false),
     setHasOnboarded: (v) => setBool('hasOnboarded', v),
     getShowAdvanced: () => getBool('showAdvanced', false),

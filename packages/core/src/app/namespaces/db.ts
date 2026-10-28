@@ -160,11 +160,11 @@ export function buildDbNamespaces(
     deleteMetaBatch: (fileIds) => ops.deleteManyFsMeta(db, fileIds),
     updateMetaUsedAt: (fileId, usedAt) => ops.updateFsMetaUsedAt(db, fileId, usedAt ?? Date.now()),
     calcTotalSize: () => ops.queryFsMetaTotalSize(db),
-    evictionCandidates: (thresholdUsedAt, limit) =>
-      ops.queryEvictionCandidates(db, thresholdUsedAt, limit),
+    evictionCandidates: (indexerURL, thresholdUsedAt, limit) =>
+      ops.queryEvictionCandidates(db, indexerURL, thresholdUsedAt, limit),
     nonCurrentCachedFiles: (thresholdUsedAt, limit) =>
       ops.queryNonCurrentCachedFiles(db, thresholdUsedAt, limit),
-    trashedCachedFiles: (limit) => ops.queryTrashedCachedFiles(db, limit),
+    trashedCachedFiles: (indexerURL, limit) => ops.queryTrashedCachedFiles(db, indexerURL, limit),
     findOrphanedFileIds: (fileIds) => ops.queryOrphanedFileIds(db, fileIds),
     liveFileTypes: (fileIds) => ops.queryLiveFileTypes(db, fileIds),
     inFlightImportFileIds: (fileIds) => ops.queryInFlightImportFileIds(db, fileIds),
@@ -869,6 +869,8 @@ export function buildDbNamespaces(
         }
       },
       countForFile: (fileId) => ops.countObjectsForFile(db, fileId),
+      countForFileOnIndexer: (fileId, indexerURL) =>
+        ops.countObjectsForFileOnIndexer(db, fileId, indexerURL),
       deleteManyByObjectIds: async (objectIds, indexerURL, opts) => {
         await ops.deleteManyObjectsByIds(db, objectIds, indexerURL)
         if (!opts?.skipInvalidation) {

@@ -8,6 +8,7 @@ import { migration_20260925_130000_prefix_content_hashes } from './20260925_1300
 import { migration_20261002_120000_share_links } from './20261002_120000_share_links'
 import { migration_20261004_120000_feed_departure_upserts } from './20261004_120000_feed_departure_upserts'
 import { migration_20261007_120000_compose_stored_names } from './20261007_120000_compose_stored_names'
+import { migration_20261028_120000_objects_feed_per_indexer } from './20261028_120000_objects_feed_per_indexer'
 
 export const coreMigrations: Migration[] = [
   migration_0001_init_schema,
@@ -19,6 +20,7 @@ export const coreMigrations: Migration[] = [
   migration_20261002_120000_share_links,
   migration_20261004_120000_feed_departure_upserts,
   migration_20261007_120000_compose_stored_names,
+  migration_20261028_120000_objects_feed_per_indexer,
 ]
 
 export function sortMigrations(migrations: Migration[]): Migration[] {

@@ -195,6 +195,7 @@ export {
   clearObjectIfUnchanged,
   clearObjectsNeedsSyncUp,
   countObjectsForFile,
+  countObjectsForFileOnIndexer,
   countSyncUpObjects,
   deleteObject,
   deleteObjectsForFile,

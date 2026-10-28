@@ -91,6 +91,19 @@ export async function countObjectsForFile(db: DatabaseAdapter, fileId: string): 
   return row?.count ?? 0
 }
 
+export async function countObjectsForFileOnIndexer(
+  db: DatabaseAdapter,
+  fileId: string,
+  indexerURL: string,
+): Promise<number> {
+  const row = await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM objects WHERE fileId = ? AND indexerURL = ?',
+    fileId,
+    indexerURL,
+  )
+  return row?.count ?? 0
+}
+
 export async function deleteObjectsForFile(db: DatabaseAdapter, fileId: string): Promise<void> {
   await sql.del(db, 'objects', { fileId })
 }

@@ -521,6 +521,8 @@ export interface AppService {
     ): Promise<void>
     /** Returns the count of local objects for a file. */
     countForFile(fileId: string): Promise<number>
+    /** Returns the count of local objects for a file on one indexer. */
+    countForFileOnIndexer(fileId: string, indexerURL: string): Promise<number>
     /** Deletes local objects by object IDs for a given indexer. */
     deleteManyByObjectIds(
       objectIds: string[],
@@ -564,16 +566,20 @@ export interface AppService {
     calcTotalSize(): Promise<number>
     /** Returns files eligible for eviction, ordered by least recently used. */
     evictionCandidates(
+      indexerURL: string,
       thresholdUsedAt: number,
       limit: number,
     ): Promise<{ fileId: string; size: number; type: string }[]>
-    /** Returns cached superseded file versions (current=0) eligible for eviction. */
+    /** Returns cached superseded file versions (current=0) uploaded to any indexer. */
     nonCurrentCachedFiles(
       thresholdUsedAt: number,
       limit: number,
     ): Promise<{ fileId: string; size: number; type: string }[]>
-    /** Returns cached trashed files (and their thumbs) that are uploaded. No age gate. */
-    trashedCachedFiles(limit: number): Promise<{ fileId: string; size: number; type: string }[]>
+    /** Returns cached trashed files (and their thumbs) uploaded to `indexerURL`. No age gate. */
+    trashedCachedFiles(
+      indexerURL: string,
+      limit: number,
+    ): Promise<{ fileId: string; size: number; type: string }[]>
     /** Returns the subset of fileIds that are orphaned (no fs row or soft-deleted). */
     findOrphanedFileIds(fileIds: string[]): Promise<Set<string>>
     /** Stored type of each live file among `fileIds`; absent when tombstoned or gone. */

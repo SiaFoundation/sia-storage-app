@@ -7,6 +7,7 @@ import type { ThumbnailAdapter } from '../../adapters/thumbnail'
 import type { FsIOAdapter } from '../../services/fsFileUri'
 import { type MemoryReader, TransferMemoryBudget } from '../../services/transferMemoryBudget'
 import type { UploaderAdapters, UploadManager } from '../../services/uploader'
+import { restampAllFiles } from '../../db/operations/providerChanges'
 import { swrCacheBy, swrFillableCacheBy } from '../../stores/swr'
 import { coalesceChanges, createAppEvents } from '../events'
 import { createLibraryVersionCache } from '../libraryVersionCache'
@@ -171,7 +172,10 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     transferBudget,
   )
 
-  const settingsNamespace = buildSettingsNamespace(adapters.storage, caches)
+  const settingsNamespace = buildSettingsNamespace(adapters.storage, caches, async () => {
+    await restampAllFiles(adapters.db)
+    caches.libraryVersion.invalidate()
+  })
   const authNamespace = buildAuthNamespace(adapters.secrets, adapters.crypto, adapters.sdkAuth)
 
   const sharesNamespace = buildSharesNamespace(

@@ -192,10 +192,12 @@ function makeFile(id: string, overrides?: Record<string, unknown>) {
   }
 }
 
-function makeObject(fileId: string) {
+const INDEXER = 'https://indexer.example.com'
+
+function makeObject(fileId: string, indexerURL = INDEXER) {
   return {
     fileId,
-    indexerURL: 'https://indexer.example.com',
+    indexerURL,
     id: `obj-${fileId}`,
     slabs: [],
     encryptedDataKey: new Uint8Array([1]).buffer as ArrayBuffer,
@@ -296,7 +298,7 @@ describe('queryEvictionCandidates (LRU)', () => {
     await upsertFsMeta(db(), { fileId: 'f1', size: 500, addedAt: 1000, usedAt: 1000 })
     await insertObject(db(), makeObject('f1'))
 
-    const rows = await queryEvictionCandidates(db(), 2000, 10)
+    const rows = await queryEvictionCandidates(db(), INDEXER, 2000, 10)
     expect(rows.map((r) => r.fileId)).toEqual(['f1'])
   })
 
@@ -315,7 +317,7 @@ describe('queryEvictionCandidates (LRU)', () => {
     await upsertFsMeta(db(), { fileId: 'orig-thumb', size: 50, addedAt: 1000, usedAt: 1000 })
     await insertObject(db(), makeObject('orig-thumb'))
 
-    const rows = await queryEvictionCandidates(db(), 2000, 10)
+    const rows = await queryEvictionCandidates(db(), INDEXER, 2000, 10)
     expect(rows).toHaveLength(0)
   })
 
@@ -325,7 +327,7 @@ describe('queryEvictionCandidates (LRU)', () => {
     await upsertFsMeta(db(), { fileId: 'v1', size: 500, addedAt: 1000, usedAt: 1000 })
     await insertObject(db(), makeObject('v1'))
 
-    const rows = await queryEvictionCandidates(db(), 2000, 10)
+    const rows = await queryEvictionCandidates(db(), INDEXER, 2000, 10)
     // Only v2 (current) should appear — but v2 has no fs row, so empty.
     expect(rows).toHaveLength(0)
   })
@@ -338,7 +340,7 @@ describe('queryEvictionCandidates (LRU)', () => {
     await insertObject(db(), makeObject('trashed'))
     await insertObject(db(), makeObject('tombstoned'))
 
-    const rows = await queryEvictionCandidates(db(), 2000, 10)
+    const rows = await queryEvictionCandidates(db(), INDEXER, 2000, 10)
     expect(rows).toHaveLength(0)
   })
 
@@ -346,7 +348,7 @@ describe('queryEvictionCandidates (LRU)', () => {
     await insertFile(db(), makeFile('local'))
     await upsertFsMeta(db(), { fileId: 'local', size: 500, addedAt: 1000, usedAt: 1000 })
 
-    const rows = await queryEvictionCandidates(db(), 2000, 10)
+    const rows = await queryEvictionCandidates(db(), INDEXER, 2000, 10)
     expect(rows).toHaveLength(0)
   })
 
@@ -355,8 +357,43 @@ describe('queryEvictionCandidates (LRU)', () => {
     await upsertFsMeta(db(), { fileId: 'fresh', size: 500, addedAt: 1000, usedAt: 5000 })
     await insertObject(db(), makeObject('fresh'))
 
-    const rows = await queryEvictionCandidates(db(), 2000, 10)
+    const rows = await queryEvictionCandidates(db(), INDEXER, 2000, 10)
     expect(rows).toHaveLength(0)
+  })
+})
+
+describe('eviction queries and the current indexer', () => {
+  const PREVIOUS = 'https://previous.example.com'
+
+  it('an LRU candidate needs an object on the indexer it is asked about', async () => {
+    await insertFile(db(), makeFile('f1'))
+    await upsertFsMeta(db(), { fileId: 'f1', size: 500, addedAt: 1000, usedAt: 1000 })
+    await insertObject(db(), makeObject('f1', PREVIOUS))
+
+    expect(await queryEvictionCandidates(db(), INDEXER, 2000, 10)).toEqual([])
+    await insertObject(db(), { ...makeObject('f1'), id: 'obj-f1-current' })
+    expect((await queryEvictionCandidates(db(), INDEXER, 2000, 10)).map((r) => r.fileId)).toEqual([
+      'f1',
+    ])
+  })
+
+  it('a superseded version uploaded only to another indexer is still a candidate', async () => {
+    await insertFile(db(), makeFile('v1', { name: 'photo.jpg', updatedAt: 1000 }))
+    await insertFile(db(), makeFile('v2', { name: 'photo.jpg', updatedAt: 2000 }))
+    await upsertFsMeta(db(), { fileId: 'v1', size: 500, addedAt: 1000, usedAt: 1000 })
+    await insertObject(db(), makeObject('v1', PREVIOUS))
+
+    expect((await queryNonCurrentCachedFiles(db(), 2000, 10)).map((r) => r.fileId)).toEqual(['v1'])
+  })
+
+  it('a trashed file on another indexer only is kept', async () => {
+    await insertFile(db(), makeFile('t1'))
+    await upsertFsMeta(db(), { fileId: 't1', size: 500, addedAt: 1000, usedAt: 1000 })
+    await insertObject(db(), makeObject('t1', PREVIOUS))
+    await trashFilesAndThumbnails(db(), ['t1'])
+
+    expect(await queryTrashedCachedFiles(db(), INDEXER, 10)).toEqual([])
+    expect((await queryTrashedCachedFiles(db(), PREVIOUS, 10)).map((r) => r.fileId)).toEqual(['t1'])
   })
 })
 
@@ -367,7 +404,7 @@ describe('queryTrashedCachedFiles', () => {
     await insertObject(db(), makeObject('f1'))
     await trashFilesAndThumbnails(db(), ['f1'])
 
-    const rows = await queryTrashedCachedFiles(db(), 10)
+    const rows = await queryTrashedCachedFiles(db(), INDEXER, 10)
     expect(rows.map((r) => r.fileId)).toEqual(['f1'])
   })
 
@@ -376,7 +413,7 @@ describe('queryTrashedCachedFiles', () => {
     await upsertFsMeta(db(), { fileId: 'f1', size: 500, addedAt: 1000, usedAt: 1000 })
     await trashFilesAndThumbnails(db(), ['f1'])
 
-    const rows = await queryTrashedCachedFiles(db(), 10)
+    const rows = await queryTrashedCachedFiles(db(), INDEXER, 10)
     expect(rows).toHaveLength(0)
   })
 
@@ -385,7 +422,7 @@ describe('queryTrashedCachedFiles', () => {
     await upsertFsMeta(db(), { fileId: 'f1', size: 500, addedAt: 1000, usedAt: 1000 })
     await insertObject(db(), makeObject('f1'))
 
-    const rows = await queryTrashedCachedFiles(db(), 10)
+    const rows = await queryTrashedCachedFiles(db(), INDEXER, 10)
     expect(rows).toHaveLength(0)
   })
 
@@ -394,7 +431,7 @@ describe('queryTrashedCachedFiles', () => {
     await upsertFsMeta(db(), { fileId: 'f1', size: 500, addedAt: 1000, usedAt: 1000 })
     await insertObject(db(), makeObject('f1'))
 
-    const rows = await queryTrashedCachedFiles(db(), 10)
+    const rows = await queryTrashedCachedFiles(db(), INDEXER, 10)
     expect(rows).toHaveLength(0)
   })
 
@@ -416,7 +453,7 @@ describe('queryTrashedCachedFiles', () => {
     await insertObject(db(), makeObject('thumb'))
     await trashFilesAndThumbnails(db(), ['orig'])
 
-    const rows = await queryTrashedCachedFiles(db(), 10)
+    const rows = await queryTrashedCachedFiles(db(), INDEXER, 10)
     expect(rows.map((r) => r.fileId).sort()).toEqual(['orig', 'thumb'])
   })
 })

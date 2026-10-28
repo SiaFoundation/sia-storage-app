@@ -15,7 +15,7 @@ import {
   syncDirectoryFromMetadata,
 } from './directories'
 import { insertFile, updateFile, upsertManyFiles } from './files'
-import { pruneFeedDepartures } from './providerChanges'
+import { pruneFeedDepartures, restampAllFiles } from './providerChanges'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
 
 beforeEach(setupTestDb)
@@ -343,6 +343,21 @@ describe('feed sequence triggers', () => {
       `SELECT directoryId, size FROM files WHERE id = 'kept'`,
     )
     expect(row).toEqual({ directoryId: dir.id, size: 200 })
+  })
+
+  it('restamping gives every file row one new sequence and leaves thumbnails alone', async () => {
+    await makeFile('a')
+    await makeFile('b')
+    await makeFile('t', { kind: 'thumb', thumbForId: 'a', thumbSize: 512 })
+    const thumbBefore = await fileSeq('t')
+    const before = await seq()
+
+    await restampAllFiles(db())
+
+    expect(await seq()).toBe(before + 1)
+    expect(await fileSeq('a')).toBe(before + 1)
+    expect(await fileSeq('b')).toBe(before + 1)
+    expect(await fileSeq('t')).toBe(thumbBefore)
   })
 
   it('pruning drops ledger rows below the horizon and records it', async () => {
