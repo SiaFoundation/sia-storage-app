@@ -43,14 +43,43 @@ export function swrCacheBy<T = unknown>() {
   const prefix = `swr/${nextId++}`
   const coalescers = new Map<string, ReturnType<typeof createCoalescer>>()
 
+  // A refresh of every mounted key in the cache, and the one queued behind it.
+  // SWR starts a new request per mutate() and discards the one in flight
+  // without stopping its reads, so calls arriving faster than a refresh
+  // finishes kept every count on screen from updating and filled the read
+  // pool's queue. A call during a refresh waits for one more refresh after
+  // it, which reads every write made before the call.
+  let refreshing: Promise<void> | null = null
+  let queued: Promise<void> | null = null
+
+  function refreshAll(): Promise<void> {
+    if (!refreshing) {
+      refreshing = mutate(
+        (key: unknown) =>
+          Array.isArray(key) && typeof key[0] === 'string' && key[0].startsWith(`${prefix}/`),
+      )
+        .then(
+          () => {},
+          () => {},
+        )
+        .finally(() => {
+          refreshing = null
+        })
+      return refreshing
+    }
+    if (!queued) {
+      queued = refreshing.then(() => {
+        queued = null
+        return refreshAll()
+      })
+    }
+    return queued
+  }
+
   const cache = {
     key: (...parts: string[]) => [`${prefix}/${parts.join('/')}`],
     invalidate: (...parts: string[]) => mutate([`${prefix}/${parts.join('/')}`]),
-    invalidateAll: () =>
-      mutate(
-        (key: unknown) =>
-          Array.isArray(key) && typeof key[0] === 'string' && key[0].startsWith(`${prefix}/`),
-      ),
+    invalidateAll: refreshAll,
     set: (data: T, ...parts: string[]) =>
       mutate([`${prefix}/${parts.join('/')}`], data ?? undefined, {
         revalidate: false,

@@ -12,12 +12,10 @@ jest.mock('@siastorage/core/stores', () => ({
     data: Array.from({ length: 1000 }, (_, i) => ({ id: `file-${i}` })),
     size: 1,
     setSize: jest.fn(),
-    isValidating: false,
     hasMore: false,
+    isLoadingMore: false,
   }),
-}))
-jest.mock('../hooks/useFlatListControls', () => ({
-  useFlatListControls: () => ({ isLoadingMore: false, handleEndReached: jest.fn() }),
+  useLoadMore: () => ({ loadMore: jest.fn(), isLoadingMore: false }),
 }))
 jest.mock('./FileGalleryItem', () => ({ FileGalleryItem: () => null }))
 
