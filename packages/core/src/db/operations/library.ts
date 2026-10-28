@@ -67,6 +67,23 @@ export function buildRecordFilter(alias: string, opts: RecordFilterOpts = {}): s
   return clauses.length === 0 ? '1=1' : clauses.join(' AND ')
 }
 
+// Partial indexes over exactly the rows buildRecordFilter keeps by default,
+// one per sort order and stored in that order. SQLite does not choose them on
+// its own. It searches idx_files_kind or idx_files_deletedAt, each of which
+// matches nearly every row, then sorts every visible file to return one page.
+// Named, a page read walks the index and stops at its LIMIT. A folder, tag or
+// search filter leaves the choice to the planner, since an index on that
+// filter finds its few rows faster than walking the whole library in order.
+const SORT_INDEXES: Record<SortBy, string> = {
+  DATE: 'idx_files_current_createdAt',
+  ADDED: 'idx_files_current_addedAt',
+  SIZE: 'idx_files_current_size',
+  NAME: 'idx_files_current_nameSortKey',
+}
+
+// The smallest index holding only visible files, for counting them.
+const COUNT_INDEX = 'idx_files_current_type'
+
 export function buildLibraryQueryParts(
   opts: {
     sortBy?: SortBy
@@ -81,6 +98,12 @@ export function buildLibraryQueryParts(
   where: string
   params: (string | number)[]
   orderExpr: string
+  /**
+   * `INDEXED BY` clauses for a query over the whole library, or empty
+   * strings when a folder, tag or search filter applies. `sort` is for
+   * queries that walk the list in order, `count` for counting it.
+   */
+  indexedBy: { sort: string; count: string }
 } {
   const {
     sortBy = 'DATE',
@@ -146,10 +169,18 @@ export function buildLibraryQueryParts(
   }
   const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''
 
+  const filtered = !!directoryId || tags.length > 0 || hasQuery
+  const indexedBy = filtered
+    ? { sort: '', count: '' }
+    : { sort: `INDEXED BY ${SORT_INDEXES[sortBy]}`, count: `INDEXED BY ${COUNT_INDEX}` }
+
   let orderExpr: string
   switch (sortBy) {
     case 'NAME':
-      orderExpr = `(${tableAlias}.nameSortKey IS NULL) ASC, ${tableAlias}.nameSortKey ${dir}, ${tableAlias}.id ${dir}`
+      // No NULLs-last term: both cores write nameSortKey with every file
+      // name, and name is NOT NULL. A leading term on anything but the column
+      // keeps SQLite from reading idx_files_current_nameSortKey in order.
+      orderExpr = `${tableAlias}.nameSortKey ${dir}, ${tableAlias}.id ${dir}`
       break
     case 'ADDED':
       orderExpr = `${tableAlias}.addedAt ${dir}, ${tableAlias}.id ${dir}`
@@ -162,7 +193,7 @@ export function buildLibraryQueryParts(
       break
   }
 
-  return { where, params, orderExpr }
+  return { where, params, orderExpr, indexedBy }
 }
 
 export type LibraryQueryParams = {
@@ -176,14 +207,14 @@ export type LibraryQueryParams = {
 
 export async function queryLibraryFileCount(db: DatabaseAdapter): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files f WHERE ${buildRecordFilter('f')}`,
+    `SELECT COUNT(*) as count FROM files f INDEXED BY ${COUNT_INDEX} WHERE ${buildRecordFilter('f')}`,
   )
   return row?.count ?? 0
 }
 
 export async function queryMediaFileCount(db: DatabaseAdapter): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files f
+    `SELECT COUNT(*) as count FROM files f INDEXED BY ${COUNT_INDEX}
      WHERE ${buildRecordFilter('f')}
        AND (f.type LIKE 'image/%' OR f.type LIKE 'video/%' OR f.type LIKE 'audio/%')`,
   )
@@ -227,13 +258,13 @@ export async function queryFileCountWithFilters(
   db: DatabaseAdapter,
   opts: LibraryQueryParams,
 ): Promise<number> {
-  const { where, params } = buildLibraryQueryParts({
+  const { where, params, indexedBy } = buildLibraryQueryParts({
     ...opts,
     tableAlias: 'f',
   })
 
   const result = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files f ${where ?? ''}`,
+    `SELECT COUNT(*) as count FROM files f ${indexedBy.count} ${where}`,
     ...params,
   )
 
@@ -245,7 +276,11 @@ export async function queryFilePositionInSortedList(
   fileId: string,
   opts: LibraryQueryParams & { sortBy: SortBy; sortDir: SortDir },
 ): Promise<number> {
-  const { where, params: queryParams } = buildLibraryQueryParts({
+  const {
+    where,
+    params: queryParams,
+    indexedBy,
+  } = buildLibraryQueryParts({
     ...opts,
     tableAlias: 'f',
   })
@@ -268,27 +303,17 @@ export async function queryFilePositionInSortedList(
     return 0
   }
 
-  let beforeCursor: { clause: string; params: (string | number)[] }
-
-  if (opts.sortBy === 'NAME') {
-    beforeCursor = buildNameBeforeCursor(
-      opts.sortDir,
-      'f',
-      anchorRow.nameSortKey ?? null,
-      anchorRow.id,
-    )
-  } else {
-    const columnMap = {
-      ADDED: { column: 'addedAt', value: anchorRow.addedAt },
-      SIZE: { column: 'size', value: anchorRow.size },
-      DATE: { column: 'createdAt', value: anchorRow.createdAt },
-    } as const
-    const { column, value } = columnMap[opts.sortBy] ?? columnMap.DATE
-    beforeCursor = buildDateBeforeCursor(opts.sortDir, 'f', value, anchorRow.id, column)
-  }
+  const columnMap = {
+    NAME: { column: 'nameSortKey', value: anchorRow.nameSortKey ?? '' },
+    ADDED: { column: 'addedAt', value: anchorRow.addedAt },
+    SIZE: { column: 'size', value: anchorRow.size },
+    DATE: { column: 'createdAt', value: anchorRow.createdAt },
+  } as const
+  const { column, value } = columnMap[opts.sortBy] ?? columnMap.DATE
+  const beforeCursor = buildBeforeCursor(opts.sortDir, 'f', value, anchorRow.id, column)
 
   const result = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM files f ${
+    `SELECT COUNT(*) as count FROM files f ${indexedBy.sort} ${
       where ? `${where} AND (${beforeCursor.clause})` : `WHERE ${beforeCursor.clause}`
     }`,
     ...queryParams,
@@ -308,13 +333,14 @@ export async function querySortedFileIds(
     where,
     params: queryParams,
     orderExpr,
+    indexedBy,
   } = buildLibraryQueryParts({
     ...opts,
     tableAlias: 'f',
   })
 
   const rows = await db.getAllAsync<{ id: string }>(
-    `SELECT f.id FROM files f ${where ?? ''} ORDER BY ${orderExpr} LIMIT ? OFFSET ?`,
+    `SELECT f.id FROM files f ${indexedBy.sort} ${where} ORDER BY ${orderExpr} LIMIT ? OFFSET ?`,
     ...queryParams,
     limit,
     offset,
@@ -331,6 +357,7 @@ export async function queryLibraryFiles(
     where,
     params: queryParams,
     orderExpr,
+    indexedBy,
   } = buildLibraryQueryParts({
     ...queryOpts,
     tableAlias: 'files',
@@ -353,7 +380,7 @@ export async function queryLibraryFiles(
             files.trashedAt, files.deletedAt,
             (file_tags.fileId IS NOT NULL) AS isFavorite,
             (fs.fileId IS NOT NULL) AS fsExists
-     FROM files
+     FROM files ${indexedBy.sort}
      LEFT JOIN file_tags ON file_tags.fileId = files.id AND file_tags.tagId = ?
      LEFT JOIN fs ON fs.fileId = files.id
      ${where}
@@ -371,40 +398,16 @@ export async function queryFileExists(db: DatabaseAdapter, fileId: string): Prom
   return !!row
 }
 
-function buildDateBeforeCursor(
+function buildBeforeCursor(
   dir: SortDir,
   alias: string,
-  anchorValue: number,
+  anchorValue: number | string,
   anchorId: string,
-  column: string = 'createdAt',
+  column: string,
 ): { clause: string; params: (string | number)[] } {
   const op = dir === 'ASC' ? '<' : '>'
   return {
     clause: `(${alias}.${column} ${op} ?) OR (${alias}.${column} = ? AND ${alias}.id ${op} ?)`,
     params: [anchorValue, anchorValue, anchorId],
-  }
-}
-
-function buildNameBeforeCursor(
-  dir: SortDir,
-  alias: string,
-  anchorSortKey: string | null,
-  anchorId: string,
-): { clause: string; params: (string | number)[] } {
-  const nullExpr = `${alias}.nameSortKey IS NULL`
-  const sortKeyExpr = `${alias}.nameSortKey`
-  const anchorNull = anchorSortKey === null ? 1 : 0
-  const op = dir === 'ASC' ? '<' : '>'
-
-  if (anchorSortKey === null) {
-    return {
-      clause: `(${nullExpr} < ?) OR (${nullExpr} = ? AND ${alias}.id ${op} ?)`,
-      params: [anchorNull, anchorNull, anchorId],
-    }
-  }
-
-  return {
-    clause: `(${nullExpr} < ?) OR (${nullExpr} = ? AND (${sortKeyExpr} ${op} ? OR (${sortKeyExpr} = ? AND ${alias}.id ${op} ?)))`,
-    params: [anchorNull, anchorNull, anchorSortKey, anchorSortKey, anchorId],
   }
 }
