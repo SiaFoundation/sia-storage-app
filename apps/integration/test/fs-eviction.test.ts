@@ -411,7 +411,8 @@ describe('FS Cache Eviction', () => {
 
     const cleared = await runCacheEviction(app.app, EVICT_ALL_BACKED_UP)
 
-    expect(cleared!.evictedFileIds).toContain(file.id)
+    expect(cleared!.evictedFileIds).toEqual([file.id])
+    expect(cleared!.bytesFreed).toBe(file.size)
     expect(await app.app.fs.readMeta(file.id)).toBeNull()
   }, 60_000)
 

@@ -224,12 +224,14 @@ bun sim device expect phone --label Menu
   `cacheMinAge`; services `cacheEviction`, `transferMemoryBudget`; CLI
   `download`, `config`
 - Check: `call <device> downloads.getState`; `call <device> cache.evict` runs an
-  eviction pass now; tables `fs`
+  eviction pass now, and `cache.clear` removes every backed-up copy, as Clear
+  Local Files does; tables `fs`
 - Tests: scenarios `mobile/clear-local-files-keeps-unuploaded`,
   `sync/converge-and-download`, `mobile/tapped-download-arrives`,
   `sync/small-downloads-beside-large`, `finder/cache-limit-evicts`,
   `finder/cache-limit-keeps-unuploaded`, `finder/cache-limit-concurrent-opens`,
-  `desktop/cache-limit-finder-keeps-copies`; integration `downloads`,
+  `desktop/cache-limit-finder-keeps-copies`, `desktop/clear-local-files`;
+  integration `downloads`,
   `fs-eviction`, `fs-adopt`, `fs-orphan`, `size-reconcile`
 - Network: `net latency` adds a delay to every call and `net download-rate`
   shares one download speed between every download, the two costs that decide

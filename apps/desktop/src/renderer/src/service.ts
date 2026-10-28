@@ -29,6 +29,8 @@ export function createWindowService(): AppService {
         'ds:shares:removeLinkFiles': 2 * 60 * 1000,
         'ds:shares:revokeLink': 2 * 60 * 1000,
         'ds:shares:syncLinks': 2 * 60 * 1000,
+        // Removes a file per row and can work through the whole cache.
+        'ds:cache:clear': 10 * 60 * 1000,
       },
     },
   )

@@ -12,7 +12,7 @@ import { restampAllFiles } from '../../db/operations/providerChanges'
 import {
   configuredCacheEviction,
   runCacheEviction,
-  singleFlightEviction,
+  evictionRunner,
 } from '../../services/cacheEviction'
 import { swrCacheBy, swrFillableCacheBy } from '../../stores/swr'
 import { coalesceChanges, createAppEvents } from '../events'
@@ -273,7 +273,8 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     }),
     downloads: downloadsNamespace,
     cache: {
-      evict: () => eviction.run(),
+      evict: () => eviction.evict(),
+      clear: () => eviction.clear(),
     },
     shares: sharesNamespace,
     connection: {
@@ -314,8 +315,9 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     caches,
   }
 
-  const eviction = singleFlightEviction(async (signal) =>
-    runCacheEviction(service, await configuredCacheEviction(service), signal),
+  const eviction = evictionRunner(
+    (config, signal) => runCacheEviction(service, config, signal),
+    () => configuredCacheEviction(service),
   )
 
   const internal: AppServiceInternal = {
@@ -332,7 +334,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     initUploader: () => initUploader(uploadManager, service, internal, adapters.uploader),
     withTransaction,
     events,
-    evictCache: (signal) => eviction.run(signal),
+    evictCache: (signal) => eviction.evict(signal),
     stopEviction: () => eviction.stop(),
   }
 

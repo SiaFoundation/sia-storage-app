@@ -7,7 +7,9 @@
  * the connection to the indexer.
  */
 
+import { useApp } from '@siastorage/core/app'
 import { useShareLinks, useTrashCount, useUploadSpeed } from '@siastorage/core/stores'
+import { useState } from 'react'
 import { Footer } from './Footer'
 import { DoneMark, ROW, Row, Section } from './Group'
 import {
@@ -27,6 +29,7 @@ import {
   fileCountLabel,
   folderCountLabel,
   formatBitrate,
+  formatBytes,
   indexerLabel,
   librarySizeLabel,
   localCacheLabel,
@@ -37,6 +40,7 @@ import {
 import { StatusLine } from './StatusLine'
 import { UpdateNotice } from './UpdateNotice'
 import { useAppInfo } from './useAppInfo'
+import { useConfirm } from './useConfirm'
 import { useLocalCache, useStatus } from './useStatus'
 
 export function Details({
@@ -59,6 +63,7 @@ export function Details({
   const mountable = status.domain !== 'unsupported'
   const online = status.daemonReachable && status.connected
   const uploads = uploadsRow(status)
+  const [clearNotice, setClearNotice] = useState<Notice | null>(null)
 
   return (
     <div className="flex flex-col">
@@ -104,6 +109,7 @@ export function Details({
             id="on-this-mac"
             value={localCacheLabel(localCache)}
           />
+          <ClearLocalFiles bytes={localCache.bytes} onDone={setClearNotice} />
           <button
             type="button"
             className={`${ROW} w-full cursor-default border-none bg-transparent text-left text-label [font-family:inherit] enabled:hover:bg-divider`}
@@ -118,6 +124,14 @@ export function Details({
             </span>
           </button>
         </Section>
+        {clearNotice ? (
+          <p
+            data-testid="clear-notice"
+            className={`m-0 -mt-1 text-[11px] leading-[1.5] ${clearNotice.error ? 'text-red' : 'text-secondary'}`}
+          >
+            {clearNotice.text}
+          </p>
+        ) : null}
 
         <Section header="Sharing">
           <button
@@ -173,5 +187,69 @@ export function Details({
 
       <Footer status={status} surface="window" version={info?.version} />
     </div>
+  )
+}
+
+type Notice = { text: string; error: boolean }
+
+/**
+ * Clear Local Files, as mobile has under Settings. It removes this Mac's copy
+ * of every file already uploaded, and takes a second click, as Empty Trash
+ * does. A file Finder has downloaded keeps its Finder copy, which on APFS
+ * shares its blocks with ours, so that space frees only once Finder drops its
+ * copy too.
+ */
+function ClearLocalFiles({
+  bytes,
+  onDone,
+}: {
+  bytes: number | null
+  onDone: (notice: Notice | null) => void
+}) {
+  const app = useApp()
+  const [confirming, setConfirming] = useConfirm()
+  const [clearing, setClearing] = useState(false)
+
+  const clear = async () => {
+    setClearing(true)
+    onDone(null)
+    try {
+      const result = await app.cache.clear()
+      onDone({
+        text: `Removed ${formatBytes(result?.bytesFreed ?? 0)} from this Mac. Files downloaded in Finder keep using space until you choose Remove Download there.`,
+        error: false,
+      })
+    } catch {
+      onDone({ text: 'Could not clear local files. Try again.', error: true })
+    } finally {
+      setClearing(false)
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      data-testid="clear-local-files"
+      className={`${ROW} w-full cursor-default border-none bg-transparent text-left [font-family:inherit] enabled:hover:bg-divider ${confirming ? 'text-red' : 'text-accent'}`}
+      disabled={clearing}
+      onClick={() => {
+        if (!confirming) return setConfirming(true)
+        setConfirming(false)
+        void clear()
+      }}
+    >
+      <span className="w-[15px] shrink-0" />
+      <span className="flex flex-auto flex-col gap-px">
+        {clearing
+          ? 'Clearing…'
+          : confirming
+            ? `Remove up to ${formatBytes(bytes ?? 0)} from this Mac`
+            : 'Clear Local Files'}
+        <span className="text-[11px] leading-[1.4] text-pretty text-secondary">
+          Removes files on this Mac that are already backed up. Files that aren't backed up yet are
+          kept.
+        </span>
+      </span>
+    </button>
   )
 }
