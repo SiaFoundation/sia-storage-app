@@ -83,13 +83,14 @@ export function initializeScheduler(app: CliApp): { scheduler: ServiceScheduler 
       worker: whenConnected(() => runPruneSlabs(app.service, app.internal)),
     },
     {
-      // An unbounded cap skips the size-driven pass, so this frees only local
-      // copies the network already holds: superseded versions, including one
-      // whose upload finished after a later save, and trashed files.
+      // Runs with the cap and age mobile uses, FS_MAX_BYTES and
+      // FS_EVICTABLE_MIN_AGE. When the Finder folder also holds a file, its copy
+      // and ours share disk blocks, so removing ours frees space only once
+      // Finder drops its copy too.
       name: 'cacheEviction',
       interval: FS_EVICTION_FREQUENCY,
       worker: async (signal: AbortSignal) => {
-        await runCacheEviction(app.service, { maxBytes: Number.POSITIVE_INFINITY }, signal)
+        await runCacheEviction(app.service, undefined, signal)
       },
     },
     {
