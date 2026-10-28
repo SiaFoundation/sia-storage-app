@@ -1,5 +1,6 @@
 import { logger } from '@siastorage/logger'
 import type { AppService } from '../app/service'
+import type { EvictionCursor, EvictionRow } from '../db/operations'
 import { FS_EVICTABLE_MIN_AGE, FS_EVICTABLE_MIN_AGE_NON_CURRENT, FS_MAX_BYTES } from '../config'
 
 export type CacheEvictionConfig = {
@@ -35,6 +36,17 @@ export type CacheEvictionResult = {
 }
 
 /**
+ * Each pass reads past the last row of its previous batch rather than from the
+ * oldest row again. A removal that throws leaves its row in place, so a batch of
+ * such rows would otherwise come back on every iteration until the pass is
+ * aborted.
+ */
+function cursorAfter(rows: EvictionRow[]): EvictionCursor {
+  const last = rows[rows.length - 1]
+  return { usedAt: last.usedAt, fileId: last.fileId }
+}
+
+/**
  * Evicts cached files in three passes:
  *   1. Trashed pre-pass: uploaded files the user has trashed, no age gate.
  *   2. Non-current pre-pass: superseded versions past `minAgeNonCurrent`.
@@ -67,7 +79,7 @@ export async function runCacheEviction(
   const evictedFileIds: string[] = []
 
   async function evictBatch(
-    rows: { fileId: string; size: number; type: string }[],
+    rows: EvictionRow[],
     options?: { stopWhenUnderCap?: boolean; anyIndexer?: boolean },
   ): Promise<void> {
     for (const { fileId, size, type } of rows) {
@@ -96,9 +108,15 @@ export async function runCacheEviction(
 
   // Pass 1: trashed uploaded files. User explicitly trashed them; evict on
   // the next pass with no age gate.
+  let afterTrashed: EvictionCursor | null = null
   while (!signal?.aborted) {
-    const trashed = await app.fs.trashedCachedFiles(await app.settings.getIndexerURL(), batchSize)
+    const trashed = await app.fs.trashedCachedFiles(
+      await app.settings.getIndexerURL(),
+      afterTrashed,
+      batchSize,
+    )
     if (trashed.length === 0) break
+    afterTrashed = cursorAfter(trashed)
     await evictBatch(trashed)
     processedRows += trashed.length
     if (trashed.length < batchSize) break
@@ -107,24 +125,33 @@ export async function runCacheEviction(
   // Pass 2: superseded file versions past the short grace. They can never
   // become current again, so keeping them cached wastes space regardless of
   // whether the cap is exceeded.
+  let afterNonCurrent: EvictionCursor | null = null
   while (!signal?.aborted) {
     const thresholdUsedAt = Date.now() - minAgeNonCurrent
-    const nonCurrent = await app.fs.nonCurrentCachedFiles(thresholdUsedAt, batchSize)
+    const nonCurrent = await app.fs.nonCurrentCachedFiles(
+      thresholdUsedAt,
+      afterNonCurrent,
+      batchSize,
+    )
     if (nonCurrent.length === 0) break
+    afterNonCurrent = cursorAfter(nonCurrent)
     await evictBatch(nonCurrent, { anyIndexer: true })
     processedRows += nonCurrent.length
     if (nonCurrent.length < batchSize) break
   }
 
   // Pass 3: LRU while over cap.
+  let afterCandidates: EvictionCursor | null = null
   while (!signal?.aborted && currentSize > maxBytes) {
     const thresholdUsedAt = Date.now() - minAge
     const candidates = await app.fs.evictionCandidates(
       await app.settings.getIndexerURL(),
       thresholdUsedAt,
+      afterCandidates,
       batchSize,
     )
     if (candidates.length === 0) break
+    afterCandidates = cursorAfter(candidates)
     await evictBatch(candidates, { stopWhenUnderCap: true })
     processedRows += candidates.length
     if (candidates.length < batchSize) break

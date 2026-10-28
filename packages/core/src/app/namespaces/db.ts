@@ -160,11 +160,12 @@ export function buildDbNamespaces(
     deleteMetaBatch: (fileIds) => ops.deleteManyFsMeta(db, fileIds),
     updateMetaUsedAt: (fileId, usedAt) => ops.updateFsMetaUsedAt(db, fileId, usedAt ?? Date.now()),
     calcTotalSize: () => ops.queryFsMetaTotalSize(db),
-    evictionCandidates: (indexerURL, thresholdUsedAt, limit) =>
-      ops.queryEvictionCandidates(db, indexerURL, thresholdUsedAt, limit),
-    nonCurrentCachedFiles: (thresholdUsedAt, limit) =>
-      ops.queryNonCurrentCachedFiles(db, thresholdUsedAt, limit),
-    trashedCachedFiles: (indexerURL, limit) => ops.queryTrashedCachedFiles(db, indexerURL, limit),
+    evictionCandidates: (indexerURL, thresholdUsedAt, after, limit) =>
+      ops.queryEvictionCandidates(db, indexerURL, thresholdUsedAt, after, limit),
+    nonCurrentCachedFiles: (thresholdUsedAt, after, limit) =>
+      ops.queryNonCurrentCachedFiles(db, thresholdUsedAt, after, limit),
+    trashedCachedFiles: (indexerURL, after, limit) =>
+      ops.queryTrashedCachedFiles(db, indexerURL, after, limit),
     findOrphanedFileIds: (fileIds) => ops.queryOrphanedFileIds(db, fileIds),
     liveFileTypes: (fileIds) => ops.queryLiveFileTypes(db, fileIds),
     inFlightImportFileIds: (fileIds) => ops.queryInFlightImportFileIds(db, fileIds),
