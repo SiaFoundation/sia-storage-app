@@ -133,12 +133,14 @@ export async function install(appPath: string): Promise<string> {
  * registers the extension on first launch rather than on the copy, and because
  * the caller decides what the process starts with.
  *
- * `open` gives the app a normal launch context, which does not include the
- * shell's environment, so anything the process needs is passed explicitly.
+ * `open` hands the app this process's environment, minus ELECTRON_RUN_AS_NODE.
+ * Some terminals and apps set it to 1, and with it set the app's binary starts
+ * as plain Node and the app never comes up.
  */
 export async function launch(appPath: string, env: Record<string, string> = {}): Promise<void> {
   const flags = Object.entries(env).flatMap(([key, value]) => ['--env', `${key}=${value}`])
-  await $`open ${flags} ${appPath}`
+  const { ELECTRON_RUN_AS_NODE: _, ...inherited } = process.env
+  await $`open ${flags} ${appPath}`.env(inherited)
 }
 
 function isExecutableFile(path: string): boolean {

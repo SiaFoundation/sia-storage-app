@@ -5,11 +5,11 @@
   "main": "out/main/index.js",
   "scripts": {
     "dev": "bun run build/dev.ts",
-    "dev:no-mount": "electron-vite dev",
+    "dev:no-mount": "env -u ELECTRON_RUN_AS_NODE electron-vite dev",
     "build": "electron-vite build",
     "package": "bun run build/package.ts",
     "release": "bun run build/release.ts",
-    "start": "electron-vite preview",
+    "start": "env -u ELECTRON_RUN_AS_NODE electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.build.json",
     "lint": "oxlint . && oxfmt --check .",
     "test": "bun test --path-ignore-patterns='**/updates.test.ts' && bun test ./src/main/updates.test.ts"
