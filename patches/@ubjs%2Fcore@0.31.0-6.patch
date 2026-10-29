@@ -1,0 +1,66 @@
+diff --git a/dist/cjs/objects.js b/dist/cjs/objects.js
+index d332b220e0034223bb4e0a0c61c814122b18a018..56726ab1b6a5d0e5091a720d452a1c12c454c2ab 100644
+--- a/dist/cjs/objects.js
++++ b/dist/cjs/objects.js
+@@ -79,6 +79,17 @@ class FfiConverterObjectWithCallbacks extends FfiConverterObject {
+         }
+         return this.handleMap.insert(value);
+     }
++
++    // Records, optionals and sequences write their items through
++    // writeIntoCursor, which calls lowerHandle rather than lower. Without this
++    // override a JS-implemented callback in a record field (an upload's
++    // shardUploaded) throws "Cannot lower this object to a pointer".
++    lowerHandle(value) {
++        if (this.factory.isConcreteType(value)) {
++            return super.lowerHandle(value);
++        }
++        return this.handleMap.insert(value);
++    }
+     // A miss falls through to the Arc-pointer interpretation, which is right for
+     // a Rust-backed object and wrong for a foreign handle minted by a runtime
+     // that no longer exists: handle maps renumber from 1 per runtime, so after a
+diff --git a/dist/esm/objects.js b/dist/esm/objects.js
+index 05d054f0380c8865306b1feeaae1e70fbace46c8..de88c712b3ed887f41e8dd8a9ae9462983ca239e 100644
+--- a/dist/esm/objects.js
++++ b/dist/esm/objects.js
+@@ -74,6 +74,17 @@ export class FfiConverterObjectWithCallbacks extends FfiConverterObject {
+         }
+         return this.handleMap.insert(value);
+     }
++
++    // Records, optionals and sequences write their items through
++    // writeIntoCursor, which calls lowerHandle rather than lower. Without this
++    // override a JS-implemented callback in a record field (an upload's
++    // shardUploaded) throws "Cannot lower this object to a pointer".
++    lowerHandle(value) {
++        if (this.factory.isConcreteType(value)) {
++            return super.lowerHandle(value);
++        }
++        return this.handleMap.insert(value);
++    }
+     // A miss falls through to the Arc-pointer interpretation, which is right for
+     // a Rust-backed object and wrong for a foreign handle minted by a runtime
+     // that no longer exists: handle maps renumber from 1 per runtime, so after a
+diff --git a/src/objects.ts b/src/objects.ts
+index a4498704f49bdd88f6e675e3941889d8eff35680..1e455b0bbcfb3584682028fde53816d8a2e1343b 100644
+--- a/src/objects.ts
++++ b/src/objects.ts
+@@ -110,6 +110,17 @@ export class FfiConverterObjectWithCallbacks<T> extends FfiConverterObject<T> {
+     return this.handleMap.insert(value);
+   }
+ 
++  // Records, optionals and sequences write their items through
++  // writeIntoCursor, which calls lowerHandle rather than lower. Without this
++  // override a JS-implemented callback in a record field (an upload's
++  // shardUploaded) throws "Cannot lower this object to a pointer".
++  protected lowerHandle(value: T): UniffiHandle {
++    if (this.factory.isConcreteType(value)) {
++      return super.lowerHandle(value);
++    }
++    return this.handleMap.insert(value);
++  }
++
+   // A miss falls through to the Arc-pointer interpretation, which is right for
+   // a Rust-backed object and wrong for a foreign handle minted by a runtime
+   // that no longer exists: handle maps renumber from 1 per runtime, so after a
