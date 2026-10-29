@@ -109,6 +109,60 @@ jobs:
       - uses: ./.github/actions/setup
       - run: bun --cwd apps/integration test
 
+  # Times the core's database calls on this PR against its base commit on the
+  # same runner, and checks their statement counts and query plans against
+  # apps/benchmark/baseline. Posts the result as one PR comment that later
+  # runs edit. Skipped when the PR touches nothing those calls run.
+  benchmark:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # A PR checks out its merge commit, whose first parent is the base
+      # branch as it stands, so HEAD^1 is exactly what the PR changes.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 2
+      - id: changes
+        shell: bash
+        run: |
+          if git diff --quiet HEAD^1 HEAD -- packages/core packages/node-adapters packages/logger apps/benchmark bun.lock .node-version; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.changes.outputs.run == 'true'
+        uses: ./.github/actions/setup
+      - if: steps.changes.outputs.run == 'true'
+        shell: bash
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/base" HEAD^1
+          cd "$RUNNER_TEMP/base" && bun install --frozen-lockfile
+      - if: steps.changes.outputs.run == 'true'
+        run: bun run --cwd apps/benchmark test
+      - if: steps.changes.outputs.run == 'true'
+        run: bun run --cwd apps/benchmark bench:ci --base "$RUNNER_TEMP/base"
+      # A fork's token cannot comment, so a fork PR gets the job summary only.
+      - if: >-
+          always() && steps.changes.outputs.run == 'true' &&
+          hashFiles('apps/benchmark/results/ci/comment.md') != '' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: bun run --cwd apps/benchmark bench:comment results/ci/comment.md
+      # report.json from a run whose two sides ran the same core is a
+      # calibration sample for bench:calibrate.
+      - if: always() && steps.changes.outputs.run == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: benchmark
+          path: apps/benchmark/results/ci
+          retention-days: 30
+
   test-cli:
     runs-on: ubuntu-latest
     if: github.event.action != 'closed'

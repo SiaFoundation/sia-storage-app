@@ -1,2 +1,3 @@
 test/fixtures/files/sample.*
 crates
+apps/benchmark/baseline

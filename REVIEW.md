@@ -48,7 +48,9 @@ are never Important.
 - A user-facing app change, or a `core`/`logger` API change, with no
   changeset. `Closes` only on a stack's last PR.
 - A changed query filter, join or order: `bun --cwd apps/benchmark bench`,
-  and no filter or sort on an unindexed column.
+  and no filter or sort on an unindexed column. A change to
+  `apps/benchmark/baseline/structure.json` that adds statements or a full
+  table scan needs a reason in the PR.
 
 ## Comments
 

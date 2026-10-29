@@ -1,7 +1,7 @@
 import type { DatabaseAdapter } from '@siastorage/core/adapters'
 import * as sql from '@siastorage/core/db/sql'
 import { naturalSortKey } from '@siastorage/core/lib/naturalSortKey'
-import type { DatasetConfig, DatasetInfo } from './types'
+import type { DatasetConfig, DatasetInfo, Row } from './types'
 
 const TYPES = [
   'image/jpeg',
@@ -23,13 +23,13 @@ type VersionGroup = { groups: number; versions: number }
 
 function getVersionDistribution(scale: number): VersionGroup[] {
   return [
-    { groups: 549_000 * scale, versions: 1 },
-    { groups: 100_000 * scale, versions: 2 },
-    { groups: 30_000 * scale, versions: 3 },
-    { groups: 1_000 * scale, versions: 10 },
-    { groups: 1_000 * scale, versions: 50 },
-    { groups: 1_000 * scale, versions: 100 },
-  ]
+    { groups: 549_000, versions: 1 },
+    { groups: 100_000, versions: 2 },
+    { groups: 30_000, versions: 3 },
+    { groups: 1_000, versions: 10 },
+    { groups: 1_000, versions: 50 },
+    { groups: 1_000, versions: 100 },
+  ].map((d) => ({ ...d, groups: Math.round(d.groups * scale) }))
 }
 
 function getTotalRecords(dist: VersionGroup[]): number {
@@ -47,7 +47,8 @@ export async function generateDataset(
   const start = performance.now()
   const dist = getVersionDistribution(config.scale)
   const totalRecords = getTotalRecords(dist)
-  const dirCount = 50 * config.scale
+  // At least 50 so the sample and move-target directories exist below scale 1.
+  const dirCount = Math.max(50, Math.round(50 * config.scale))
   const tagCount = 5
 
   console.log(
@@ -88,30 +89,28 @@ export async function generateDataset(
   console.log(`  Generating file records...`)
   const baseTime = Date.now() - 365 * 24 * 60 * 60 * 1000
   let fileIndex = 0
-  let batchBuffer: Record<string, unknown>[] = []
-  let objectBuffer: Record<string, unknown>[] = []
-  let fsBuffer: Record<string, unknown>[] = []
-  let tagBuffer: Record<string, unknown>[] = []
+  let batchBuffer: Row[] = []
+  let objectBuffer: Row[] = []
+  let fsBuffer: Row[] = []
+  let tagBuffer: Row[] = []
   let objectCount = 0
   let fsCount = 0
 
   async function flushBatch() {
-    if (batchBuffer.length > 0) {
-      await sql.insertMany(db, 'files', batchBuffer)
-      batchBuffer = []
-    }
-    if (objectBuffer.length > 0) {
-      await sql.insertMany(db, 'objects', objectBuffer)
-      objectBuffer = []
-    }
-    if (fsBuffer.length > 0) {
-      await sql.insertMany(db, 'fs', fsBuffer)
-      fsBuffer = []
-    }
-    if (tagBuffer.length > 0) {
-      await sql.insertMany(db, 'file_tags', tagBuffer)
-      tagBuffer = []
-    }
+    const files = batchBuffer
+    const objects = objectBuffer
+    const fsRows = fsBuffer
+    const tags = tagBuffer
+    batchBuffer = []
+    objectBuffer = []
+    fsBuffer = []
+    tagBuffer = []
+    await db.withTransactionAsync(async (tx) => {
+      if (files.length > 0) await sql.insertMany(tx, 'files', files)
+      if (objects.length > 0) await sql.insertMany(tx, 'objects', objects)
+      if (fsRows.length > 0) await sql.insertMany(tx, 'fs', fsRows)
+      if (tags.length > 0) await sql.insertMany(tx, 'file_tags', tags)
+    })
   }
 
   for (const { groups, versions } of dist) {
@@ -213,6 +212,20 @@ export async function generateDataset(
     fsPopulated: fsCount,
     generationTimeMs,
   }
+}
+
+/** Directory, tag and file the library specs aim at. dir-0025 and dir-0049
+ * exist at every scale because there are always at least 50 directories. */
+export const LIBRARY_SAMPLES = {
+  sampleDirId: 'dir-0025',
+  sampleTagId: 'tag-work',
+  moveTargetDirId: 'dir-0049',
+}
+
+/** A file in the middle of the records, so filePosition has to count half the
+ * library at any scale. */
+export function librarySampleFileId(info: DatasetInfo): string {
+  return `f-${Math.floor(info.totalRecords / 2)}`
 }
 
 export { INDEXER_URL }

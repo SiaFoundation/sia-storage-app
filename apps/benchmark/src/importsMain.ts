@@ -9,9 +9,10 @@ import { fileURLToPath } from 'url'
 import { capturePlans } from './explain'
 import { generateImportsDataset, IMPORTS_PROFILES, seedLibraryFiles } from './importsDataset'
 import { buildImportQuerySpecs } from './importsQueries'
+import { instrumentDatabase } from './instrument'
 import { writeReport } from './report'
 import { runBenchmark } from './runner'
-import { createStubAppService } from './stubApp'
+import { benchContentHash, createStubAppService } from './stubApp'
 import type { BenchmarkReport, DatasetInfo } from './types'
 
 /*
@@ -44,7 +45,7 @@ async function main() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sia-bench-imports-'))
   const dbPath = path.join(tempDir, 'bench.db')
 
-  const db = createBetterSqlite3Database(dbPath)
+  const db = instrumentDatabase(createBetterSqlite3Database(dbPath))
   await runMigrations(db, sortMigrations(coreMigrations))
 
   const genStart = performance.now()
@@ -65,7 +66,7 @@ async function main() {
   const scanner = new ImportScanner()
   scanner.initialize(
     app,
-    async () => 'bench-content-hash',
+    async (uri) => benchContentHash(uri),
     async () => null,
     async () => ({ status: 'resolved', uri: 'file:///bench/source.bin' }),
   )
@@ -111,7 +112,7 @@ async function main() {
     JSON.stringify(plans, null, 2),
   )
 
-  db.close()
+  db.close?.()
   fs.rmSync(tempDir, { recursive: true })
 }
 

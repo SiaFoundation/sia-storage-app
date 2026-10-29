@@ -1,6 +1,7 @@
 import type { DatabaseAdapter } from '@siastorage/core/adapters'
 import * as sql from '@siastorage/core/db/sql'
 import { naturalSortKey } from '@siastorage/core/lib/naturalSortKey'
+import type { Row } from './types'
 
 /*
  * Seeds the imports scenarios: one sealed library-scan import mid-drain
@@ -83,8 +84,8 @@ export async function seedLibraryFiles(db: DatabaseAdapter, count: number): Prom
   }
 
   let objects = 0
-  let fileBuffer: Record<string, unknown>[] = []
-  let objectBuffer: Record<string, unknown>[] = []
+  let fileBuffer: Row[] = []
+  let objectBuffer: Row[] = []
   for (let i = 0; i < count; i++) {
     const id = `lf-${i}`
     const name = `photo-${i}.jpg`
@@ -155,7 +156,7 @@ export async function generateImportsDataset(
   const ARCHIVE_UNAVAILABLE = Math.floor(archiveCount * UNAVAILABLE_FRACTION)
   const ARCHIVE_BACKOFF = Math.floor(archiveCount * BACKOFF_FRACTION)
 
-  const importRows: Record<string, unknown>[] = [
+  const importRows: Row[] = [
     {
       id: ARCHIVE_IMPORT_ID,
       source: 'library-scan',
@@ -205,7 +206,7 @@ export async function generateImportsDataset(
   // pending backlog with the backoff slice at the newest end.
   const terminalEnd = ARCHIVE_ADDED + ARCHIVE_DUPLICATE + ARCHIVE_FAILED + ARCHIVE_UNAVAILABLE
   const activeEnd = terminalEnd + ARCHIVE_ACTIVE
-  let fileBuffer: Record<string, unknown>[] = []
+  let fileBuffer: Row[] = []
   let importFileCount = 0
 
   async function flush() {
