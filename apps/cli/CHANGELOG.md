@@ -1,3 +1,32 @@
+## 0.0.7-rc.5 (2026-10-29)
+
+### Fixes
+
+- The background service frees the disk space held by older versions of a file and by trashed files once they are backed up.
+- A release candidate keeps its library in `~/.sia-beta`, apart from the one a release uses, so the first candidate you run starts signed out.
+- Commands that change the library, such as trashing or renaming a file, no longer fail while the library is syncing.
+- Adds `sia share`, `sia unshare`, `sia revoke` and `sia links` to make, change, revoke and list share links, the same links the phone and desktop app make.
+- BMP images get thumbnails, and on Linux the background service no longer tries and fails to thumbnail TIFF, HEIC and AVIF images.
+- `sia --version` reports the released version rather than the release candidate it was built from.
+- `sia add` and `sia import` store file hashes in the same `sha256:` form as every other app, so saving identical bytes over a file added with the CLI no longer creates a duplicate version and `sia import --skip-existing` finds files added elsewhere. `FileMetadata.hash` is typed `ContentHash` from `@siastorage/core/lib/contentHash`, built with `toContentHash`, and decoded metadata and stored files with a bare hex hash gain the prefix.
+- Files no longer upload with another file's contents when other files in the same upload could not be read.
+- A file whose name contains `#` or `?` gets the type its extension names instead of a generic one.
+- Opening many cloud-only files at once in Finder, or running many `sia download` commands at once, no longer fails some of them.
+- Canon raw (CR3) photos are recognized from their contents, and a file Android reports with no type (`application/octet-stream`) takes its type from its name or contents instead.
+- Files with an extension such as `.constructor` or `.__proto__` are stored with an unknown file type instead of a bogus one.
+- A name with accents or other combined characters is stored the same way whichever app it came from, so a file saved in Finder and the same file added on a phone share one name and one version history. Names already stored are converted on the first launch after the update.
+- Camera raw photos such as DNG, CR2, NEF and ARW keep their raw type on every device instead of being stored or renamed as TIFF.
+- Raw photos stored as TIFF, such as DNGs an iPhone relabelled, get their raw type back the next time the app starts and catches up with the network.
+- Moving a file out of a folder to the top level, or removing its last tag, now shows up on your other devices.
+- Small downloads, such as the photos in a folder you open, start right away instead of waiting for large downloads to finish. Eight downloads run at once by default, up from two, including on phones that had saved the old default, and `SlotPool` can limit the total weight of what runs as well as the count.
+- When another device changes a file's type, the copy already on this device moves to match, so the file opens from disk instead of downloading again.
+- Uploads and downloads share a memory budget sized from what the device can spare, instead of each taking a tenth of its total memory, and downloads keep part of it however large an upload is. `AppServiceAdapters.readMemory` supplies the reading.
+- `sia trash` lists the trash, `sia restore` puts files back with their versions, under a new name such as `notes (restored).txt` when a file has taken theirs, and `sia trash --delete` and `sia trash --empty` delete them for good.
+- Taking a file out of Favorites on one device now takes it out on your other devices too.
+- A file added while the app is checking for new uploads no longer uploads twice.
+- Upload progress no longer counts files that can never upload, so it reaches complete once everything else has uploaded. `UploadCategoryStats.total` covers uploaded and remaining files only, and the new `unavailable` and `unavailableBytes` count files with no object on the indexer and no local copy, or marked lost. The phone's status sheet and `sia status` show those files separately.
+- Portrait iPhone photos and other rotated HEIC and TIFF images get upright previews when added from the desktop app or the CLI, instead of previews turned on their side.
+
 ## 0.0.7-rc.4 (2026-10-28)
 
 ### Fixes
