@@ -1,3 +1,6 @@
+/** One row for `sql.insertMany`. */
+export type Row = Record<string, string | number | null>
+
 export type DatasetConfig = {
   scale: number // multiplier: 1 = ~1M records, 10 = ~10M
 }

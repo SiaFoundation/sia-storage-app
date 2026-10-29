@@ -1,7 +1,7 @@
 import type { DatabaseAdapter } from '@siastorage/core/adapters'
 import type { AppService } from '@siastorage/core/app'
 import * as ops from '@siastorage/core/db/operations'
-import { INDEXER_URL } from './dataset'
+import { INDEXER_URL, LIBRARY_SAMPLES } from './dataset'
 import type { QuerySpec } from './types'
 
 export function buildQuerySpecs(
@@ -125,29 +125,38 @@ export function buildQuerySpecs(
 }
 
 /**
- * Write benchmarks for version group operations. Operations that don't open
- * their own transactions use SAVEPOINT for rollback. Operations that use
- * withTransactionAsync (trash, move) undo their mutations after measurement.
+ * Write benchmarks for version group operations. Those that only need undoing
+ * run inside a transaction that is rolled back after each run. Trash and move
+ * run as the app runs them and undo their own mutations.
  */
 export function buildWriteQuerySpecs(db: DatabaseAdapter, sampleDirId: string): QuerySpec[] {
-  function withRollback(fn: () => Promise<unknown>): () => Promise<unknown> {
+  // The ops open their own transaction, and SQLite cannot BEGIN inside a
+  // SAVEPOINT, so the rollback has to come from the adapter's transaction. The
+  // op joins it through `tx`, and throwing at the end rolls the whole run back.
+  const ROLLBACK = Symbol('rollback')
+  function withRollback(fn: (tx: DatabaseAdapter) => Promise<unknown>): () => Promise<unknown> {
     return async () => {
-      await db.execAsync('SAVEPOINT bench_write')
+      let result: unknown
       try {
-        return await fn()
-      } finally {
-        await db.execAsync('ROLLBACK TO bench_write')
-        await db.execAsync('RELEASE bench_write')
+        await db.withTransactionAsync(async (tx) => {
+          result = await fn(tx)
+          throw ROLLBACK
+        })
+      } catch (e) {
+        if (e !== ROLLBACK) throw e
       }
+      return result
     }
   }
 
-  // Pre-query large sets of file IDs for directory-scale benchmarks.
-  // dir-0000 contains ~12k files at scale=1 (682k groups / 55 dir slots).
+  // Up to 10k file ids from the sample directory. Version groups spread over
+  // 55 slots and the first 50 are directories, so each holds about 18k rows
+  // (999k records / 55) at scale 1, and the "10k" specs touch fewer below
+  // about scale 0.55.
   let largeDir10kIds: string[] | null = null
-  async function getLargeDir10kIds(): Promise<string[]> {
+  async function getLargeDir10kIds(handle: DatabaseAdapter = db): Promise<string[]> {
     if (largeDir10kIds) return largeDir10kIds
-    const rows = await db.getAllAsync<{ id: string }>(
+    const rows = await handle.getAllAsync<{ id: string }>(
       `SELECT id FROM files WHERE directoryId = ? AND kind = 'file' LIMIT 10000`,
       sampleDirId,
     )
@@ -159,22 +168,24 @@ export function buildWriteQuerySpecs(db: DatabaseAdapter, sampleDirId: string): 
     {
       name: 'recalculateCurrentForGroup:single',
       category: 'write',
-      run: withRollback(() => ops.recalculateCurrentForGroup(db, 'vgroup-100v-0.pdf', sampleDirId)),
+      run: withRollback((tx) =>
+        ops.recalculateCurrentForGroup(tx, 'vgroup-100v-0.pdf', sampleDirId),
+      ),
     },
     {
       name: 'recalculateCurrentForFileIds:500',
       category: 'write',
-      run: withRollback(async () => {
+      run: withRollback(async (tx) => {
         const ids = Array.from({ length: 500 }, (_, i) => `f-${i * 100}`)
-        await ops.recalculateCurrentForFileIds(db, ids)
+        await ops.recalculateCurrentForFileIds(tx, ids)
       }),
     },
     {
       name: 'recalculateCurrentForFileIds:10k',
       category: 'write',
-      run: withRollback(async () => {
+      run: withRollback(async (tx) => {
         const ids = Array.from({ length: 10_000 }, (_, i) => `f-${i * 10}`)
-        await ops.recalculateCurrentForFileIds(db, ids)
+        await ops.recalculateCurrentForFileIds(tx, ids)
       }),
     },
     {
@@ -191,14 +202,14 @@ export function buildWriteQuerySpecs(db: DatabaseAdapter, sampleDirId: string): 
       category: 'write',
       run: async () => {
         const ids = Array.from({ length: 1000 }, (_, i) => `f-${i}`)
-        await ops.moveFilesAllVersions(db, ids, 'dir-0049')
+        await ops.moveFilesAllVersions(db, ids, LIBRARY_SAMPLES.moveTargetDirId)
         await ops.moveFilesAllVersions(db, ids, sampleDirId)
       },
     },
     {
       name: 'upsertManyFiles:500',
       category: 'write',
-      run: withRollback(async () => {
+      run: withRollback(async (tx) => {
         const now = Date.now()
         const records = Array.from({ length: 500 }, (_, i) => ({
           id: `upsert-${i}`,
@@ -206,7 +217,7 @@ export function buildWriteQuerySpecs(db: DatabaseAdapter, sampleDirId: string): 
           type: 'image/jpeg',
           kind: 'file' as const,
           size: 1000 + i,
-          hash: `upsert-hash-${i}`,
+          hash: `sha256:upsert-hash-${i}` as const,
           createdAt: now,
           updatedAt: now,
           mediaAssetId: null,
@@ -216,7 +227,7 @@ export function buildWriteQuerySpecs(db: DatabaseAdapter, sampleDirId: string): 
           trashedAt: null,
           deletedAt: null,
         }))
-        await ops.upsertManyFiles(db, records, {
+        await ops.upsertManyFiles(tx, records, {
           skipCurrentRecalc: true,
         })
       }),
@@ -226,32 +237,32 @@ export function buildWriteQuerySpecs(db: DatabaseAdapter, sampleDirId: string): 
       category: 'write',
       run: async () => {
         const ids = await getLargeDir10kIds()
-        await ops.moveFilesAllVersions(db, ids, 'dir-0049')
+        await ops.moveFilesAllVersions(db, ids, LIBRARY_SAMPLES.moveTargetDirId)
         await ops.moveFilesAllVersions(db, ids, sampleDirId)
       },
     },
     {
       name: 'recalculateCurrentForGroups:10k(loop)',
       category: 'write',
-      run: withRollback(async () => {
-        const ids = await getLargeDir10kIds()
+      run: withRollback(async (tx) => {
+        const ids = await getLargeDir10kIds(tx)
         const placeholders = ids.map(() => '?').join(',')
-        const groups = await db.getAllAsync<{
+        const groups = await tx.getAllAsync<{
           name: string
           directoryId: string | null
         }>(
           `SELECT DISTINCT name, directoryId FROM files WHERE id IN (${placeholders}) AND kind = 'file'`,
           ...ids,
         )
-        await ops.recalculateCurrentForGroups(db, groups)
+        await ops.recalculateCurrentForGroups(tx, groups)
       }),
     },
     {
       name: 'recalculateCurrentForFileIds:10k(bulk)',
       category: 'write',
-      run: withRollback(async () => {
-        const ids = await getLargeDir10kIds()
-        await ops.recalculateCurrentForFileIds(db, ids)
+      run: withRollback(async (tx) => {
+        const ids = await getLargeDir10kIds(tx)
+        await ops.recalculateCurrentForFileIds(tx, ids)
       }),
     },
   ]

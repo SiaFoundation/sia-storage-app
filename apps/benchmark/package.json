@@ -6,7 +6,13 @@
     "bench": "node --import tsx src/main.ts",
     "bench:10m": "node --import tsx src/main.ts --scale 10",
     "bench:imports": "node --import tsx src/importsMain.ts",
-    "bench:imports:100k": "node --import tsx src/importsMain.ts --profile archive100k"
+    "bench:imports:100k": "node --import tsx src/importsMain.ts --profile archive100k",
+    "bench:ci": "node --import tsx src/ci/main.ts",
+    "bench:baseline": "node --import tsx src/ci/main.ts --update-baseline",
+    "bench:calibrate": "node --import tsx src/ci/calibrate.ts",
+    "bench:comment": "node --import tsx src/ci/postComment.ts",
+    "test": "node --import tsx --test 'src/**/*.test.ts'",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "tsx": "4.23.15"

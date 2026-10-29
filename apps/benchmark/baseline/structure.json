@@ -1,0 +1,1050 @@
+{
+  "library": {
+    "scale": 0.25,
+    "specs": {
+      "libraryFileCount": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "count: 170500",
+        "plans": [
+          {
+            "sql": "SELECT COUNT(*) as count FROM files f INDEXED BY idx_files_current_type WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL",
+            "plan": [
+              "SCAN f USING INDEX idx_files_current_type"
+            ]
+          }
+        ]
+      },
+      "mediaFileCount": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "count: 135800",
+        "plans": [
+          {
+            "sql": "SELECT COUNT(*) as count FROM files f INDEXED BY idx_files_current_type WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND (f.type LIKE 'image/%' OR f.type LIKE 'video/%' OR f.type LIKE 'audio/%')",
+            "plan": [
+              "SCAN f USING INDEX idx_files_current_type"
+            ]
+          }
+        ]
+      },
+      "tagFileCount": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "count: 24357",
+        "plans": [
+          {
+            "sql": "SELECT COUNT(*) as count FROM files f INNER JOIN file_tags ft ON ft.fileId = f.id WHERE ft.tagId = ? AND f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL",
+            "plan": [
+              "SEARCH ft USING INDEX idx_file_tags_tagId (tagId=?)",
+              "SEARCH f USING INDEX sqlite_autoindex_files_1 (id=?)"
+            ]
+          }
+        ]
+      },
+      "directoryFileCount": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "count: 3101",
+        "plans": [
+          {
+            "sql": "SELECT COUNT(*) as count FROM files f WHERE f.directoryId = ? AND f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL",
+            "plan": [
+              "SEARCH f USING INDEX idx_files_current_directoryId (directoryId=?)"
+            ]
+          }
+        ]
+      },
+      "unfiledFileCount": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "count: 15485",
+        "plans": [
+          {
+            "sql": "SELECT COUNT(*) as count FROM files f WHERE f.directoryId IS NULL AND f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL",
+            "plan": [
+              "SEARCH f USING INDEX idx_files_current_directoryId (directoryId=?)"
+            ]
+          }
+        ]
+      },
+      "countWithFilters:imageOnly": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "count: 67900",
+        "plans": [
+          {
+            "sql": "SELECT COUNT(*) as count FROM files f INDEXED BY idx_files_current_type WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND (f.type LIKE ?)",
+            "plan": [
+              "SCAN f USING INDEX idx_files_current_type"
+            ]
+          }
+        ]
+      },
+      "countWithFilters:withTag": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "count: 24357",
+        "plans": [
+          {
+            "sql": "SELECT COUNT(*) as count FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.id IN ( SELECT ft.fileId FROM file_tags ft WHERE ft.tagId IN (?) GROUP BY ft.fileId HAVING COUNT(DISTINCT ft.tagId) = ? )",
+            "plan": [
+              "SEARCH f USING INDEX sqlite_autoindex_files_1 (id=?)",
+              "LIST SUBQUERY 1",
+              "SEARCH ft USING INDEX idx_file_tags_tagId (tagId=?)",
+              "USE TEMP B-TREE FOR GROUP BY"
+            ]
+          }
+        ]
+      },
+      "countWithFilters:withDirectory": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "count: 3101",
+        "plans": [
+          {
+            "sql": "SELECT COUNT(*) as count FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.directoryId = ?",
+            "plan": [
+              "SEARCH f USING INDEX idx_files_current_directoryId (directoryId=?)"
+            ]
+          }
+        ]
+      },
+      "sortedFileIds:date:page1": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "rows: 50",
+        "plans": [
+          {
+            "sql": "SELECT f.id FROM files f INDEXED BY idx_files_current_createdAt WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL ORDER BY f.createdAt DESC, f.id DESC LIMIT ? OFFSET ?",
+            "plan": [
+              "SCAN f USING INDEX idx_files_current_createdAt"
+            ]
+          }
+        ]
+      },
+      "sortedFileIds:date:deepPage": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "rows: 50",
+        "plans": [
+          {
+            "sql": "SELECT f.id FROM files f INDEXED BY idx_files_current_createdAt WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL ORDER BY f.createdAt DESC, f.id DESC LIMIT ? OFFSET ?",
+            "plan": [
+              "SCAN f USING INDEX idx_files_current_createdAt"
+            ]
+          }
+        ]
+      },
+      "sortedFileIds:name:page1": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "rows: 50",
+        "plans": [
+          {
+            "sql": "SELECT f.id FROM files f INDEXED BY idx_files_current_nameSortKey WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL ORDER BY f.nameSortKey ASC, f.id ASC LIMIT ? OFFSET ?",
+            "plan": [
+              "SCAN f USING INDEX idx_files_current_nameSortKey"
+            ]
+          }
+        ]
+      },
+      "sortedFileIds:size:page1": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "rows: 50",
+        "plans": [
+          {
+            "sql": "SELECT f.id FROM files f INDEXED BY idx_files_current_size WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL ORDER BY f.size DESC, f.id DESC LIMIT ? OFFSET ?",
+            "plan": [
+              "SCAN f USING INDEX idx_files_current_size"
+            ]
+          }
+        ]
+      },
+      "filePosition": {
+        "reads": 2,
+        "writes": 0,
+        "execs": 0,
+        "result": "count: 45624",
+        "plans": [
+          {
+            "sql": "SELECT f.id, f.nameSortKey, f.size, f.createdAt, f.addedAt FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.id = ? LIMIT 1",
+            "plan": [
+              "SEARCH f USING INDEX sqlite_autoindex_files_1 (id=?)"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) as count FROM files f INDEXED BY idx_files_current_createdAt WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND ((f.createdAt > ?) OR (f.createdAt = ? AND f.id > ?))",
+            "plan": [
+              "SCAN f USING INDEX idx_files_current_createdAt"
+            ]
+          }
+        ]
+      },
+      "uploadStats": {
+        "reads": 12,
+        "writes": 0,
+        "execs": 0,
+        "result": "keys: 8",
+        "plans": [
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(f.size), 0) AS bytes FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.type LIKE 'image/%'",
+            "plan": [
+              "SCAN f"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(f.size), 0) AS bytes FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.type LIKE 'video/%'",
+            "plan": [
+              "SCAN f"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(f.size), 0) AS bytes FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.type LIKE 'audio/%'",
+            "plan": [
+              "SCAN f"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(f.size), 0) AS bytes FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND (f.type LIKE 'text/%' OR f.type LIKE 'application/%')",
+            "plan": [
+              "SCAN f"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(f.size), 0) AS bytes FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.type NOT LIKE 'image/%' AND f.type NOT LIKE 'video/%' AND f.type NOT LIKE 'audio/%' AND f.type NOT LIKE 'text/%' AND f.type NOT LIKE 'application/%'",
+            "plan": [
+              "SCAN f"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(f.size), 0) AS bytes FROM files f WHERE f.kind = 'thumb' AND ((f.kind = 'file' AND f.current = 1) OR (f.kind = 'thumb' AND EXISTS (SELECT 1 FROM files o WHERE o.id = f.thumbForId AND o.current = 1 AND o.trashedAt IS NULL AND o.deletedAt IS NULL))) AND f.trashedAt IS NULL AND f.deletedAt IS NULL",
+            "plan": [
+              "SEARCH f USING INDEX idx_files_kind (kind=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH o USING INDEX sqlite_autoindex_files_1 (id=?)"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes, COALESCE(SUM(here), 0) AS remaining, COALESCE(SUM(CASE WHEN here THEN size ELSE 0 END), 0) AS remainingBytes FROM ( SELECT f.size AS size, (f.lostReason IS NULL AND EXISTS ( SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id )) AS here FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.type LIKE 'image/%' AND NOT EXISTS ( SELECT 1 FROM objects obj WHERE obj.fileId = f.id AND obj.indexerURL = ? ) )",
+            "plan": [
+              "SCAN f",
+              "CORRELATED SCALAR SUBQUERY 2",
+              "SEARCH obj USING INDEX idx_objects_fileId (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes, COALESCE(SUM(here), 0) AS remaining, COALESCE(SUM(CASE WHEN here THEN size ELSE 0 END), 0) AS remainingBytes FROM ( SELECT f.size AS size, (f.lostReason IS NULL AND EXISTS ( SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id )) AS here FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.type LIKE 'video/%' AND NOT EXISTS ( SELECT 1 FROM objects obj WHERE obj.fileId = f.id AND obj.indexerURL = ? ) )",
+            "plan": [
+              "SCAN f",
+              "CORRELATED SCALAR SUBQUERY 2",
+              "SEARCH obj USING INDEX idx_objects_fileId (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes, COALESCE(SUM(here), 0) AS remaining, COALESCE(SUM(CASE WHEN here THEN size ELSE 0 END), 0) AS remainingBytes FROM ( SELECT f.size AS size, (f.lostReason IS NULL AND EXISTS ( SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id )) AS here FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.type LIKE 'audio/%' AND NOT EXISTS ( SELECT 1 FROM objects obj WHERE obj.fileId = f.id AND obj.indexerURL = ? ) )",
+            "plan": [
+              "SCAN f",
+              "CORRELATED SCALAR SUBQUERY 2",
+              "SEARCH obj USING INDEX idx_objects_fileId (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes, COALESCE(SUM(here), 0) AS remaining, COALESCE(SUM(CASE WHEN here THEN size ELSE 0 END), 0) AS remainingBytes FROM ( SELECT f.size AS size, (f.lostReason IS NULL AND EXISTS ( SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id )) AS here FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND (f.type LIKE 'text/%' OR f.type LIKE 'application/%') AND NOT EXISTS ( SELECT 1 FROM objects obj WHERE obj.fileId = f.id AND obj.indexerURL = ? ) )",
+            "plan": [
+              "SCAN f",
+              "CORRELATED SCALAR SUBQUERY 2",
+              "SEARCH obj USING INDEX idx_objects_fileId (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes, COALESCE(SUM(here), 0) AS remaining, COALESCE(SUM(CASE WHEN here THEN size ELSE 0 END), 0) AS remainingBytes FROM ( SELECT f.size AS size, (f.lostReason IS NULL AND EXISTS ( SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id )) AS here FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.type NOT LIKE 'image/%' AND f.type NOT LIKE 'video/%' AND f.type NOT LIKE 'audio/%' AND f.type NOT LIKE 'text/%' AND f.type NOT LIKE 'application/%' AND NOT EXISTS ( SELECT 1 FROM objects obj WHERE obj.fileId = f.id AND obj.indexerURL = ? ) )",
+            "plan": [
+              "SCAN f",
+              "CORRELATED SCALAR SUBQUERY 2",
+              "SEARCH obj USING INDEX idx_objects_fileId (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes, COALESCE(SUM(here), 0) AS remaining, COALESCE(SUM(CASE WHEN here THEN size ELSE 0 END), 0) AS remainingBytes FROM ( SELECT f.size AS size, (f.lostReason IS NULL AND EXISTS ( SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id )) AS here FROM files f WHERE f.kind = 'thumb' AND ((f.kind = 'file' AND f.current = 1) OR (f.kind = 'thumb' AND EXISTS (SELECT 1 FROM files o WHERE o.id = f.thumbForId AND o.current = 1 AND o.trashedAt IS NULL AND o.deletedAt IS NULL))) AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND NOT EXISTS ( SELECT 1 FROM objects obj WHERE obj.fileId = f.id AND obj.indexerURL = ? ) )",
+            "plan": [
+              "SEARCH f USING INDEX idx_files_kind (kind=?)",
+              "CORRELATED SCALAR SUBQUERY 2",
+              "SEARCH o USING INDEX sqlite_autoindex_files_1 (id=?)",
+              "CORRELATED SCALAR SUBQUERY 3",
+              "SEARCH obj USING INDEX idx_objects_fileId (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)"
+            ]
+          }
+        ]
+      },
+      "allDirectoriesWithCounts": {
+        "reads": 2,
+        "writes": 0,
+        "execs": 0,
+        "result": "rows: 50",
+        "plans": [
+          {
+            "sql": "SELECT id, path, createdAt, parentId FROM directories ORDER BY nameSortKey",
+            "plan": [
+              "SCAN directories USING INDEX idx_directories_nameSortKey"
+            ]
+          },
+          {
+            "sql": "SELECT f.directoryId, COUNT(*) AS fileCount FROM files f WHERE f.directoryId IS NOT NULL AND f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL GROUP BY f.directoryId",
+            "plan": [
+              "SEARCH f USING INDEX idx_files_current_directoryId (directoryId>?)"
+            ]
+          }
+        ]
+      },
+      "directoryChildren:root": {
+        "reads": 2,
+        "writes": 0,
+        "execs": 0,
+        "result": "rows: 50",
+        "plans": [
+          {
+            "sql": "SELECT id, path, createdAt, parentId FROM directories ORDER BY nameSortKey",
+            "plan": [
+              "SCAN directories USING INDEX idx_directories_nameSortKey"
+            ]
+          },
+          {
+            "sql": "SELECT f.directoryId, COUNT(*) AS fileCount FROM files f WHERE f.directoryId IS NOT NULL AND f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL GROUP BY f.directoryId",
+            "plan": [
+              "SEARCH f USING INDEX idx_files_current_directoryId (directoryId>?)"
+            ]
+          }
+        ]
+      },
+      "thumbnailCandidatePage": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "rows: 50",
+        "plans": [
+          {
+            "sql": "SELECT f.id, f.hash, f.type, f.mediaAssetId, f.createdAt FROM files f INNER JOIN fs fsm ON fsm.fileId = f.id LEFT JOIN files t ON t.thumbForId = f.id AND t.thumbSize IN (64,512) WHERE f.type IN (?, …) AND f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL GROUP BY f.id HAVING COUNT(DISTINCT t.thumbSize) < 2 ORDER BY f.createdAt DESC, f.id DESC LIMIT ?",
+            "plan": [
+              "SCAN f USING INDEX sqlite_autoindex_files_1",
+              "SEARCH fsm USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)",
+              "SEARCH t USING COVERING INDEX idx_files_thumbForId_thumbSize (thumbForId=? AND thumbSize=?) LEFT-JOIN",
+              "USE TEMP B-TREE FOR count(DISTINCT)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          }
+        ]
+      },
+      "thumbnailScanProgress": {
+        "reads": 2,
+        "writes": 0,
+        "execs": 0,
+        "result": "originals: 101850, thumbs: 0",
+        "plans": [
+          {
+            "sql": "SELECT COUNT(*) as count FROM files f WHERE f.type IN (?, …) AND f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL",
+            "plan": [
+              "SEARCH f USING INDEX idx_files_current_type (type=?)"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) as count FROM files f WHERE f.kind = 'thumb' AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.thumbSize IN (64,512)",
+            "plan": [
+              "SEARCH f USING INDEX idx_files_kind (kind=?)"
+            ]
+          }
+        ]
+      },
+      "recalculateCurrentForGroup:single": {
+        "reads": 1,
+        "writes": 1,
+        "execs": 0,
+        "result": "undefined",
+        "plans": [
+          {
+            "sql": "SELECT id, name, directoryId, stackId, updatedAt, current FROM files WHERE name = ? AND directoryId = ? AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL ORDER BY updatedAt DESC, id DESC",
+            "plan": [
+              "SEARCH files USING INDEX idx_files_version_group (name=? AND directoryId=?)"
+            ]
+          }
+        ]
+      },
+      "recalculateCurrentForFileIds:500": {
+        "reads": 2,
+        "writes": 1,
+        "execs": 0,
+        "result": "undefined",
+        "plans": [
+          {
+            "sql": "SELECT f2.id, f2.name, f2.directoryId, f2.stackId, f2.updatedAt, f2.current FROM (SELECT DISTINCT name, directoryId FROM files WHERE id IN (?, …) AND kind = 'file') g CROSS JOIN files f2 ON f2.name = g.name AND f2.directoryId IS g.directoryId WHERE f2.kind = 'file' AND f2.trashedAt IS NULL AND f2.deletedAt IS NULL",
+            "plan": [
+              "CO-ROUTINE g",
+              "SEARCH files USING INDEX sqlite_autoindex_files_1 (id=?)",
+              "USE TEMP B-TREE FOR DISTINCT",
+              "SCAN g",
+              "SEARCH f2 USING INDEX idx_files_version_group (name=? AND directoryId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT id, name, directoryId, stackId, updatedAt, current FROM files INDEXED BY idx_files_stackId WHERE stackId IN (?, …) AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL",
+            "plan": [
+              "SEARCH files USING INDEX idx_files_stackId (stackId=?)"
+            ]
+          }
+        ]
+      },
+      "recalculateCurrentForFileIds:10k": {
+        "reads": 2,
+        "writes": 1,
+        "execs": 0,
+        "result": "undefined",
+        "plans": [
+          {
+            "sql": "SELECT f2.id, f2.name, f2.directoryId, f2.stackId, f2.updatedAt, f2.current FROM (SELECT DISTINCT name, directoryId FROM files WHERE id IN (?, …) AND kind = 'file') g CROSS JOIN files f2 ON f2.name = g.name AND f2.directoryId IS g.directoryId WHERE f2.kind = 'file' AND f2.trashedAt IS NULL AND f2.deletedAt IS NULL",
+            "plan": [
+              "CO-ROUTINE g",
+              "SEARCH files USING INDEX sqlite_autoindex_files_1 (id=?)",
+              "USE TEMP B-TREE FOR DISTINCT",
+              "SCAN g",
+              "SEARCH f2 USING INDEX idx_files_version_group (name=? AND directoryId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT id, name, directoryId, stackId, updatedAt, current FROM files INDEXED BY idx_files_stackId WHERE stackId IN (?, …) AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL",
+            "plan": [
+              "SEARCH files USING INDEX idx_files_stackId (stackId=?)"
+            ]
+          }
+        ]
+      },
+      "trashFilesAndThumbnails:1k": {
+        "reads": 113,
+        "writes": 64,
+        "execs": 0,
+        "result": "undefined",
+        "plans": [
+          {
+            "sql": "SELECT DISTINCT name, directoryId FROM files WHERE id IN (?, …) AND kind = 'file'",
+            "plan": [
+              "SEARCH files USING INDEX sqlite_autoindex_files_1 (id=?)",
+              "USE TEMP B-TREE FOR DISTINCT"
+            ]
+          },
+          {
+            "sql": "SELECT DISTINCT directoryId FROM files WHERE id IN (?, …) AND directoryId IS NOT NULL",
+            "plan": [
+              "SEARCH files USING INDEX sqlite_autoindex_files_1 (id=?)",
+              "USE TEMP B-TREE FOR DISTINCT"
+            ]
+          },
+          {
+            "sql": "SELECT id, updatedAt FROM files WHERE id IN (?, …) ORDER BY updatedAt DESC, id DESC",
+            "plan": [
+              "SEARCH files USING INDEX sqlite_autoindex_files_1 (id=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          },
+          {
+            "sql": "SELECT f2.id, f2.name, f2.directoryId, f2.stackId, f2.updatedAt, f2.current FROM (SELECT json_extract(value, '$.name') AS name, json_extract(value, '$.directoryId') AS directoryId FROM json_each(?)) g CROSS JOIN files f2 ON f2.name = g.name AND f2.directoryId IS g.directoryId WHERE f2.kind = 'file' AND f2.trashedAt IS NULL AND f2.deletedAt IS NULL",
+            "plan": [
+              "SCAN json_each VIRTUAL TABLE INDEX 1:",
+              "SEARCH f2 USING INDEX idx_files_version_group (name=? AND directoryId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT d.id, d.path FROM directories d WHERE d.id IN (?, …) AND NOT EXISTS ( SELECT 1 FROM files f WHERE f.directoryId = d.id AND f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL ) -- Any folder under d, as a path between '<path>/' and '<path>0', -- '0' being the byte after '/', which SQLite answers from the -- unique index on path. A LIKE on an expression reads every folder. AND NOT EXISTS ( SELECT 1 FROM directories c WHERE c.path > d.path || '/' AND c.path < d.path || '0' ) AND NOT EXISTS ( SELECT 1 FROM import_files i WHERE i.directoryId = d.id AND i.state IN ('pending', 'active') ) AND NOT EXISTS (SELECT 1 FROM imports im WHERE im.directoryId = d.id AND im.sealed = 0)",
+            "plan": [
+              "SCAN d",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH f USING INDEX idx_files_current_directoryId (directoryId=?)",
+              "CORRELATED SCALAR SUBQUERY 2",
+              "SEARCH c USING COVERING INDEX sqlite_autoindex_directories_2 (path>? AND path<?)",
+              "CORRELATED SCALAR SUBQUERY 3",
+              "SEARCH i USING COVERING INDEX idx_import_files_state_directory (state=? AND directoryId=?)",
+              "CORRELATED SCALAR SUBQUERY 4",
+              "SCAN im"
+            ]
+          },
+          {
+            "sql": "SELECT id, name, coalesce(trashedFrom, '') AS fromPath, trashedAt, updatedAt, stackId FROM files WHERE id IN (?, …) AND kind = 'file' AND trashedAt IS NOT NULL AND deletedAt IS NULL",
+            "plan": [
+              "SEARCH files USING INDEX idx_files_trashedAt (trashedAt>?)"
+            ]
+          },
+          {
+            "sql": "SELECT id, path, createdAt, parentId FROM directories WHERE path = ?",
+            "plan": [
+              "SEARCH directories USING INDEX sqlite_autoindex_directories_2 (path=?)"
+            ]
+          },
+          {
+            "sql": "SELECT f.name, f.stackId FROM json_each(?) j CROSS JOIN files f ON f.name = j.value AND f.directoryId IS ? WHERE f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL",
+            "plan": [
+              "SCAN j VIRTUAL TABLE INDEX 1:",
+              "SEARCH f USING INDEX idx_files_version_group (name=? AND directoryId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT id, name, directoryId, stackId, updatedAt, current FROM files INDEXED BY idx_files_stackId WHERE stackId IN (?, …) AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL",
+            "plan": [
+              "SEARCH files USING INDEX idx_files_stackId (stackId=?)"
+            ]
+          }
+        ]
+      },
+      "moveFilesAllVersions:1k": {
+        "reads": 6,
+        "writes": 2004,
+        "execs": 0,
+        "result": "undefined",
+        "plans": [
+          {
+            "sql": "SELECT f.id, f.updatedAt FROM files f JOIN (SELECT DISTINCT name, directoryId FROM files WHERE id IN (?, …) AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL) g ON f.name = g.name AND f.directoryId IS g.directoryId WHERE f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL ORDER BY f.updatedAt DESC, f.id DESC",
+            "plan": [
+              "CO-ROUTINE g",
+              "SEARCH files USING INDEX sqlite_autoindex_files_1 (id=?)",
+              "USE TEMP B-TREE FOR DISTINCT",
+              "SCAN g",
+              "SEARCH f USING INDEX idx_files_version_group (name=? AND directoryId=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          },
+          {
+            "sql": "SELECT f2.id, f2.name, f2.directoryId, f2.stackId, f2.updatedAt, f2.current FROM (SELECT DISTINCT name, directoryId FROM files WHERE id IN (?, …) AND kind = 'file') g CROSS JOIN files f2 ON f2.name = g.name AND f2.directoryId IS g.directoryId WHERE f2.kind = 'file' AND f2.trashedAt IS NULL AND f2.deletedAt IS NULL",
+            "plan": [
+              "CO-ROUTINE g",
+              "SEARCH files USING INDEX sqlite_autoindex_files_1 (id=?)",
+              "USE TEMP B-TREE FOR DISTINCT",
+              "SCAN g",
+              "SEARCH f2 USING INDEX idx_files_version_group (name=? AND directoryId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT id, name, directoryId, stackId, updatedAt, current FROM files INDEXED BY idx_files_stackId WHERE stackId IN (?, …) AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL",
+            "plan": [
+              "SEARCH files USING INDEX idx_files_stackId (stackId=?)"
+            ]
+          }
+        ]
+      },
+      "upsertManyFiles:500": {
+        "reads": 0,
+        "writes": 1,
+        "execs": 0,
+        "result": "undefined",
+        "plans": []
+      },
+      "moveFilesAllVersions:10k": {
+        "reads": 6,
+        "writes": 11194,
+        "execs": 0,
+        "result": "undefined",
+        "plans": [
+          {
+            "sql": "SELECT f.id, f.updatedAt FROM files f JOIN (SELECT DISTINCT name, directoryId FROM files WHERE id IN (?, …) AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL) g ON f.name = g.name AND f.directoryId IS g.directoryId WHERE f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL ORDER BY f.updatedAt DESC, f.id DESC",
+            "plan": [
+              "CO-ROUTINE g",
+              "SEARCH files USING INDEX sqlite_autoindex_files_1 (id=?)",
+              "USE TEMP B-TREE FOR DISTINCT",
+              "SCAN g",
+              "SEARCH f USING INDEX idx_files_version_group (name=? AND directoryId=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          },
+          {
+            "sql": "SELECT f2.id, f2.name, f2.directoryId, f2.stackId, f2.updatedAt, f2.current FROM (SELECT DISTINCT name, directoryId FROM files WHERE id IN (?, …) AND kind = 'file') g CROSS JOIN files f2 ON f2.name = g.name AND f2.directoryId IS g.directoryId WHERE f2.kind = 'file' AND f2.trashedAt IS NULL AND f2.deletedAt IS NULL",
+            "plan": [
+              "CO-ROUTINE g",
+              "SEARCH files USING INDEX sqlite_autoindex_files_1 (id=?)",
+              "USE TEMP B-TREE FOR DISTINCT",
+              "SCAN g",
+              "SEARCH f2 USING INDEX idx_files_version_group (name=? AND directoryId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT id, name, directoryId, stackId, updatedAt, current FROM files INDEXED BY idx_files_stackId WHERE stackId IN (?, …) AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL",
+            "plan": [
+              "SEARCH files USING INDEX idx_files_stackId (stackId=?)"
+            ]
+          }
+        ]
+      },
+      "recalculateCurrentForGroups:10k(loop)": {
+        "reads": 19,
+        "writes": 9,
+        "execs": 0,
+        "result": "undefined",
+        "plans": [
+          {
+            "sql": "SELECT DISTINCT name, directoryId FROM files WHERE id IN (?, …) AND kind = 'file'",
+            "plan": [
+              "SEARCH files USING INDEX sqlite_autoindex_files_1 (id=?)",
+              "USE TEMP B-TREE FOR DISTINCT"
+            ]
+          },
+          {
+            "sql": "SELECT f2.id, f2.name, f2.directoryId, f2.stackId, f2.updatedAt, f2.current FROM (SELECT json_extract(value, '$.name') AS name, json_extract(value, '$.directoryId') AS directoryId FROM json_each(?)) g CROSS JOIN files f2 ON f2.name = g.name AND f2.directoryId IS g.directoryId WHERE f2.kind = 'file' AND f2.trashedAt IS NULL AND f2.deletedAt IS NULL",
+            "plan": [
+              "SCAN json_each VIRTUAL TABLE INDEX 1:",
+              "SEARCH f2 USING INDEX idx_files_version_group (name=? AND directoryId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT id, name, directoryId, stackId, updatedAt, current FROM files INDEXED BY idx_files_stackId WHERE stackId IN (?, …) AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL",
+            "plan": [
+              "SEARCH files USING INDEX idx_files_stackId (stackId=?)"
+            ]
+          }
+        ]
+      },
+      "recalculateCurrentForFileIds:10k(bulk)": {
+        "reads": 2,
+        "writes": 1,
+        "execs": 0,
+        "result": "undefined",
+        "plans": [
+          {
+            "sql": "SELECT f2.id, f2.name, f2.directoryId, f2.stackId, f2.updatedAt, f2.current FROM (SELECT DISTINCT name, directoryId FROM files WHERE id IN (?, …) AND kind = 'file') g CROSS JOIN files f2 ON f2.name = g.name AND f2.directoryId IS g.directoryId WHERE f2.kind = 'file' AND f2.trashedAt IS NULL AND f2.deletedAt IS NULL",
+            "plan": [
+              "CO-ROUTINE g",
+              "SEARCH files USING INDEX sqlite_autoindex_files_1 (id=?)",
+              "USE TEMP B-TREE FOR DISTINCT",
+              "SCAN g",
+              "SEARCH f2 USING INDEX idx_files_version_group (name=? AND directoryId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT id, name, directoryId, stackId, updatedAt, current FROM files INDEXED BY idx_files_stackId WHERE stackId IN (?, …) AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL",
+            "plan": [
+              "SEARCH files USING INDEX idx_files_stackId (stackId=?)"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "imports": {
+    "specs": {
+      "imports.list": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "rows: 31",
+        "plans": [
+          {
+            "sql": "SELECT * FROM imports ORDER BY lastActivityAt DESC, id DESC",
+            "plan": [
+              "SCAN imports USING INDEX idx_imports_activity"
+            ]
+          }
+        ]
+      },
+      "imports.summary:allIds": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "rows: 31",
+        "plans": [
+          {
+            "sql": "SELECT i.id AS importId, i.sealed AS sealed, f.state AS state, COUNT(f.importId) AS n, COALESCE(SUM(f.copyBytes), 0) AS bytes, COALESCE(SUM(f.size), 0) AS size, COALESCE(SUM(CASE WHEN f.size > 0 THEN 1 ELSE 0 END), 0) AS sized, COALESCE(SUM(CASE WHEN f.attempts > 0 AND f.nextAttemptAt > ? THEN 1 ELSE 0 END), 0) AS backoff, MIN(CASE WHEN f.attempts > 0 AND f.nextAttemptAt > ? THEN f.nextAttemptAt END) AS soonest FROM imports i LEFT JOIN import_files f ON f.importId = i.id WHERE i.id IN (?, …) GROUP BY i.id, f.state",
+            "plan": [
+              "SEARCH i USING INDEX sqlite_autoindex_imports_1 (id=?)",
+              "SEARCH f USING COVERING INDEX idx_import_files_import_state_agg (importId=?) LEFT-JOIN"
+            ]
+          }
+        ]
+      },
+      "imports.summary:archiveOnly": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "rows: 1",
+        "plans": [
+          {
+            "sql": "SELECT i.id AS importId, i.sealed AS sealed, f.state AS state, COUNT(f.importId) AS n, COALESCE(SUM(f.copyBytes), 0) AS bytes, COALESCE(SUM(f.size), 0) AS size, COALESCE(SUM(CASE WHEN f.size > 0 THEN 1 ELSE 0 END), 0) AS sized, COALESCE(SUM(CASE WHEN f.attempts > 0 AND f.nextAttemptAt > ? THEN 1 ELSE 0 END), 0) AS backoff, MIN(CASE WHEN f.attempts > 0 AND f.nextAttemptAt > ? THEN f.nextAttemptAt END) AS soonest FROM imports i LEFT JOIN import_files f ON f.importId = i.id WHERE i.id IN (?) GROUP BY i.id, f.state",
+            "plan": [
+              "SEARCH i USING INDEX sqlite_autoindex_imports_1 (id=?)",
+              "SEARCH f USING COVERING INDEX idx_import_files_import_state_agg (importId=?) LEFT-JOIN"
+            ]
+          }
+        ]
+      },
+      "imports.countInFlight:global": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "count: 7350",
+        "plans": [
+          {
+            "sql": "SELECT COUNT(*) AS n FROM import_files WHERE state IN ('pending','active')",
+            "plan": [
+              "SEARCH import_files USING COVERING INDEX idx_import_files_state_directory (state=?)"
+            ]
+          }
+        ]
+      },
+      "imports.countInFlight:directory": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "count: 3675",
+        "plans": [
+          {
+            "sql": "SELECT COUNT(*) AS n FROM import_files WHERE state IN ('pending','active') AND directoryId = ?",
+            "plan": [
+              "SEARCH import_files USING COVERING INDEX idx_import_files_state_directory (state=? AND directoryId=?)"
+            ]
+          }
+        ]
+      },
+      "imports.files:archive:limit100": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "rows: 100",
+        "plans": [
+          {
+            "sql": "SELECT * FROM import_files WHERE importId = ? ORDER BY addedAt DESC, id DESC LIMIT 100",
+            "plan": [
+              "SEARCH import_files USING INDEX idx_import_files_import_added (importId=?)"
+            ]
+          }
+        ]
+      },
+      "imports.pendingFiles:20": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "rows: 20",
+        "plans": [
+          {
+            "sql": "SELECT * FROM import_files INDEXED BY idx_import_files_pending WHERE state = 'pending' AND nextAttemptAt <= ? ORDER BY addedAt DESC, id DESC LIMIT ?",
+            "plan": [
+              "SCAN import_files USING INDEX idx_import_files_pending"
+            ]
+          }
+        ]
+      },
+      "stats.uploadStats": {
+        "reads": 12,
+        "writes": 0,
+        "execs": 0,
+        "result": "keys: 8",
+        "plans": [
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(f.size), 0) AS bytes FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.type LIKE 'image/%'",
+            "plan": [
+              "SCAN f"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(f.size), 0) AS bytes FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.type LIKE 'video/%'",
+            "plan": [
+              "SCAN f"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(f.size), 0) AS bytes FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.type LIKE 'audio/%'",
+            "plan": [
+              "SCAN f"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(f.size), 0) AS bytes FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND (f.type LIKE 'text/%' OR f.type LIKE 'application/%')",
+            "plan": [
+              "SCAN f"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(f.size), 0) AS bytes FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.type NOT LIKE 'image/%' AND f.type NOT LIKE 'video/%' AND f.type NOT LIKE 'audio/%' AND f.type NOT LIKE 'text/%' AND f.type NOT LIKE 'application/%'",
+            "plan": [
+              "SCAN f"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(f.size), 0) AS bytes FROM files f WHERE f.kind = 'thumb' AND ((f.kind = 'file' AND f.current = 1) OR (f.kind = 'thumb' AND EXISTS (SELECT 1 FROM files o WHERE o.id = f.thumbForId AND o.current = 1 AND o.trashedAt IS NULL AND o.deletedAt IS NULL))) AND f.trashedAt IS NULL AND f.deletedAt IS NULL",
+            "plan": [
+              "SEARCH f USING INDEX idx_files_kind (kind=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH o USING INDEX sqlite_autoindex_files_1 (id=?)"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes, COALESCE(SUM(here), 0) AS remaining, COALESCE(SUM(CASE WHEN here THEN size ELSE 0 END), 0) AS remainingBytes FROM ( SELECT f.size AS size, (f.lostReason IS NULL AND EXISTS ( SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id )) AS here FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.type LIKE 'image/%' AND NOT EXISTS ( SELECT 1 FROM objects obj WHERE obj.fileId = f.id AND obj.indexerURL = ? ) )",
+            "plan": [
+              "SCAN f",
+              "CORRELATED SCALAR SUBQUERY 2",
+              "SEARCH obj USING INDEX idx_objects_fileId (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes, COALESCE(SUM(here), 0) AS remaining, COALESCE(SUM(CASE WHEN here THEN size ELSE 0 END), 0) AS remainingBytes FROM ( SELECT f.size AS size, (f.lostReason IS NULL AND EXISTS ( SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id )) AS here FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.type LIKE 'video/%' AND NOT EXISTS ( SELECT 1 FROM objects obj WHERE obj.fileId = f.id AND obj.indexerURL = ? ) )",
+            "plan": [
+              "SCAN f",
+              "CORRELATED SCALAR SUBQUERY 2",
+              "SEARCH obj USING INDEX idx_objects_fileId (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes, COALESCE(SUM(here), 0) AS remaining, COALESCE(SUM(CASE WHEN here THEN size ELSE 0 END), 0) AS remainingBytes FROM ( SELECT f.size AS size, (f.lostReason IS NULL AND EXISTS ( SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id )) AS here FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.type LIKE 'audio/%' AND NOT EXISTS ( SELECT 1 FROM objects obj WHERE obj.fileId = f.id AND obj.indexerURL = ? ) )",
+            "plan": [
+              "SCAN f",
+              "CORRELATED SCALAR SUBQUERY 2",
+              "SEARCH obj USING INDEX idx_objects_fileId (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes, COALESCE(SUM(here), 0) AS remaining, COALESCE(SUM(CASE WHEN here THEN size ELSE 0 END), 0) AS remainingBytes FROM ( SELECT f.size AS size, (f.lostReason IS NULL AND EXISTS ( SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id )) AS here FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND (f.type LIKE 'text/%' OR f.type LIKE 'application/%') AND NOT EXISTS ( SELECT 1 FROM objects obj WHERE obj.fileId = f.id AND obj.indexerURL = ? ) )",
+            "plan": [
+              "SCAN f",
+              "CORRELATED SCALAR SUBQUERY 2",
+              "SEARCH obj USING INDEX idx_objects_fileId (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes, COALESCE(SUM(here), 0) AS remaining, COALESCE(SUM(CASE WHEN here THEN size ELSE 0 END), 0) AS remainingBytes FROM ( SELECT f.size AS size, (f.lostReason IS NULL AND EXISTS ( SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id )) AS here FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND f.type NOT LIKE 'image/%' AND f.type NOT LIKE 'video/%' AND f.type NOT LIKE 'audio/%' AND f.type NOT LIKE 'text/%' AND f.type NOT LIKE 'application/%' AND NOT EXISTS ( SELECT 1 FROM objects obj WHERE obj.fileId = f.id AND obj.indexerURL = ? ) )",
+            "plan": [
+              "SCAN f",
+              "CORRELATED SCALAR SUBQUERY 2",
+              "SEARCH obj USING INDEX idx_objects_fileId (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes, COALESCE(SUM(here), 0) AS remaining, COALESCE(SUM(CASE WHEN here THEN size ELSE 0 END), 0) AS remainingBytes FROM ( SELECT f.size AS size, (f.lostReason IS NULL AND EXISTS ( SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id )) AS here FROM files f WHERE f.kind = 'thumb' AND ((f.kind = 'file' AND f.current = 1) OR (f.kind = 'thumb' AND EXISTS (SELECT 1 FROM files o WHERE o.id = f.thumbForId AND o.current = 1 AND o.trashedAt IS NULL AND o.deletedAt IS NULL))) AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND NOT EXISTS ( SELECT 1 FROM objects obj WHERE obj.fileId = f.id AND obj.indexerURL = ? ) )",
+            "plan": [
+              "SEARCH f USING INDEX idx_files_kind (kind=?)",
+              "CORRELATED SCALAR SUBQUERY 2",
+              "SEARCH o USING INDEX sqlite_autoindex_files_1 (id=?)",
+              "CORRELATED SCALAR SUBQUERY 3",
+              "SEARCH obj USING INDEX idx_objects_fileId (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH fsMeta USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)"
+            ]
+          }
+        ]
+      },
+      "imports.listWithSummary:page30": {
+        "reads": 2,
+        "writes": 0,
+        "execs": 0,
+        "result": "keys: 2",
+        "plans": [
+          {
+            "sql": "SELECT * FROM imports ORDER BY lastActivityAt DESC, id DESC LIMIT 30",
+            "plan": [
+              "SCAN imports USING INDEX idx_imports_activity"
+            ]
+          },
+          {
+            "sql": "SELECT i.id AS importId, i.sealed AS sealed, f.state AS state, COUNT(f.importId) AS n, COALESCE(SUM(f.copyBytes), 0) AS bytes, COALESCE(SUM(f.size), 0) AS size, COALESCE(SUM(CASE WHEN f.size > 0 THEN 1 ELSE 0 END), 0) AS sized, COALESCE(SUM(CASE WHEN f.attempts > 0 AND f.nextAttemptAt > ? THEN 1 ELSE 0 END), 0) AS backoff, MIN(CASE WHEN f.attempts > 0 AND f.nextAttemptAt > ? THEN f.nextAttemptAt END) AS soonest FROM imports i LEFT JOIN import_files f ON f.importId = i.id WHERE i.id IN (?, …) GROUP BY i.id, f.state",
+            "plan": [
+              "SEARCH i USING INDEX sqlite_autoindex_imports_1 (id=?)",
+              "SEARCH f USING COVERING INDEX idx_import_files_import_state_agg (importId=?) LEFT-JOIN"
+            ]
+          }
+        ]
+      },
+      "imports.listWithSummary:unpaged": {
+        "reads": 2,
+        "writes": 0,
+        "execs": 0,
+        "result": "keys: 2",
+        "plans": [
+          {
+            "sql": "SELECT * FROM imports ORDER BY lastActivityAt DESC, id DESC",
+            "plan": [
+              "SCAN imports USING INDEX idx_imports_activity"
+            ]
+          },
+          {
+            "sql": "SELECT i.id AS importId, i.sealed AS sealed, f.state AS state, COUNT(f.importId) AS n, COALESCE(SUM(f.copyBytes), 0) AS bytes, COALESCE(SUM(f.size), 0) AS size, COALESCE(SUM(CASE WHEN f.size > 0 THEN 1 ELSE 0 END), 0) AS sized, COALESCE(SUM(CASE WHEN f.attempts > 0 AND f.nextAttemptAt > ? THEN 1 ELSE 0 END), 0) AS backoff, MIN(CASE WHEN f.attempts > 0 AND f.nextAttemptAt > ? THEN f.nextAttemptAt END) AS soonest FROM imports i LEFT JOIN import_files f ON f.importId = i.id WHERE i.id IN (?, …) GROUP BY i.id, f.state",
+            "plan": [
+              "SEARCH i USING INDEX sqlite_autoindex_imports_1 (id=?)",
+              "SEARCH f USING COVERING INDEX idx_import_files_import_state_agg (importId=?) LEFT-JOIN"
+            ]
+          }
+        ]
+      },
+      "resetStaleImportFiles": {
+        "reads": 0,
+        "writes": 3,
+        "execs": 3,
+        "result": "count: 0",
+        "plans": []
+      },
+      "importsRefetchCycle": {
+        "reads": 6,
+        "writes": 0,
+        "execs": 0,
+        "result": "rows: 100",
+        "plans": [
+          {
+            "sql": "SELECT * FROM imports ORDER BY lastActivityAt DESC, id DESC LIMIT 30",
+            "plan": [
+              "SCAN imports USING INDEX idx_imports_activity"
+            ]
+          },
+          {
+            "sql": "SELECT i.id AS importId, i.sealed AS sealed, f.state AS state, COUNT(f.importId) AS n, COALESCE(SUM(f.copyBytes), 0) AS bytes, COALESCE(SUM(f.size), 0) AS size, COALESCE(SUM(CASE WHEN f.size > 0 THEN 1 ELSE 0 END), 0) AS sized, COALESCE(SUM(CASE WHEN f.attempts > 0 AND f.nextAttemptAt > ? THEN 1 ELSE 0 END), 0) AS backoff, MIN(CASE WHEN f.attempts > 0 AND f.nextAttemptAt > ? THEN f.nextAttemptAt END) AS soonest FROM imports i LEFT JOIN import_files f ON f.importId = i.id WHERE i.id IN (?, …) GROUP BY i.id, f.state",
+            "plan": [
+              "SEARCH i USING INDEX sqlite_autoindex_imports_1 (id=?)",
+              "SEARCH f USING COVERING INDEX idx_import_files_import_state_agg (importId=?) LEFT-JOIN"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS n FROM import_files WHERE state IN ('pending','active')",
+            "plan": [
+              "SEARCH import_files USING COVERING INDEX idx_import_files_state_directory (state=?)"
+            ]
+          },
+          {
+            "sql": "SELECT COUNT(*) AS n FROM import_files WHERE state IN ('pending','active') AND directoryId = ?",
+            "plan": [
+              "SEARCH import_files USING COVERING INDEX idx_import_files_state_directory (state=? AND directoryId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT * FROM imports WHERE source = ? AND (sealed = 0 OR EXISTS ( SELECT 1 FROM import_files f WHERE f.importId = imports.id AND f.state IN (?, …) )) ORDER BY startedAt ASC LIMIT 1",
+            "plan": [
+              "SCAN imports",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH f USING COVERING INDEX idx_import_files_import_state_agg (importId=? AND state=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          },
+          {
+            "sql": "SELECT * FROM import_files WHERE importId = ? ORDER BY addedAt DESC, id DESC LIMIT 100",
+            "plan": [
+              "SEARCH import_files USING INDEX idx_import_files_import_added (importId=?)"
+            ]
+          }
+        ]
+      },
+      "importScannerTick": {
+        "reads": 123,
+        "writes": 223,
+        "execs": 0,
+        "result": "keys: 7",
+        "plans": [
+          {
+            "sql": "SELECT * FROM import_files INDEXED BY idx_import_files_pending WHERE state = 'pending' AND nextAttemptAt <= ? ORDER BY addedAt DESC, id DESC LIMIT ?",
+            "plan": [
+              "SCAN import_files USING INDEX idx_import_files_pending"
+            ]
+          },
+          {
+            "sql": "SELECT * FROM imports WHERE id = ?",
+            "plan": [
+              "SEARCH imports USING INDEX sqlite_autoindex_imports_1 (id=?)"
+            ]
+          },
+          {
+            "sql": "SELECT COALESCE(SUM(f.size), 0) as totalBytes FROM files f WHERE f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND NOT EXISTS (SELECT 1 FROM objects o WHERE o.fileId = f.id) AND EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id)",
+            "plan": [
+              "SCAN f",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH o USING COVERING INDEX idx_objects_fileId (fileId=?)",
+              "SEARCH fsMeta EXISTS USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT fileId, size, addedAt, usedAt FROM fs WHERE fileId = ?",
+            "plan": [
+              "SEARCH fs USING INDEX sqlite_autoindex_fs_1 (fileId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT f.name AS name, f.type AS type, f.size AS size, f.hash AS hash, f.createdAt AS createdAt, f.updatedAt AS updatedAt, f.addedAt AS addedAt, f.directoryId AS directoryId, f.mediaAssetId AS mediaAssetId, i.dedupByHash AS dedupByHash, i.pendingTags AS pendingTags FROM import_files f JOIN imports i ON i.id = f.importId WHERE f.id = ? AND f.claimToken = ? AND f.state = 'active'",
+            "plan": [
+              "SEARCH f USING INDEX sqlite_autoindex_import_files_1 (id=?)",
+              "SEARCH i USING INDEX sqlite_autoindex_imports_1 (id=?)"
+            ]
+          },
+          {
+            "sql": "SELECT id FROM files WHERE hash = ? AND directoryId IS ? AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL LIMIT 1",
+            "plan": [
+              "SEARCH files USING INDEX idx_files_directoryId_feedSeq_id (directoryId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT id, name, directoryId, stackId, updatedAt, current FROM files WHERE name = ? AND directoryId IS NULL AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL ORDER BY updatedAt DESC, id DESC",
+            "plan": [
+              "SEARCH files USING INDEX idx_files_version_group (name=? AND directoryId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT id, name, directoryId, stackId, updatedAt, current FROM files INDEXED BY idx_files_stackId WHERE stackId IN (?) AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL",
+            "plan": [
+              "SEARCH files USING INDEX idx_files_stackId (stackId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT id, name, directoryId, stackId, updatedAt, current FROM files WHERE name = ? AND directoryId = ? AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL ORDER BY updatedAt DESC, id DESC",
+            "plan": [
+              "SEARCH files USING INDEX idx_files_version_group (name=? AND directoryId=?)"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

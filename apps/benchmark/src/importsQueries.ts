@@ -117,10 +117,21 @@ export function buildImportQuerySpecs(
     // own claim/copy/hash/finalize traffic, not a hand-written imitation of
     // it. The stub fsIO moves no bytes, so what is measured is the DB work a
     // tick issues, which is what the indexes change.
+    //
+    // It is not rolled back. The scanner opens its own transactions, and
+    // SQLite refuses a BEGIN inside a SAVEPOINT, so under `withRollback`
+    // every file in the tick fails. Each run finalizes the next batch of
+    // pending rows instead, the way successive ticks of a real drain do.
     {
       name: 'importScannerTick',
       category: 'imports-scenario',
-      run: withRollback(() => scanner.runScan()),
+      run: async () => {
+        const result = await scanner.runScan()
+        if (result.finalized === 0) {
+          throw new Error(`scanner tick finalized nothing: ${JSON.stringify(result)}`)
+        }
+        return result
+      },
     },
   )
 

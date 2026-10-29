@@ -62,7 +62,7 @@ function round(n: number): number {
   return Math.round(n * 10) / 10
 }
 
-function formatPreview(result: unknown): string {
+export function formatPreview(result: unknown): string {
   if (typeof result === 'number') return `count: ${result}`
   if (Array.isArray(result)) return `rows: ${result.length}`
   if (result && typeof result === 'object' && 'originals' in result) {

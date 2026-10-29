@@ -166,16 +166,24 @@ anything on a screen.
 
 ## Tests
 
-| Tier                  | Command (repo root)                             | Proves                                                          | CI                  |
-| --------------------- | ----------------------------------------------- | --------------------------------------------------------------- | ------------------- |
-| JS unit               | `bun run test`                                  | core, mobile, integration, CLI logic                            | yes                 |
-| Rust                  | `cargo test --workspace`                        | the Rust core                                                   | yes                 |
-| Native unit (iOS)     | `bun run mobile:test:native:ios`                | Swift logic; standalone SwiftPM package                         | yes                 |
-| Native unit (Android) | `bun run mobile:test:native:android`            | Kotlin under Robolectric; needs a prebuilt `android/`           | yes                 |
-| Native device (iOS)   | `bun run mobile:test:native:ios:sim`            | real Photos-framework behavior                                  | on label and weekly |
-| Sim, CLI devices      | `bun sim run sync/ resilience/ finder/`         | real daemons syncing, killed and offline together               | yes                 |
-| Sim, phones           | `bun sim run mobile/ photos/ [--phone android]` | the built app on simulators and emulators, suspended and killed | on label and weekly |
-| Sim, desktop          | `bun sim run desktop/`                          | the installed test app: sign-in, its windows and Finder folder  | no                  |
+| Tier                  | Command (repo root)                             | Proves                                                                | CI                   |
+| --------------------- | ----------------------------------------------- | --------------------------------------------------------------------- | -------------------- |
+| JS unit               | `bun run test`                                  | core, mobile, integration, CLI logic                                  | yes                  |
+| Rust                  | `cargo test --workspace`                        | the Rust core                                                         | yes                  |
+| Native unit (iOS)     | `bun run mobile:test:native:ios`                | Swift logic; standalone SwiftPM package                               | yes                  |
+| Native unit (Android) | `bun run mobile:test:native:android`            | Kotlin under Robolectric; needs a prebuilt `android/`                 | yes                  |
+| Native device (iOS)   | `bun run mobile:test:native:ios:sim`            | real Photos-framework behavior                                        | on label and weekly  |
+| Sim, CLI devices      | `bun sim run sync/ resilience/ finder/`         | real daemons syncing, killed and offline together                     | yes                  |
+| Benchmarks            | `bun run --cwd apps/benchmark bench:ci`         | core database calls: statement counts, query plans, time against base | on PRs touching core |
+| Sim, phones           | `bun sim run mobile/ photos/ [--phone android]` | the built app on simulators and emulators, suspended and killed       | on label and weekly  |
+| Sim, desktop          | `bun sim run desktop/`                          | the installed test app: sign-in, its windows and Finder folder        | no                   |
+
+The benchmark check compares statement counts, query plans and results exactly against
+`apps/benchmark/baseline/structure.json`, and times each call against the PR's base
+commit on the same runner. A PR that changes a count or a plan on purpose runs
+`bun run --cwd apps/benchmark bench:baseline` and commits the file. A call fails on time
+only once `baseline/timing.json` gives it a tolerance, which `bench:calibrate` computes
+from the reports of CI runs whose two sides ran the same core.
 
 The desktop tier is local-only and rots unless deliberately run. The native device tier
 and the phone scenarios run in CI only on the `sim-mobile` label and weekly, so run them,

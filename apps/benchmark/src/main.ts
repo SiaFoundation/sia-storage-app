@@ -5,7 +5,7 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import { fileURLToPath } from 'url'
-import { generateDataset } from './dataset'
+import { generateDataset, LIBRARY_SAMPLES, librarySampleFileId } from './dataset'
 import { buildQuerySpecs, buildWriteQuerySpecs } from './queries'
 import { writeReport } from './report'
 import { runBenchmark } from './runner'
@@ -53,9 +53,8 @@ async function main() {
 
   const { service: app } = createStubAppService(db)
 
-  const sampleDirId = 'dir-0025'
-  const sampleTagId = 'tag-work'
-  const sampleFileId = 'f-500000'
+  const { sampleDirId, sampleTagId } = LIBRARY_SAMPLES
+  const sampleFileId = librarySampleFileId(datasetInfo)
 
   const thisDir = path.dirname(fileURLToPath(import.meta.url))
   const outputDir = path.join(thisDir, '..', 'results')
@@ -96,7 +95,7 @@ async function main() {
   const writeReportData = buildReport(`${approach}_writes`, datasetInfo, writeResults)
   writeReport(writeReportData, outputDir)
 
-  db.close()
+  db.close?.()
   fs.rmSync(tempDir, { recursive: true })
 
   console.log('\nDone.')
