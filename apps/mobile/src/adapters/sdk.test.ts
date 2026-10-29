@@ -1,5 +1,11 @@
+import path from 'node:path'
 import type { PinnedObjectRef } from '@siastorage/core/adapters'
-import { type SdkInterface, SharingKey, type SharingKeyInterface } from 'react-native-sia'
+import {
+  type PackedUploadOptions,
+  type SdkInterface,
+  SharingKey,
+  type SharingKeyInterface,
+} from 'react-native-sia'
 import { MobileSdkAdapter } from './sdk'
 
 describe('sharing keys', () => {
@@ -51,5 +57,39 @@ describe('sharing keys', () => {
     const [key, passed] = shareObject.mock.calls[0]
     expect(new Uint8Array(key.seed())).toEqual(new Uint8Array(32).fill(5))
     expect(passed).toBe(object)
+  })
+})
+
+describe('upload options', () => {
+  // The real generated bindings, not the jest mock of react-native-sia. Encoding
+  // a record needs no native module, so this runs the converter uploadPacked
+  // calls on its options. The package's exports map hides the file, so it is
+  // loaded by path.
+  const bindings: {
+    converters: {
+      FfiConverterTypePackedUploadOptions: {
+        lower(value: PackedUploadOptions, alloc: (n: number) => Uint8Array): Uint8Array
+      }
+    }
+  } = jest.requireActual(
+    path.join(
+      path.dirname(require.resolve('react-native-sia/package.json')),
+      'lib/module/generated/sia_storage_ffi.js',
+    ),
+  ).default
+
+  it('encodes packed upload options that carry a shard progress callback', () => {
+    const lower = () =>
+      bindings.converters.FfiConverterTypePackedUploadOptions.lower(
+        {
+          dataShards: 10,
+          parityShards: 20,
+          maxBufferedSlabs: 4,
+          shardUploaded: { progress: () => {} },
+        },
+        (n: number) => new Uint8Array(n),
+      )
+
+    expect(lower).not.toThrow()
   })
 })
