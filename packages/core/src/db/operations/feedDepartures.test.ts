@@ -80,9 +80,16 @@ describe('deleting a folder that holds several versions of one file', () => {
     ])
   })
 
-  it("sync-down's cleanup deletes the folder once both versions are deleted for good", async () => {
+  it('deleting both versions for good deletes the folder they leave empty', async () => {
     const { dirId } = await twoVersionsIn('Trips')
     await tombstoneFilesAndThumbnails(db(), ['v1', 'v2'])
+
+    expect(await db().getFirstAsync('SELECT id FROM directories WHERE id = ?', dirId)).toBeNull()
+  })
+
+  it("sync-down's cleanup deletes the folder once both versions are deleted for good", async () => {
+    const { dirId } = await twoVersionsIn('Trips')
+    await db().runAsync(`UPDATE files SET deletedAt = 1, trashedAt = 1 WHERE id IN ('v1', 'v2')`)
 
     expect(await deleteEmptyDirectories(db(), [dirId])).toBe(1)
     expect(await db().getFirstAsync('SELECT id FROM directories WHERE id = ?', dirId)).toBeNull()
@@ -100,10 +107,9 @@ describe('deleting a folder that holds several versions of one file', () => {
     const { dirId, stackId } = await twoVersionsIn('Trips')
     await moveAllFileVersions(db(), 'notes.txt', dirId, null)
     await moveAllFileVersions(db(), 'notes.txt', null, dirId)
-    await tombstoneFilesAndThumbnails(db(), ['v1', 'v2'])
     const before = await seq()
 
-    await deleteEmptyDirectories(db(), [dirId])
+    await tombstoneFilesAndThumbnails(db(), ['v1', 'v2'])
 
     const left = (await departures()).find((d) => d.id === stackId && d.parentId === dirId)
     expect(left?.feedSeq).toBeGreaterThan(before)

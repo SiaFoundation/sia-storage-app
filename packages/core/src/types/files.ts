@@ -23,8 +23,11 @@ export type FileMetadata = {
   thumbForId?: string
   thumbSize?: ThumbSize
   tags?: string[]
+  /** The folder path the file is in, or for a trashed file the one it was trashed from. '' is the root. */
   directory?: string
   trashedAt: number | null
+  /** For a trashed file, the path of the deleted folder it went to the trash with. */
+  trashedFolder?: string
   createdAt: number
   /**
    * The version clock, not a row-write timestamp. It orders the versions of a name to pick the
@@ -37,9 +40,13 @@ export type FileMetadata = {
   updatedAt: number
 }
 
-// tags and directory are synced via object metadata but stored in separate
-// tables locally, not in the files table.
-export const fileMetadataKeys = keysOf<Omit<FileMetadata, 'tags' | 'directory'>>()([
+// tags, directory and trashedFolder are synced via object metadata but stored
+// apart from these columns locally: tags and the folder in their own tables,
+// and a trashed file's folder and deleted folder in trashedFrom and
+// trashedFolder, which file reads leave out.
+export const fileMetadataKeys = keysOf<
+  Omit<FileMetadata, 'tags' | 'directory' | 'trashedFolder'>
+>()([
   'id',
   'name',
   'type',
@@ -68,7 +75,8 @@ export const fileLocalMetadataKeys = keysOf<FileLocalMetadata>()([
   'lostReason',
 ])
 
-export type FileRecordRow = Omit<FileMetadata, 'tags' | 'directory'> & FileLocalMetadata
+export type FileRecordRow = Omit<FileMetadata, 'tags' | 'directory' | 'trashedFolder'> &
+  FileLocalMetadata
 
 export const fileRecordRowKeys = keysOf<Omit<FileRecordRow, 'tags'>>()([
   ...fileMetadataKeys,
@@ -100,12 +108,22 @@ export type FileRecord = FileRecordRow & {
  */
 export type TrashEntry = {
   id: string
+  /** `folder` is a deleted folder, which holds every file the delete took into the trash. */
+  kind: 'file' | 'folder'
+  /** The file's name, or the deleted folder's. */
   name: string
+  /** The file's type, '' for a folder. */
   type: string
+  /** The file's size, or for a folder the size of every file in it. */
   size: number
-  /** The folder it was in, or null for the top of the library or a folder since deleted. */
+  /**
+   * The folder path it restores into, null for the top of the library. Restore
+   * creates it again if it no longer exists.
+   */
   folder: string | null
   versions: number
+  /** How many files a folder holds, 1 for a file. */
+  files: number
   trashedAt: number
   /** The earliest the trash deletes it for good. The hourly purge may run later. */
   purgeAt: number

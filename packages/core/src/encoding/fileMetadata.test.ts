@@ -62,4 +62,26 @@ describe('encodeFileMetadata', () => {
     expect(decoded.directory).toBe('docs')
     expect(decoded.tags).toEqual(['keep'])
   })
+
+  it('writes the deleted folder a trashed file went with, and the folder it restores to', () => {
+    const decoded = decodeFileMetadata(
+      encodeFileMetadata({ ...file, trashedAt: 5, directory: 'Trips/sub', trashedFolder: 'Trips' }),
+    )
+    expect(decoded.directory).toBe('Trips/sub')
+    expect(decoded.trashedFolder).toBe('Trips')
+  })
+
+  it('drops a deleted folder from a file that is not in the trash', () => {
+    const encoded = encodeFileMetadata({ ...file, trashedFolder: 'Trips' })
+    expect(JSON.parse(new TextDecoder().decode(encoded))).not.toHaveProperty('trashedFolder')
+    expect(decodeFileMetadata(encoded).trashedFolder).toBeUndefined()
+  })
+
+  it('reads an empty deleted folder from another writer as none', () => {
+    const payload = JSON.parse(
+      new TextDecoder().decode(encodeFileMetadata({ ...file, trashedAt: 5 })),
+    )
+    const encoded = new TextEncoder().encode(JSON.stringify({ ...payload, trashedFolder: '' }))
+    expect(decodeFileMetadata(encoded.buffer as ArrayBuffer).trashedFolder).toBeUndefined()
+  })
 })

@@ -36,6 +36,7 @@ const FileV1Schema = z.object({
   tags: z.array(z.string()).optional(),
   directory: z.string().optional(),
   trashedAt: z.number().nullable().optional(),
+  trashedFolder: z.string().optional(),
 })
 
 const ThumbV1Schema = z.object({
@@ -65,6 +66,7 @@ const FutureVersionSchema = z.object({
   tags: z.array(z.string()).optional(),
   directory: z.string().optional(),
   trashedAt: z.number().nullable().optional(),
+  trashedFolder: z.string().optional(),
 })
 
 export function encodeFileMetadata(meta: FileMetadata): ArrayBuffer {
@@ -86,6 +88,10 @@ export function encodeFileMetadata(meta: FileMetadata): ArrayBuffer {
     payload.tags = meta.tags ?? []
     payload.directory = meta.directory ?? ''
     payload.trashedAt = meta.trashedAt
+    // Absent on a file trashed on its own and on every live file. Clients
+    // older than this field drop it, and the file then lists in their trash
+    // on its own.
+    if (meta.trashedAt != null && meta.trashedFolder) payload.trashedFolder = meta.trashedFolder
   } else if (meta.kind === 'thumb') {
     payload.thumbForId = meta.thumbForId
     payload.thumbSize = meta.thumbSize
@@ -200,6 +206,9 @@ function toFileMetadata(
     result.tags = d.tags as string[] | undefined
     result.directory = d.directory as string | undefined
     result.trashedAt = (d.trashedAt as number | null | undefined) ?? null
+    if (result.trashedAt !== null && typeof d.trashedFolder === 'string' && d.trashedFolder) {
+      result.trashedFolder = d.trashedFolder
+    }
   } else if (kind === 'thumb') {
     result.thumbForId = d.thumbForId as string | undefined
     result.thumbSize = d.thumbSize as ThumbSize | undefined

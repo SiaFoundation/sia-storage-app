@@ -1108,6 +1108,41 @@ describe('syncManyDirectoriesFromMetadata', () => {
     expect(oldGroups).toEqual([{ name: 'f1.jpg', directoryId: dirId }])
   })
 
+  it('keeps the folder a trashed file restores to when metadata naming no folder is applied twice', async () => {
+    await createTestFile('f1')
+    await syncManyDirectoriesFromMetadata(db(), [{ fileId: 'f1', directoryPath: 'Trips' }])
+    await db().runAsync('UPDATE files SET trashedAt = 5 WHERE id = ?', 'f1')
+    const trashed = { fileId: 'f1', directoryPath: '', trash: { from: undefined, folder: null } }
+
+    await syncManyDirectoriesFromMetadata(db(), [trashed])
+    await syncManyDirectoriesFromMetadata(db(), [trashed])
+
+    const row = await db().getFirstAsync<{ directoryId: string | null; trashedFrom: string }>(
+      'SELECT directoryId, trashedFrom FROM files WHERE id = ?',
+      'f1',
+    )
+    expect(row).toEqual({ directoryId: null, trashedFrom: 'Trips' })
+  })
+
+  it('writes nothing when a batch of trashed files it already applied comes again', async () => {
+    await createTestFile('f1')
+    await createTestFile('f2')
+    await db().runAsync('UPDATE files SET trashedAt = 5')
+    const batch = ['f1', 'f2'].map((fileId) => ({
+      fileId,
+      directoryPath: '',
+      trash: { from: 'Trips', folder: 'Trips' },
+    }))
+    await syncManyDirectoriesFromMetadata(db(), batch)
+    const changes = async () =>
+      (await db().getFirstAsync<{ n: number }>('SELECT total_changes() AS n'))?.n ?? 0
+
+    const before = await changes()
+    await syncManyDirectoriesFromMetadata(db(), batch)
+
+    expect(await changes()).toBe(before)
+  })
+
   it('returns no groups for files already in their folder', async () => {
     await createTestFile('f1')
     await createTestFile('f2')

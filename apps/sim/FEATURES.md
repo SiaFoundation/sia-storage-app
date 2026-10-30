@@ -75,13 +75,17 @@ bun sim device expect phone --label Menu
 
 ### Folders
 
-- When: creating, renaming and deleting folders, and moving files into them.
-- Code: `app.directories`; screens `Directory`; CLI `mkdir`, `mv`
+- When: creating, renaming, deleting and restoring folders, and moving files
+  into them.
+- Code: `app.directories`; screens `Directory`, `Trash`; desktop `TrashView`;
+  CLI `mkdir`, `mv`, `trash`
 - Check: tables `directories`, `files`
 - Tests: scenarios `sync/folder-rename-vs-offline-edit`,
   `sync/move-to-root-and-untag`, `sync/folder-with-versions-trashed`,
-  `sync/deleted-versions-empty-a-folder`; integration `directory-cascade`,
-  `folder-delete-versions`
+  `sync/deleted-versions-empty-a-folder`, `sync/deleted-folder-stays-deleted`,
+  `desktop/finder-folder-delete-and-restore`, `mobile/folder-trash-on-phone`;
+  integration `directory-cascade`, `folder-delete-versions`,
+  `folder-trash-restore`
 - CLI: `bun sim sia laptop -- mkdir {folder}`,
   `bun sim sia laptop -- mv {file} {folder}/`
 - Phone, create a folder and open it:

@@ -2,7 +2,18 @@ import type { TrashEntry } from '@siastorage/core/types'
 import { matchTrashEntry, optionsError, shownIds } from '../../src/commands/trash'
 
 function entry(id: string, name: string, folder: string | null): TrashEntry {
-  return { id, name, folder, type: 'text/plain', size: 1, versions: 1, trashedAt: 0, purgeAt: 0 }
+  return {
+    id,
+    kind: 'file',
+    name,
+    folder,
+    type: 'text/plain',
+    size: 1,
+    versions: 1,
+    files: 1,
+    trashedAt: 0,
+    purgeAt: 0,
+  }
 }
 
 const notes = entry('k3x9a1', 'notes.txt', null)
@@ -15,6 +26,12 @@ describe('naming a trash entry', () => {
     expect(matchTrashEntry(entries, 'k3xq')).toBe(tripNotes)
     expect(matchTrashEntry(entries, 'Trips/notes.txt')).toBe(tripNotes)
     expect(matchTrashEntry(entries, 'notes.txt')).toBe(notes)
+  })
+
+  it('takes a deleted folder by its path, with or without the trailing slash', () => {
+    const trips = { ...entry('z9q2b4', 'Trips', 'Photos'), kind: 'folder' as const, files: 3 }
+    expect(matchTrashEntry([...entries, trips], 'Photos/Trips')).toBe(trips)
+    expect(matchTrashEntry([...entries, trips], 'Photos/Trips/')).toBe(trips)
   })
 
   it('refuses a start of an id two entries share, and a name in none', () => {

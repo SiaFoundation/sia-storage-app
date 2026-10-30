@@ -50,6 +50,11 @@ export function diffFileMetadata(
   if (localDir !== remoteDir) {
     diffs.directory = { local: localDir, remote: remoteDir }
   }
+  const localFolder = localMeta.trashedFolder || null
+  const remoteFolder = remoteMeta.trashedFolder || null
+  if (localFolder !== remoteFolder) {
+    diffs.trashedFolder = { local: localFolder, remote: remoteFolder }
+  }
   return diffs
 }
 

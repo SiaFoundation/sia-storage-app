@@ -2,8 +2,9 @@
  * The trash from the command line: list what is in it, put entries back,
  * delete them for good, or empty it.
  *
- * An entry is a file with the versions trashed along with it, the same
- * entries the phone and desktop app show.
+ * An entry is a file with the versions trashed along with it, or a deleted
+ * folder with every file it held, the same entries the phone and desktop app
+ * show. A folder's path ends in a slash.
  */
 import type { TrashEntry } from '@siastorage/core/types'
 import { createDaemonClient } from '../lib/appServiceClient'
@@ -15,7 +16,8 @@ import { normalizePath } from '../lib/normalizePath'
 const ID_SHOWN = 8
 
 function pathOf(entry: TrashEntry): string {
-  return entry.folder ? `${entry.folder}/${entry.name}` : entry.name
+  const path = entry.folder ? `${entry.folder}/${entry.name}` : entry.name
+  return entry.kind === 'folder' ? `${path}/` : path
 }
 
 /**
@@ -26,7 +28,9 @@ export function matchTrashEntry(entries: TrashEntry[], ref: string): TrashEntry 
   const byId = entries.find((e) => e.id === ref)
   if (byId) return byId
   const path = normalizePath(ref)
-  const matches = entries.filter((e) => pathOf(e) === path || e.id.startsWith(ref))
+  const matches = entries.filter(
+    (e) => pathOf(e) === path || pathOf(e) === `${path}/` || e.id.startsWith(ref),
+  )
   if (matches.length === 1) return matches[0]
   if (matches.length > 1) {
     return `"${ref}" matches ${matches.length} entries. Give the id ${c.bold('sia trash')} shows.`
@@ -80,6 +84,9 @@ async function entriesFor(app: ReturnType<typeof createDaemonClient>, refs: stri
 }
 
 function versionsNote(entry: TrashEntry): string {
+  if (entry.kind === 'folder') {
+    return c.dim(entry.files === 1 ? ' (1 file)' : ` (${entry.files} files)`)
+  }
   return entry.versions === 1 ? '' : c.dim(` (${entry.versions} versions)`)
 }
 
@@ -152,11 +159,24 @@ export async function trashCommand(
 export async function restoreCommand(dataDir: string, refs: string[]) {
   const app = createDaemonClient(await ensureDaemon(dataDir))
   const entries = await entriesFor(app, refs)
-  const restored = await app.files.restoreTrashEntries(entries.map((e) => e.id))
+  // One entry at a time, so the files a folder brought back are told apart
+  // from another entry's.
   for (const entry of entries) {
-    const back = restored.find((r) => r.id === entry.id)
-    // Missing when the entry left the trash between listing it and now.
-    if (!back) continue
+    const restored = await app.files.restoreTrashEntries([entry.id])
+    // Empty when the entry left the trash between listing it and now.
+    if (restored.length === 0) continue
+    if (entry.kind === 'folder') {
+      const renamed = restored.filter((r) => r.renamedFrom).length
+      const note =
+        renamed === 0
+          ? ''
+          : renamed === 1
+            ? ', 1 file renamed since its name is taken'
+            : `, ${renamed} files renamed since their names are taken`
+      console.log(`Restored ${c.green(pathOf(entry))}${versionsNote(entry)}${note}`)
+      continue
+    }
+    const [back] = restored
     const renamed = back.renamedFrom ? ` as ${c.green(back.name)}, since the name is taken` : ''
     console.log(`Restored ${c.green(pathOf(entry))}${versionsNote(entry)}${renamed}`)
   }

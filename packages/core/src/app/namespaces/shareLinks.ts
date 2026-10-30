@@ -62,8 +62,17 @@ function keyOf(link: ops.ShareLinkRow): SharingKeyRef {
   return { publicKey: link.publicKey, seed: hexToUint8(link.seed) }
 }
 
-/** A stack's identity, as queryFileVersions takes it. */
-function stackOf(row: { name: string | null; directoryId: string | null }): string {
+/**
+ * A stack's identity, as queryFileVersions takes it. A trashed row is in no
+ * folder, so it is keyed by the folder it restores to and kept apart from the
+ * live files at the top of the library, which share its name and null folder.
+ */
+function stackOf(row: {
+  name: string | null
+  directoryId: string | null
+  trashedFrom?: string | null
+}): string {
+  if (row.trashedFrom != null) return JSON.stringify(['trash', row.trashedFrom, row.name])
   return JSON.stringify([row.directoryId, row.name])
 }
 
@@ -103,6 +112,29 @@ function isGoneError(e: unknown): boolean {
 
 export function buildShareLinks(deps: Deps): ShareLinkMethods {
   const { db } = deps
+
+  /**
+   * The live version a link row's file shows, with its folder. A trashed row
+   * is in no folder, so it looks in the folder it restores to, which finds the
+   * versions left when only some were trashed. Every device gets the same
+   * answer this way, where a stack id is local and a device that synced the
+   * row already trashed gives it one of its own. By name at the top of the
+   * library it would find a different file of the same name.
+   */
+  async function currentVersion(
+    file: ops.ShareLinkFileStack,
+    name: string,
+  ): Promise<{ row: FileRecordRow; directoryId: string | null } | null> {
+    let directoryId = file.directoryId
+    if (file.trashedFrom !== null && file.trashedFrom !== '') {
+      const folder = await ops.queryDirectoryByPath(db, file.trashedFrom)
+      if (!folder) return null
+      directoryId = folder.id
+    }
+    const row = await ops.queryCurrentFileVersion(db, name, directoryId)
+    return row && { row, directoryId }
+  }
+
   let refreshedAt = 0
   // Every operation that reads a link's state and then changes it on the
   // indexer runs one at a time. Without this, the background pass could
@@ -349,7 +381,7 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
         continue
       }
       const inStack = attachedByStack.get(stackOf(file)) ?? []
-      const current = await ops.queryCurrentFileVersion(db, file.name, file.directoryId)
+      const current = (await currentVersion(file, file.name))?.row
       if (!current) {
         for (const object of inStack) await unshare(sdk, key, object.objectId)
         if (inStack.length > 0) changed = true
@@ -417,15 +449,16 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
       // A snapshot shows the version its row names. A latest link shows the
       // stack's current version, or the row itself while every version is
       // trashed.
-      const current =
-        link.mode === 'latest'
-          ? await ops.queryCurrentFileVersion(db, file.name, file.directoryId)
-          : null
-      const row = current ?? (await ops.queryFileById(db, file.fileId))
+      const current = link.mode === 'latest' ? await currentVersion(file, file.name) : null
+      const row = current?.row ?? (await ops.queryFileById(db, file.fileId))
       if (!row) continue
-      const folder = file.directoryId
-        ? ((await ops.queryDirectoryById(db, file.directoryId))?.path ?? null)
-        : null
+      const directoryId = current ? current.directoryId : file.directoryId
+      // A trashed row is in no folder and shows the one it restores to.
+      const folder = directoryId
+        ? ((await ops.queryDirectoryById(db, directoryId))?.path ?? null)
+        : current
+          ? null
+          : file.trashedFrom || null
       files.push({ fileId: row.id, name: row.name, size: row.size, folder, state: file.state })
     }
     return {

@@ -7,11 +7,13 @@ const NOW = 1_800_000_000_000
 function entry(overrides: Partial<TrashEntry> = {}): TrashEntry {
   return {
     id: 'e1',
+    kind: 'file',
     name: 'notes.txt',
     type: 'text/plain',
     size: 1,
     folder: null,
     versions: 1,
+    files: 1,
     trashedAt: NOW,
     purgeAt: NOW + 30 * DAY,
     ...overrides,
@@ -53,6 +55,14 @@ describe('trashEntryDetail', () => {
       'No folder · 3 versions · Deleted in 30 days',
     )
   })
+
+  it('counts the files in a deleted folder instead of versions', () => {
+    const folder = entry({ kind: 'folder', name: 'Trips', type: '', versions: 4, files: 3 })
+    expect(trashEntryDetail(folder, NOW)).toBe('No folder · 3 files · Deleted in 30 days')
+    expect(trashEntryDetail({ ...folder, folder: 'Photos', files: 1 }, NOW)).toBe(
+      'Photos · 1 file · Deleted in 30 days',
+    )
+  })
 })
 
 describe('restoredText', () => {
@@ -66,6 +76,18 @@ describe('restoredText', () => {
         { id: 'a', name: 'notes (restored).txt', renamedFrom: 'notes.txt' },
       ]),
     ).toBe('Restored as notes (restored).txt, since the name is taken.')
+  })
+
+  it('says a folder came back, counting the files renamed on the way', () => {
+    const kept = { id: 'a', name: 'a.txt', renamedFrom: null }
+    const renamed = { id: 'b', name: 'b (restored).txt', renamedFrom: 'b.txt' }
+    expect(restoredText('Trips', [kept], 'folder')).toBe('Restored Trips.')
+    expect(restoredText('Trips', [kept, renamed], 'folder')).toBe(
+      'Restored Trips. 1 file was renamed, since its name is taken.',
+    )
+    expect(restoredText('Trips', [renamed, renamed], 'folder')).toBe(
+      'Restored Trips. 2 files were renamed, since their names are taken.',
+    )
   })
 
   it('says restored under the old name otherwise', () => {

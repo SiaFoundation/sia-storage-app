@@ -41,7 +41,7 @@ describe('deleteEmptyDirectories', () => {
     expect(deleted).toBe(0)
   })
 
-  it('keeps a directory whose files are all trashed', async () => {
+  it('deletes a directory whose only file is in the trash, since a trashed file does not keep its folder', async () => {
     const dir = await insertDirectory(db(), 'trashed')
     await createTestFile('f2', 'doc.txt')
     await moveFileToDirectory(db(), 'f2', dir.id)
@@ -49,7 +49,50 @@ describe('deleteEmptyDirectories', () => {
     await db().runAsync('UPDATE files SET trashedAt = ? WHERE id = ?', now, 'f2')
 
     const deleted = await deleteEmptyDirectories(db(), [dir.id])
-    expect(deleted).toBe(0)
+    expect(deleted).toBe(1)
+  })
+
+  it('keeps a directory an import is still adding files to', async () => {
+    const dir = await insertDirectory(db(), 'importing')
+    await db().runAsync(
+      `INSERT INTO imports (id, source, directoryId, startedAt, updatedAt) VALUES ('i1', 'picker', ?, ?, ?)`,
+      dir.id,
+      now,
+      now,
+    )
+    await db().runAsync(
+      `INSERT INTO import_files (id, importId, state, name, type, createdAt, updatedAt, addedAt, directoryId, sourceKind)
+       VALUES ('if1', 'i1', 'pending', 'a.txt', 'text/plain', ?, ?, ?, ?, 'path')`,
+      now,
+      now,
+      now,
+      dir.id,
+    )
+
+    expect(await deleteEmptyDirectories(db(), [dir.id])).toBe(0)
+  })
+
+  it('keeps a directory a photo library scan holds between pages, with no file pending', async () => {
+    const dir = await insertDirectory(db(), 'scanning')
+    await db().runAsync(
+      `INSERT INTO imports (id, source, directoryId, sealed, startedAt, updatedAt) VALUES ('scan', 'library-scan', ?, 0, ?, ?)`,
+      dir.id,
+      now,
+      now,
+    )
+
+    expect(await deleteEmptyDirectories(db(), [dir.id])).toBe(0)
+    await db().runAsync(`UPDATE imports SET sealed = 1 WHERE id = 'scan'`)
+    expect(await deleteEmptyDirectories(db(), [dir.id])).toBe(1)
+  })
+
+  it('deletes a parent once its subfolders, checked in later batches, are gone', async () => {
+    const parent = await insertDirectory(db(), 'parent')
+    const children = []
+    for (let i = 0; i < 1200; i++) children.push(await insertDirectory(db(), `parent/${i}`))
+
+    const deleted = await deleteEmptyDirectories(db(), [parent.id, ...children.map((c) => c.id)])
+    expect(deleted).toBe(1201)
   })
 
   it('deletes directory when all files are tombstoned', async () => {

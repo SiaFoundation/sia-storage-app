@@ -8,7 +8,7 @@
 import { createBetterSqlite3Database } from '@siastorage/node-adapters/database'
 import { runMigrations } from '..'
 import { coreMigrations, sortMigrations } from '../migrations'
-import { insertDirectory } from './directories'
+import { getOrCreateDirectoryAtPath, insertDirectory } from './directories'
 import {
   insertFile,
   insertNextVersion,
@@ -334,11 +334,13 @@ describe('stack identity over random operations', () => {
     const random = rng(seed)
     const pick = <T>(items: T[]): T => items[Math.floor(random() * items.length)]
     const names = ['a.txt', 'b.txt', 'c.txt']
-    const dirs = [
-      null,
-      (await insertDirectory(db(), 'One')).id,
-      (await insertDirectory(db(), 'Two')).id,
-    ]
+    // By path, since trashing a folder's last file deletes the folder, and a
+    // later step creates it again as restore does.
+    const paths = [null, 'One', 'Two']
+    const pickDir = async () => {
+      const path = pick(paths)
+      return path === null ? null : (await getOrCreateDirectoryAtPath(db(), path)).id
+    }
     const rows = () =>
       db().getAllAsync<Row>(
         `SELECT id, name, directoryId, stackId, current, trashedAt, deletedAt
@@ -357,7 +359,11 @@ describe('stack identity over random operations', () => {
       const label = `seed ${seed} step ${step} op ${op} on ${target?.id}`
 
       if (op === 0) {
-        await file(`f${next++}`, { name: pick(names), directoryId: pick(dirs), updatedAt: clock })
+        await file(`f${next++}`, {
+          name: pick(names),
+          directoryId: await pickDir(),
+          updatedAt: clock,
+        })
       } else if (op === 1) {
         const id = `f${next++}`
         await insertNextVersion(db(), target.id, { id, size: 1, hash: `sha256:h-${id}` })
@@ -368,7 +374,7 @@ describe('stack identity over random operations', () => {
           await renameAllFileVersions(db(), target.name, target.directoryId, name)
         }
       } else if (op === 3) {
-        const dir = pick(dirs)
+        const dir = await pickDir()
         if (dir !== target.directoryId) {
           await moveAllFileVersions(db(), target.name, target.directoryId, dir)
         }
@@ -385,7 +391,7 @@ describe('stack identity over random operations', () => {
         // batch's stacks, then the stack the row left.
         const moved = random() < 0.5
         const name = moved ? target.name : pick(names)
-        const dir = moved ? pick(dirs) : target.directoryId
+        const dir = moved ? await pickDir() : target.directoryId
         const intoEmpty = !live.some((r) => r.name === name && r.directoryId === dir)
         await db().runAsync(
           'UPDATE files SET name = ?, directoryId = ? WHERE id = ?',
