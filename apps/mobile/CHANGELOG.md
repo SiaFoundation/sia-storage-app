@@ -2,6 +2,16 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.15.1-rc.0 (2026-10-30)
+
+### Fixes
+
+- Cache eviction and Clear local files finish when some files cannot be deleted, instead of retrying the same files until they are stopped. `fs.evictionCandidates`, `fs.nonCurrentCachedFiles` and `fs.trashedCachedFiles` take a cursor and return each row's `usedAt`.
+- A file's local copy is no longer removed to save space, and Finder no longer treats it as backed up, until the file is on the indexer you use now, so switching indexers cannot leave a file with no copy the new indexer can get.
+- While uploads or sync keep changing the library, the grid's loading spinner clears once the next page arrives, where it could stay stuck until the app restarted. `useFileList` returns `isLoadingMore` and `useLoadMore` takes it in place of `data` and `isValidating`, and list reloads and `invalidateAll()` refreshes each run one at a time, with one more after for changes made meanwhile.
+- The library grid, its counts and the photo viewer load faster in large libraries, for every sort order. `buildLibraryQueryParts` returns `indexedBy` clauses for reads over the whole library, and the name sort no longer moves files without a `nameSortKey` to the end.
+- The photo viewer lets you swipe once its list of photos loads after a failed try, where it stayed on the opened photo until the app restarted.
+
 ## 1.15.0 (2026-10-30)
 
 ### Features

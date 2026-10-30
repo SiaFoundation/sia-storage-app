@@ -1,3 +1,17 @@
+## 0.0.2-rc.0 (2026-10-30)
+
+### Features
+
+- `sia config set cacheMaxBytes` and `sia config set cacheMinAge` change how much the local cache may hold and how long a file must go unused before it can be removed, and the status window shows how much is cached against the limit.
+- The files cached on this computer are kept under 4 GB by removing backed-up files that have not been used for a day, and they download again when opened.
+- The status window has Clear Local Files, which removes this Mac's copies of files that are already backed up and keeps the rest.
+
+### Fixes
+
+- Restart installs a downloaded update and reopens the app, instead of sometimes doing nothing. If the install fails, the app says so and Restart can be tried again.
+- A file's local copy is no longer removed to save space, and Finder no longer treats it as backed up, until the file is on the indexer you use now, so switching indexers cannot leave a file with no copy the new indexer can get.
+- Opening a file from Finder no longer fails when the cache removes its copy at the same moment, and a download is never cut short by cache cleanup. `fs.removeFile` takes `skipIfLocked` and resolves whether it removed the file.
+
 ## 0.0.1 (2026-10-30)
 
 ### Features
