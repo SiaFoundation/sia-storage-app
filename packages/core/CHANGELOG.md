@@ -1,3 +1,64 @@
+## 0.0.21 (2026-10-30)
+
+### Features
+
+- Adds `auth.builder.reconnecting` and `auth.builder.matchesExistingAppKey`, which say after approval whether the approving account already uses the app and whether a recovery phrase is one of its own. Both return null where the platform's SDK cannot say.
+- `sia add` and `sia import` store file hashes in the same `sha256:` form as every other app, so saving identical bytes over a file added with the CLI no longer creates a duplicate version and `sia import --skip-existing` finds files added elsewhere. `FileMetadata.hash` is typed `ContentHash` from `@siastorage/core/lib/contentHash`, built with `toContentHash`, and decoded metadata and stored files with a bare hex hash gain the prefix.
+- Adds `@siastorage/core/lib/forcedReset`, the forced-reset nonces and decision that every app shares.
+- Adds `@siastorage/core/lib/shareLinkText`: the expiry and mode choices an app offers for a new share link, and the title, expiry, progress and error text it shows for one.
+- Removes `app.shares.create`, which made a signed URL to one object. `app.shares.createLink` makes a link to any number of files instead.
+- Removes `app.db.waitUntilActive` and `DatabaseAdapter.waitUntilActive`. An adapter with a suspension gate holds a new call until the gate reopens and rejects a statement inside a transaction that was already open once a grace period has passed, and the optional `DatabaseAdapter.failFast()` returns a view of it that rejects instead of holding. The suspension manager takes a `suspendBlocker` hook and an optional `db.isInTransaction` check, and `Mutex.tryAcquire()` takes a free lock in the calling tick.
+- Adds `directories.count`, the number of directories in the library.
+- `downloads.downloadFile` takes a priority, `'user'` or `'background'`, and a `'user'` call for a file queued as `'background'` raises it so the queue can no longer drop it. `downloads.wasDropped(id)` reports whether the background queue dropped a file's last download. The exported `MAX_AUTO_DOWNLOAD_QUEUE` is renamed `MAX_BACKGROUND_DOWNLOADS_QUEUED`.
+- The library keeps a local apply-order record of every file and folder change, including which folder each moved or deleted item left. `directories.ensureAtPaths` and upsertMany's `directoryIdByFileId` option let bulk writers create files directly in their folders.
+- `app.provider.fetchRange` places one byte range of a file at a path, for a shell that serves a read of part of a file rather than the whole thing.
+- `app.provider.fileIds` returns the current version's file id for each Finder item id, leaving out folders and items with no visible file.
+- The provider surface lists the whole library on one cursor, folders before files, and answers "what changed since this anchor" for one folder or everything. A moved item arrives as an update carrying its new parent, deletions and folder renames as ordinary deltas, and an anchor stays answerable for as long as a client keeps polling.
+- `app.provider.write` adds the new bytes as the file's newest version, and a provider item keeps the same id across all of a file's versions. Adds `files.addVersion`, and `files.update` and `files.updateMany` no longer accept `hash`, so a file's bytes change only through a new version.
+- `createRemoteAppService` takes per-channel timeouts, and its `invoke` callback now receives `(channel, args, timeoutMs)` in place of variadic arguments.
+- Adds `repairRawPhotoTypes` in `@siastorage/core/services/repairRawPhotoTypes` and `files.getRawPhotosStoredAsTiff()`, and `syncDownEventsBatch` runs the repair once per app instance after its first pass that reaches the end of the event stream. The repair keeps each file's `updatedAt`.
+- Adds share links built on sharing keys: `app.shares.createLink`, `links`, `addLinkFiles`, `removeLinkFiles` and `revokeLink`, with `syncLinks` and the `runShareLinkSync` service keeping a `latest` link on its files' current versions while a `snapshot` link keeps the versions it was made with. `SdkAdapter` gains the sharing-key methods. Its `sharedObject` is renamed `objectFromShareUrl`, and `shareObject` attaches an object to a sharing key where it used to make a signed URL to one.
+- Upload progress no longer counts files that can never upload, so it reaches complete once everything else has uploaded. `UploadCategoryStats.total` covers uploaded and remaining files only, and the new `unavailable` and `unavailableBytes` count files with no object on the indexer and no local copy, or marked lost. The phone's status sheet and `sia status` show those files separately.
+
+### Fixes
+
+- On Android, turning on Upload in the background in the menu keeps uploads going on Wi-Fi with the app in the background or the phone locked, with a notification while they run. `UploadManager.shardBytes` reports bytes sent to hosts as a file uploads, and the suspension manager gains `suspendUnlessBusy`, which suspends only when no background task is running.
+- Trashing, restoring, deleting, renaming and moving files, and creating, renaming and moving folders, each commit as one transaction, so a failure partway through leaves nothing half-applied.
+- Importing the package no longer throws where `process` is undefined, such as a browser renderer.
+- `app.directories.getPathsForFiles` returns the folder path of many files in one call, and `useShareLinks` takes a `revalidateOnFocus` option.
+- Downloading a file that would not fit on the device now shows a message up front instead of starting a download that fails partway through. This covers files you download from your library and files opened from a share link. Automatic downloads, like thumbnails and previews, skip the message and just don't download.
+- Downloading a file now costs half the disk space it used to and no longer leaves a stray copy in the cache; files taken into local storage report a consistent sha256 hash across devices.
+- Downloads use less memory, since a large file is written straight to disk instead of passing through the app a piece at a time, and a download that is cancelled, as every download is when the app goes to the background, no longer leaves part of the file marked as on the phone. `DownloadLikeRef` gains an optional `writeToPath`, and `fileUriToPath` returns a path with a literal `%` as it is instead of throwing.
+- A file that finishes downloading while the file list refreshes no longer shows as cloud only or goes back to queued, and the Transfers count drops a download once it finishes.
+- Files no longer upload with another file's contents when other files in the same upload could not be read.
+- `useFileCountAll` and `useFileStatsAll` count files only and leave their thumbnails out.
+- A file whose name contains `#` or `?` gets the type its extension names instead of a generic one.
+- A file saved into the Finder folder gets the same type it would get from any other app, read from its contents first and its name second, so a PNG named `photo.txt` is an image on every device.
+- Opening many cloud-only files at once in Finder, or running many `sia download` commands at once, no longer fails some of them.
+- Canon raw (CR3) photos are recognized from their contents, and a file Android reports with no type (`application/octet-stream`) takes its type from its name or contents instead.
+- An import copy that ends as cancelled outside a suspension is retried at once the first time and backs off if it happens again, instead of leaving it and the files after it waiting ten minutes.
+- Files being imported when the app goes to the background finish soon after it comes back, instead of waiting up to ten minutes.
+- A file whose content is not the format its filename claims now imports and uploads normally instead of landing under Unavailable files. An edited raw photo is stored as the rendered JPEG it actually is, and named to match. `nameForType` in `@siastorage/core/lib/fileTypes` gives a name the extension its type implies.
+- Files with an extension such as `.constructor` or `.__proto__` are stored with an unknown file type instead of a bogus one.
+- A name with accents or other combined characters is stored the same way whichever app it came from, so a file saved in Finder and the same file added on a phone share one name and one version history. Names already stored are converted on the first launch after the update.
+- Clear local files in Advanced settings moves a file's local copy back under the right extension instead of deleting it, and never deletes a copy that a file in the library still points at.
+- Camera raw photos such as DNG, CR2, NEF and ARW keep their raw type on every device instead of being stored or renamed as TIFF.
+- Moving a file out of a folder to the top level, or removing its last tag, now shows up on your other devices.
+- Small downloads, such as the photos in a folder you open, start right away instead of waiting for large downloads to finish. Eight downloads run at once by default, up from two, including on phones that had saved the old default, and `SlotPool` can limit the total weight of what runs as well as the count.
+- When another device changes a file's type, the copy already on this device moves to match, so the file opens from disk instead of downloading again.
+- Files from your other devices now appear on a phone that went to the background while it was syncing them.
+- `resolveVariant` treats the desktop `test` build as `dev`, so a test build answers dev forced-reset nonces.
+- `withTransactionAsync` passes its body a handle bound to the transaction, and `internal.withTransaction` passes a database facade bound to it. A body must reach the database only through that handle, and using the outer adapter inside one throws `TransactionMisuseError` on node.
+- Uploads and downloads share a memory budget sized from what the device can spare, instead of each taking a tenth of its total memory, and downloads keep part of it however large an upload is. `AppServiceAdapters.readMemory` supplies the reading.
+- `files.trashEntries`, `trashCount`, `restoreTrashEntries`, `deleteTrashEntries` and `emptyTrash` list the trash one file at a time, with the versions trashed with it, and act on it. Trashing and restoring keep a file's versions in order, and a file restored to a name a live file has taken since comes back as `name (restored).ext`.
+- Trash in the menu lists deleted files with how long until they are deleted for good, and puts them back or deletes them now. `useTrashEntries`, `useTrashCount` and `@siastorage/core/lib/trashText` give any app the same list and words.
+- Correcting a file's type from its bytes keeps the file's `updatedAt`, so the correction cannot make an older version of a file the current one.
+- Taking a file out of Favorites on one device now takes it out on your other devices too.
+- A file added while the app is checking for new uploads no longer uploads twice.
+- `useUploadSpeed` takes an optional `refreshInterval`, and the unused `useUploadCounts` hook is removed from `@siastorage/core/stores`.
+- `UploadManager` stops or parks right away when `shutdown()` or `suspend()` is called during a database poll, instead of sleeping a full poll interval first and, when suspended with a batch open, flushing that batch.
+- A file that is still downloading is no longer served as though it were complete, and a download that ends before the whole file arrives now fails instead of leaving a partial file behind.
+
 ## 0.0.21-rc.6 (2026-10-29)
 
 ### Features
