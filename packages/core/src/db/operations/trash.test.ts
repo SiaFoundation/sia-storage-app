@@ -2,9 +2,13 @@ import type { DatabaseAdapter, SQLParam } from '../../adapters/db'
 import { insertFile } from './files'
 import { insertObject } from './localObjects'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
+import { deleteDirectoryAndTrashFiles, getOrCreateDirectoryAtPath } from './directories'
 import {
   autoPurgeOldTrashedFiles,
+  queryTrashEntries,
+  restoreTrashEntries,
   tombstoneFilesAndThumbnails,
+  tombstoneTrashEntries,
   restoreFilesAndThumbnails,
   trashFilesAndThumbnails,
 } from './trash'
@@ -282,4 +286,51 @@ describe('autoPurgeOldTrashedFiles', () => {
 
     expect(purgedCount).toBe(0)
   })
+})
+
+describe('a deleted folder with more files than SQLite binds in one statement', () => {
+  // SQLITE_MAX_VARIABLE_NUMBER is 32766, and one id is bound per file.
+  const FILES = 33_000
+
+  async function fillFolder(path: string) {
+    const dir = await getOrCreateDirectoryAtPath(db(), path)
+    await db().runAsync(
+      `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
+       INSERT INTO files (id, name, size, type, kind, createdAt, updatedAt, addedAt, hash, directoryId, stackId)
+       SELECT 'f' || i, 'f' || i || '.txt', 1, 'text/plain', 'file', 1000, 1000, 1000, 'sha256:h' || i, ?, 'f' || i
+       FROM n`,
+      FILES,
+      dir.id,
+    )
+    return dir
+  }
+
+  async function countIn(path: string): Promise<number> {
+    const row = await db().getFirstAsync<{ n: number }>(
+      `SELECT count(*) AS n FROM files f JOIN directories d ON d.id = f.directoryId
+       WHERE d.path = ? AND f.trashedAt IS NULL AND f.deletedAt IS NULL`,
+      path,
+    )
+    return row?.n ?? 0
+  }
+
+  it('comes back whole from the trash, and deletes for good', async () => {
+    await deleteDirectoryAndTrashFiles(db(), (await fillFolder('Big')).id)
+    const [entry] = await queryTrashEntries(db(), 10, 0)
+    expect(entry).toMatchObject({ kind: 'folder', files: FILES })
+
+    await restoreTrashEntries(db(), [entry.id])
+    expect(await countIn('Big')).toBe(FILES)
+
+    const big = await getOrCreateDirectoryAtPath(db(), 'Big')
+    await deleteDirectoryAndTrashFiles(db(), big.id)
+    const [again] = await queryTrashEntries(db(), 10, 0)
+    await tombstoneTrashEntries(db(), [again.id])
+    const deleted = await db().getFirstAsync<{ n: number }>(
+      'SELECT count(*) AS n FROM files WHERE deletedAt IS NOT NULL',
+    )
+    expect(deleted?.n).toBe(FILES)
+    // The time limit fails this if delete or restore goes back to a
+    // statement per file, which holds the database far longer.
+  }, 30_000)
 })

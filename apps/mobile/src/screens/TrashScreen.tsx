@@ -1,6 +1,7 @@
 /*
- * The trash. Each row is a file with the versions trashed along with it, and
- * tapping one offers to put it back or delete it for good. Empty Trash deletes
+ * The trash. Each row is a file with the versions trashed along with it, or a
+ * deleted folder with every file it held, and tapping one offers to put it
+ * back or delete it for good. Empty Trash deletes
  * everything in it. The trash deletes an entry for good on its own 30 days
  * after it was trashed, which each row counts down to.
  */
@@ -65,7 +66,7 @@ export function TrashScreen() {
           onPress: () => {
             app()
               .files.restoreTrashEntries([entry.id])
-              .then((restored) => toast.show(restoredText(entry.name, restored)))
+              .then((restored) => toast.show(restoredText(entry.name, restored, entry.kind)))
               .catch(() => toast.show('Could not restore it. Try again.'))
           },
         },

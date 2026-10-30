@@ -1,5 +1,5 @@
 import { logger } from '@siastorage/logger'
-import type { DatabaseAdapter } from '../../adapters/db'
+import type { DatabaseAdapter, SQLParam } from '../../adapters/db'
 import type { LocalObject, LocalObjectRef, LocalObjectRefRow } from '../../encoding/localObject'
 import { localObjectRefFromStorageRow } from '../../encoding/localObject'
 import type { ContentHash } from '../../lib/contentHash'
@@ -48,6 +48,9 @@ type StackRow = {
 }
 
 const LIVE_FILE = `kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL`
+
+/** A trashed row's folder to restore to, '' for the top of the library, and null for any other row. */
+const TRASHED_FROM_OR_NULL = `CASE WHEN trashedAt IS NOT NULL THEN coalesce(trashedFrom, '') END`
 const STACK_COLUMNS = 'id, name, directoryId, stackId, updatedAt, current'
 
 const isNewer = (a: StackRow, b: StackRow) =>
@@ -147,16 +150,27 @@ export async function queryNameDirGroups(
   )
 }
 
+/** Groups per statement when recalculating, which bounds the stack ids assignStackIds binds. */
+const RECALC_BATCH = 500
+
+/**
+ * Recalculates every stack in `groups` a batch at a time, the groups passed as
+ * one JSON parameter. A folder delete or restore recalculates a stack per file,
+ * and one statement pair per batch is what keeps that from being a query per
+ * file inside its transaction.
+ */
 export async function recalculateCurrentForGroups(
   db: DatabaseAdapter,
   groups: { name: string; directoryId: string | null }[],
 ): Promise<void> {
-  const seen = new Set<string>()
-  for (const { name, directoryId } of groups) {
-    const key = `${name}\0${directoryId ?? ''}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    await recalculateCurrentForGroup(db, name, directoryId)
+  const unique = [...new Map(groups.map((g) => [`${g.name}\0${g.directoryId ?? ''}`, g])).values()]
+  for (let i = 0; i < unique.length; i += RECALC_BATCH) {
+    await recalculateStacks(
+      db,
+      `SELECT json_extract(value, '$.name') AS name, json_extract(value, '$.directoryId') AS directoryId
+       FROM json_each(?)`,
+      [JSON.stringify(unique.slice(i, i + RECALC_BATCH))],
+    )
   }
 }
 
@@ -166,14 +180,32 @@ export async function recalculateCurrentForFileIds(
 ): Promise<void> {
   if (fileIds.length === 0) return
   const ph = fileIds.map(() => '?').join(',')
-  const groupsCte = `SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file'`
+  await recalculateStacks(
+    db,
+    `SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file'`,
+    fileIds,
+  )
+}
+
+/**
+ * Recalculates the stacks whose (name, directoryId) rows `groupsSql` selects.
+ * CROSS JOIN makes SQLite read the groups first and find each one's rows by
+ * the name index. It knows nothing of how many rows json_each gives, and left
+ * to choose it reads every file and scans the groups for each.
+ */
+async function recalculateStacks(
+  db: DatabaseAdapter,
+  groupsSql: string,
+  params: SQLParam[],
+): Promise<void> {
   await assignStackIds(
     db,
     await db.getAllAsync<StackRow>(
-      `SELECT f2.id, f2.name, f2.directoryId, f2.stackId, f2.updatedAt, f2.current FROM files f2
-       INNER JOIN (${groupsCte}) g ON f2.name = g.name AND f2.directoryId IS g.directoryId
+      `SELECT f2.id, f2.name, f2.directoryId, f2.stackId, f2.updatedAt, f2.current
+       FROM (${groupsSql}) g CROSS JOIN files f2
+         ON f2.name = g.name AND f2.directoryId IS g.directoryId
        WHERE f2.kind = 'file' AND f2.trashedAt IS NULL AND f2.deletedAt IS NULL`,
-      ...fileIds,
+      ...params,
     ),
   )
   // One statement for the same reason as recalculateCurrentForGroup.
@@ -183,15 +215,14 @@ export async function recalculateCurrentForFileIds(
          PARTITION BY f2.name, f2.directoryId
          ORDER BY f2.updatedAt DESC, f2.id DESC
        ) AS rn
-       FROM files f2
-       INNER JOIN (${groupsCte}) g
+       FROM (${groupsSql}) g CROSS JOIN files f2
          ON f2.name = g.name AND f2.directoryId IS g.directoryId
        WHERE f2.kind = 'file' AND f2.trashedAt IS NULL AND f2.deletedAt IS NULL
      )
      UPDATE files SET current = (id IN (SELECT id FROM ranked WHERE rn = 1))
      WHERE id IN (SELECT id FROM ranked)
        AND current IS NOT (id IN (SELECT id FROM ranked WHERE rn = 1))`,
-    ...fileIds,
+    ...params,
   )
 }
 
@@ -695,12 +726,18 @@ export async function queryFileById(
  * methods use this to resolve which stack a given id belongs to before acting
  * on every version in it.
  */
+/**
+ * The stack a file belongs to, by name and folder. A file in the trash is in
+ * no folder, so `trashedFrom` names the folder it restores to, and is null for
+ * a file that is not in the trash. Its name and null folder alone would name
+ * whatever live file of that name sits at the top of the library.
+ */
 export async function queryFileStackKey(
   db: DatabaseAdapter,
   id: string,
-): Promise<{ name: string; directoryId: string | null } | null> {
-  return db.getFirstAsync<{ name: string; directoryId: string | null }>(
-    'SELECT name, directoryId FROM files WHERE id = ?',
+): Promise<{ name: string; directoryId: string | null; trashedFrom: string | null } | null> {
+  return db.getFirstAsync<{ name: string; directoryId: string | null; trashedFrom: string | null }>(
+    `SELECT name, directoryId, ${TRASHED_FROM_OR_NULL} AS trashedFrom FROM files WHERE id = ?`,
     id,
   )
 }
@@ -1544,9 +1581,11 @@ export async function moveFilesAllVersions(
   return sql.transaction(db, async (tx) => {
     // Every active version of every selected stack, newest-first, in one query.
     // `f.directoryId IS g.directoryId` is null-safe, so unfiled stacks match too.
+    // A selected id trashed since it was picked selects nothing: a trashed row
+    // is in no folder, so its name would pick a live file at the root.
     const versions = await tx.getAllAsync<{ id: string; updatedAt: number }>(
       `SELECT f.id, f.updatedAt FROM files f
-       JOIN (SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND kind = 'file') g
+       JOIN (SELECT DISTINCT name, directoryId FROM files WHERE id IN (${ph}) AND ${LIVE_FILE}) g
          ON f.name = g.name AND f.directoryId IS g.directoryId
        WHERE f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL
        ORDER BY f.updatedAt DESC, f.id DESC`,
@@ -1582,12 +1621,13 @@ export async function trashAllFileVersions(
   db: DatabaseAdapter,
   name: string,
   directoryId: string | null,
+  opts?: { keepFolder?: boolean },
 ): Promise<string[]> {
   return sql.transaction(db, async (tx) => {
     const versions = await queryFileVersions(tx, name, directoryId)
     if (versions.length === 0) return []
     const ids = versions.map((v) => v.id)
-    await trashFilesAndThumbnails(tx, ids)
+    await trashFilesAndThumbnails(tx, ids, { keepFolders: opts?.keepFolder })
     return ids
   })
 }

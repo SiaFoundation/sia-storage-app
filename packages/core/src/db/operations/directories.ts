@@ -49,10 +49,6 @@ export function escapeLikePattern(str: string): string {
   return str.replace(/[%_\\]/g, '\\$&')
 }
 
-function sqlEscapeLike(col: string): string {
-  return `replace(replace(${col}, '%', '\\%'), '_', '\\_')`
-}
-
 export function sanitizeDirectorySegment(segment: string): string {
   let result = ''
   for (const ch of segment) {
@@ -79,6 +75,9 @@ function toDirectory(row: DirectoryRow): Directory {
     parentId: row.parentId,
   }
 }
+
+/** Ids per statement when a folder delete trashes its files, or a cleanup checks folders. */
+const DELETE_BATCH = 500
 
 type DirectoryRow = { id: string; path: string; createdAt: number; parentId: string | null }
 
@@ -511,13 +510,29 @@ export async function ensureDirectoriesAtPaths(
   })
 }
 
+/**
+ * One file's folder from remote metadata. A live file goes into
+ * `directoryPath`, creating it. A trashed file (`trash` set) goes into no
+ * folder and remembers `trash.from` as the one it restores to. When the
+ * metadata names none, it keeps the path it already remembers, or else the
+ * folder it sits in. No folder is created for it, which is what keeps a
+ * deleted folder from coming back on this device.
+ */
+type DirectoryMetadataEntry = {
+  fileId: string
+  directoryPath: string
+  trash?: { from: string | undefined; folder: string | null }
+}
+
 export async function syncManyDirectoriesFromMetadata(
   db: DatabaseAdapter,
-  entries: { fileId: string; directoryPath: string }[],
+  entries: DirectoryMetadataEntry[],
 ): Promise<{ name: string; directoryId: string | null }[]> {
   if (entries.length === 0) return []
   return sql.transaction(db, async (tx) => {
-    const dirPaths = new Set(entries.map((e) => e.directoryPath))
+    const live = entries.filter((e) => !e.trash)
+    const trashed = entries.filter((e) => e.trash)
+    const dirPaths = new Set(live.map((e) => e.directoryPath))
     const pathToId = await ensureDirectoriesAtPaths(tx, dirPaths)
 
     const fileIds = entries.map((e) => e.fileId)
@@ -527,8 +542,54 @@ export async function syncManyDirectoriesFromMetadata(
       name: string
       kind: string
       directoryId: string | null
-    }>(`SELECT id, name, kind, directoryId FROM files WHERE id IN (${ph})`, ...fileIds)
+      folderPath: string | null
+      trashedFrom: string | null
+    }>(
+      `SELECT f.id, f.name, f.kind, f.directoryId, d.path AS folderPath, f.trashedFrom
+       FROM files f LEFT JOIN directories d ON d.id = f.directoryId
+       WHERE f.id IN (${ph})`,
+      ...fileIds,
+    )
     const rowById = new Map(rows.map((r) => [r.id, r]))
+
+    const locations: { id: string; from: string; folder: string | null }[] = []
+    for (const entry of trashed) {
+      const row = rowById.get(entry.fileId)
+      if (!row || !entry.trash) continue
+      // The row left its folder when it was first trashed here, so a replay
+      // of the same event finds it in none and has only trashedFrom to go by.
+      const from =
+        entry.trash.from === undefined
+          ? (row.trashedFrom ?? row.folderPath ?? '')
+          : sanitizeDirectoryPath(normalizeName(entry.trash.from))
+      const folder =
+        entry.trash.folder === null
+          ? null
+          : sanitizeDirectoryPath(normalizeName(entry.trash.folder))
+      locations.push({ id: entry.fileId, from, folder })
+    }
+    // One statement for the batch, writing only rows whose location differs,
+    // so a replayed page of events that are already applied writes nothing.
+    if (locations.length > 0) {
+      await tx.runAsync(
+        `UPDATE files SET trashedFrom = json_extract(j.value, '$.from'),
+           trashedFolder = json_extract(j.value, '$.folder')
+         FROM json_each(?) j
+         WHERE files.id = json_extract(j.value, '$.id')
+           AND (files.trashedFrom IS NOT json_extract(j.value, '$.from')
+             OR files.trashedFolder IS NOT json_extract(j.value, '$.folder'))`,
+        JSON.stringify(locations),
+      )
+    }
+    // A live file keeps no trash location, as after a restore on another device.
+    if (live.length > 0) {
+      const livePh = live.map(() => '?').join(',')
+      await tx.runAsync(
+        `UPDATE files SET trashedFrom = NULL, trashedFolder = NULL
+         WHERE id IN (${livePh}) AND (trashedFrom IS NOT NULL OR trashedFolder IS NOT NULL)`,
+        ...live.map((e) => e.fileId),
+      )
+    }
 
     // Only rows whose folder changes are written and returned. Every group returned costs the
     // caller a stack recalculation, and a created row already sits in its folder.
@@ -538,7 +599,11 @@ export async function syncManyDirectoriesFromMetadata(
       const row = rowById.get(entry.fileId)
       if (!row) continue
       // '' is the root. Every other path that normalizes to nothing is left alone.
-      const target = entry.directoryPath === '' ? null : pathToId.get(entry.directoryPath)
+      const target = entry.trash
+        ? null
+        : entry.directoryPath === ''
+          ? null
+          : pathToId.get(entry.directoryPath)
       if (target === undefined || target === row.directoryId) continue
       const ids = movesByTarget.get(target) ?? []
       ids.push(row.id)
@@ -625,79 +690,114 @@ export async function deleteDirectory(db: DatabaseAdapter, id: string): Promise<
   })
 }
 
+/**
+ * Deletes a folder and every folder under it, and moves all their files to
+ * the trash as one entry. One transaction, so a crash or a failed write
+ * leaves the folder as it was rather than a folder of trashed files. The
+ * parent goes too when nothing is left in it, unless `keepParent` is set.
+ * Returns how many files went to the trash.
+ */
 export async function deleteDirectoryAndTrashFiles(
   db: DatabaseAdapter,
   id: string,
+  opts?: { keepParent?: boolean },
 ): Promise<number> {
-  const dir = await queryDirectoryById(db, id)
-  if (!dir) return 0
+  return sql.transaction(db, async (tx) => {
+    const dir = await queryDirectoryById(tx, id)
+    if (!dir) return 0
 
-  const escaped = escapeLikePattern(dir.path)
-
-  const totalTrashed = await sql.processInBatches<{ id: string }>(
-    db,
-    `SELECT f.id FROM files f
-     INNER JOIN directories d ON f.directoryId = d.id
-     WHERE (d.path = ? OR d.path LIKE ? || '/%' ESCAPE '\\')
-       AND f.kind = 'file' AND ${buildRecordFilter('f', { includeOldVersions: true })}`,
-    [dir.path, escaped],
-    500,
-    async (rows) => {
+    const escaped = escapeLikePattern(dir.path)
+    // Newest first across the whole folder, so the batches below stamp one
+    // descending run and every file keeps its version order.
+    const rows = await tx.getAllAsync<{ id: string; updatedAt: number }>(
+      `SELECT f.id, f.updatedAt FROM files f
+       INNER JOIN directories d ON f.directoryId = d.id
+       WHERE (d.path = ? OR d.path LIKE ? || '/%' ESCAPE '\\')
+         AND f.kind = 'file' AND ${buildRecordFilter('f', { includeOldVersions: true })}
+       ORDER BY f.updatedAt DESC, f.id DESC`,
+      dir.path,
+      escaped,
+    )
+    const trashedAt = Date.now()
+    let base = Math.max(trashedAt, (rows[0]?.updatedAt ?? 0) + rows.length)
+    for (let i = 0; i < rows.length; i += DELETE_BATCH) {
+      const batch = rows.slice(i, i + DELETE_BATCH)
       await trashFilesAndThumbnails(
-        db,
-        rows.map((r) => r.id),
+        tx,
+        batch.map((r) => r.id),
+        // The whole tree is deleted below, and the parent after it.
+        { trashedAt, folder: dir.path, base, keepFolders: true },
       )
-    },
-  )
+      base -= batch.length
+    }
 
-  await db.runAsync(
-    `DELETE FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'`,
-    dir.path,
-    escaped,
-  )
-
-  return totalTrashed
+    await tx.runAsync(
+      `DELETE FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'`,
+      dir.path,
+      escaped,
+    )
+    // The parent can be left with nothing in it, which other devices also
+    // drop once the files arrive in the trash.
+    const parentPath = directoryParentPath(dir.path)
+    if (parentPath !== null && !opts?.keepParent) {
+      const parent = await queryDirectoryByPath(tx, parentPath)
+      if (parent) await deleteEmptyDirectories(tx, [parent.id])
+    }
+    return rows.length
+  })
 }
 
 /**
- * Deletes directories that have no active or trashed files and no
- * subdirectories. A trashed file keeps its folder because deleting the folder
- * sets the file's directoryId to null, and restoring it then publishes the
- * root to other devices, which move their copy out of the folder.
- * Walks up the tree one level per iteration: if removing a directory makes
- * its parent empty, the parent is evaluated on the next pass.
+ * Deletes the given directories that hold no live file, no subdirectory and
+ * no import in progress, then their parents the same way, up the tree. An
+ * import is in progress while it has a file pending or active, or while it is
+ * unsealed: a photo library scan adds its files a page at a time and holds
+ * the folder's id between pages, when none of its files may be pending.
  *
- * Iteration count is bounded by tree depth (3 queries per level). Per
- * iteration the queries scale linearly with the candidate set, which
- * starts at `directoryIds.length` and shrinks toward the tree's width
- * (one row per unique parent path) after the first pass.
+ * A trashed file does not keep its folder. It remembers the folder's path and
+ * restore recreates it. Folders are not synced themselves, so other devices
+ * hold a folder only while a live file is in it. Sync-down runs this on every
+ * folder files leave, and trashing or deleting files here runs it on theirs,
+ * so a folder emptied that way goes on every device. A move here leaves its
+ * folder in place, because Finder or the app can still hold the folder's id
+ * and move a file back into it. A folder created here with nothing in it
+ * stays until it is deleted.
+ *
+ * Candidates are checked DELETE_BATCH at a time, since each id is a bound
+ * parameter. A folder whose subfolder a later batch deletes is checked again
+ * then, as the parent of that subfolder.
  */
 export async function deleteEmptyDirectories(
   db: DatabaseAdapter,
   directoryIds: string[],
 ): Promise<number> {
-  if (directoryIds.length === 0) return 0
-  let candidates = [...new Set(directoryIds)]
+  const queue = [...new Set(directoryIds)]
   let totalDeleted = 0
 
-  while (candidates.length > 0) {
-    const ph = candidates.map(() => '?').join(',')
+  while (queue.length > 0) {
+    const batch = queue.splice(0, DELETE_BATCH)
+    const ph = batch.map(() => '?').join(',')
     const empties = await db.getAllAsync<{ id: string; path: string }>(
       `SELECT d.id, d.path FROM directories d
        WHERE d.id IN (${ph})
          AND NOT EXISTS (
            SELECT 1 FROM files f
-           WHERE f.directoryId = d.id AND ${buildRecordFilter('f', { includeTrashed: true })}
+           WHERE f.directoryId = d.id AND ${buildRecordFilter('f')}
+         )
+         -- Any folder under d, as a path between '<path>/' and '<path>0',
+         -- '0' being the byte after '/', which SQLite answers from the
+         -- unique index on path. A LIKE on an expression reads every folder.
+         AND NOT EXISTS (
+           SELECT 1 FROM directories c WHERE c.path > d.path || '/' AND c.path < d.path || '0'
          )
          AND NOT EXISTS (
-           SELECT 1 FROM directories c
-           WHERE c.path LIKE ${sqlEscapeLike('d.path')} || '/%' ESCAPE '\\'
-             AND c.path NOT LIKE ${sqlEscapeLike('d.path')} || '/%/%' ESCAPE '\\'
-         )`,
-      ...candidates,
+           SELECT 1 FROM import_files i
+           WHERE i.directoryId = d.id AND i.state IN ('pending', 'active')
+         )
+         AND NOT EXISTS (SELECT 1 FROM imports im WHERE im.directoryId = d.id AND im.sealed = 0)`,
+      ...batch,
     )
-
-    if (empties.length === 0) break
+    if (empties.length === 0) continue
 
     const idPh = empties.map(() => '?').join(',')
     await db.runAsync(`DELETE FROM directories WHERE id IN (${idPh})`, ...empties.map((e) => e.id))
@@ -708,14 +808,14 @@ export async function deleteEmptyDirectories(
         empties.map((e) => directoryParentPath(e.path)).filter((p): p is string => p !== null),
       ),
     ]
-    if (parentPaths.length === 0) break
+    if (parentPaths.length === 0) continue
 
     const pathPh = parentPaths.map(() => '?').join(',')
     const parents = await db.getAllAsync<{ id: string }>(
       `SELECT id FROM directories WHERE path IN (${pathPh})`,
       ...parentPaths,
     )
-    candidates = parents.map((p) => p.id)
+    queue.push(...parents.map((p) => p.id))
   }
 
   return totalDeleted

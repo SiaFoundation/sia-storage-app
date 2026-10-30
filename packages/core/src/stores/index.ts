@@ -1,6 +1,11 @@
 export { useAccount } from './account'
 export { useConnectionState, useIsConnected } from './connection'
-export { useAllDirectories, useDirectoryChildren, useDirectoryForFile } from './directories'
+export {
+  useAllDirectories,
+  useDirectoryById,
+  useDirectoryChildren,
+  useDirectoryForFile,
+} from './directories'
 export { type DownloadCounts, useDownloadCounts, useDownloadEntry } from './downloads'
 export { useFileCountAll, useFileDetails, useFileStatsAll } from './files'
 export { useHost, useHosts } from './hosts'

@@ -58,6 +58,7 @@ type PreparedCreate = {
   localObject: LocalObject
   tags?: string[]
   directory?: string
+  trashedFolder?: string
   isFile: boolean
 }
 
@@ -69,6 +70,7 @@ type PreparedUpdate = {
   fileId: string
   tags?: string[]
   directory?: string
+  trashedFolder?: string
   isFile: boolean
   isRemoteNewer: boolean
   /**
@@ -435,6 +437,7 @@ async function processBatch(
         fileId: existing.id,
         tags: metadata.tags,
         directory: metadata.directory,
+        trashedFolder: metadata.trashedFolder,
         isFile: type === 'file',
         isRemoteNewer,
         previousType: existing.type,
@@ -463,6 +466,7 @@ async function processBatch(
         localObject,
         tags: metadata.tags,
         directory: metadata.directory,
+        trashedFolder: metadata.trashedFolder,
         isFile: type === 'file',
       })
     }
@@ -504,9 +508,25 @@ async function processBatch(
       (e.kind === 'create' || (e.kind === 'update' && e.isRemoteNewer)),
   )
   const newest = newestPerFile(syncableEvents)
-  const dirEntries = newest
-    .filter((e) => e.directory !== undefined)
-    .map((e) => ({ fileId: e.fileRecord.id, directoryPath: e.directory! }))
+  // A trashed file never creates a folder. Its metadata names the folder it
+  // restores to, and a folder deleted elsewhere would otherwise come back here
+  // for the files it took into the trash.
+  const dirEntries: {
+    fileId: string
+    directoryPath: string
+    trash?: { from: string | undefined; folder: string | null }
+  }[] = []
+  for (const e of newest) {
+    if (e.fileRecord.trashedAt != null) {
+      dirEntries.push({
+        fileId: e.fileRecord.id,
+        directoryPath: '',
+        trash: { from: e.directory, folder: e.trashedFolder ?? null },
+      })
+    } else if (e.directory !== undefined) {
+      dirEntries.push({ fileId: e.fileRecord.id, directoryPath: e.directory })
+    }
+  }
   const tagEntries = newest
     .filter((e) => e.tags !== undefined)
     .map((e) => ({ fileId: e.fileRecord.id, tagNames: e.tags! }))
@@ -538,12 +558,13 @@ async function processBatch(
       // directoryId in the insert. An insert-then-assign shape reads to the
       // departure trigger as a move out of root and journals a departure no
       // observer ever saw, once per remote-created file placed in a folder.
+      const liveEntries = dirEntries.filter((entry) => !entry.trash)
       const dirIdByPath = await tx.directories.ensureAtPaths(
-        dirEntries.map((entry) => entry.directoryPath),
+        liveEntries.map((entry) => entry.directoryPath),
         { skipInvalidation: true },
       )
       const directoryIdByFileId = new Map<string, string>()
-      for (const entry of dirEntries) {
+      for (const entry of liveEntries) {
         const dirId = dirIdByPath.get(entry.directoryPath)
         if (dirId) directoryIdByFileId.set(entry.fileId, dirId)
       }

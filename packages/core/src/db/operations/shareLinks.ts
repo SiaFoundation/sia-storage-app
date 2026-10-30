@@ -185,10 +185,15 @@ export async function replaceShareLinkObjects(
   return changed
 }
 
-/** A shared file with the stack its row names. Name and directoryId are null once the row is gone. */
+/**
+ * A shared file with the stack its row names. Name and directoryId are null
+ * once the row is gone. trashedFrom is set while the row is in the trash, as
+ * queryFileStackKey gives it.
+ */
 export type ShareLinkFileStack = ShareLinkFileRow & {
   name: string | null
   directoryId: string | null
+  trashedFrom: string | null
   deletedAt: number | null
 }
 
@@ -197,7 +202,9 @@ export async function queryShareLinkFileStacks(
   publicKey: string,
 ): Promise<ShareLinkFileStack[]> {
   return db.getAllAsync<ShareLinkFileStack>(
-    `SELECT s.publicKey, s.fileId, s.state, f.name, f.directoryId, f.deletedAt
+    `SELECT s.publicKey, s.fileId, s.state, f.name, f.directoryId,
+            CASE WHEN f.trashedAt IS NOT NULL THEN coalesce(f.trashedFrom, '') END AS trashedFrom,
+            f.deletedAt
      FROM share_link_files s LEFT JOIN files f ON f.id = s.fileId
      WHERE s.publicKey = ?
      ORDER BY s.rowid`,
@@ -213,6 +220,7 @@ export type ShareLinkObjectFile = ShareLinkObjectRow & {
   fileId: string | null
   name: string | null
   directoryId: string | null
+  trashedFrom: string | null
   updatedAt: number | null
 }
 
@@ -223,7 +231,9 @@ export async function queryShareLinkObjectFiles(
 ): Promise<ShareLinkObjectFile[]> {
   return db.getAllAsync<ShareLinkObjectFile>(
     `SELECT s.publicKey, s.objectId, s.sharedUpdatedAt,
-            f.id AS fileId, f.name, f.directoryId, f.updatedAt
+            f.id AS fileId, f.name, f.directoryId,
+            CASE WHEN f.trashedAt IS NOT NULL THEN coalesce(f.trashedFrom, '') END AS trashedFrom,
+            f.updatedAt
      FROM share_link_objects s
      LEFT JOIN objects o ON o.id = s.objectId AND o.indexerURL = ?
      LEFT JOIN files f ON f.id = o.fileId

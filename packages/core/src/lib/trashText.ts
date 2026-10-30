@@ -18,11 +18,21 @@ export function purgeLabel(purgeAt: number, now: number): string {
   return days === 1 ? 'Deleted in 1 day' : `Deleted in ${days} days`
 }
 
-/** The entry's folder, its version count when it has more than one, and when it is deleted for good. */
+/**
+ * The folder the entry restores into, how many files a deleted folder holds or
+ * how many versions a file has when more than one, and when it is deleted for
+ * good.
+ */
 export function trashEntryDetail(entry: TrashEntry, now: number): string {
   return [
     entry.folder ?? 'No folder',
-    entry.versions > 1 ? `${entry.versions} versions` : null,
+    entry.kind === 'folder'
+      ? entry.files === 1
+        ? '1 file'
+        : `${entry.files.toLocaleString()} files`
+      : entry.versions > 1
+        ? `${entry.versions} versions`
+        : null,
     purgeLabel(entry.purgeAt, now),
   ]
     .filter(Boolean)
@@ -34,9 +44,20 @@ export function trashEntryDetail(entry: TrashEntry, now: number): string {
  * is empty when the entry left the trash before the restore ran, deleted on
  * another device or by the 30-day purge.
  */
-export function restoredText(name: string, restored: RestoredFile[]): string {
+export function restoredText(
+  name: string,
+  restored: RestoredFile[],
+  kind: TrashEntry['kind'] = 'file',
+): string {
   const [file] = restored
   if (!file) return `${name} is no longer in the trash.`
+  if (kind === 'folder') {
+    const renamed = restored.filter((f) => f.renamedFrom).length
+    if (renamed === 0) return `Restored ${name}.`
+    return renamed === 1
+      ? `Restored ${name}. 1 file was renamed, since its name is taken.`
+      : `Restored ${name}. ${renamed.toLocaleString()} files were renamed, since their names are taken.`
+  }
   if (file.renamedFrom) return `Restored as ${file.name}, since the name is taken.`
   return `Restored ${name}.`
 }

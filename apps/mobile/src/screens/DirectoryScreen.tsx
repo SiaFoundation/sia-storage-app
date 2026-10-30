@@ -2,6 +2,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { type DirectoryWithCount, UNFILED_DIRECTORY_ID } from '@siastorage/core/db/operations'
 import {
   type FileListParams,
+  useDirectoryById,
   useDirectoryChildren,
   useDirectoryFileCount,
   useFileList,
@@ -74,6 +75,15 @@ export function DirectoryScreen({ route, navigation }: Props) {
   const isUnfiled = directoryId === UNFILED_DIRECTORY_ID
   const scope = `dir.${directoryId}`
   const subdirectories = useDirectoryChildren(isUnfiled ? null : directoryPath)
+  const directory = useDirectoryById(isUnfiled ? null : directoryId)
+  const leftRef = useRef(false)
+  // The folder goes once its last file is trashed or deleted, here or on
+  // another device, and an action on it would then fail.
+  useEffect(() => {
+    if (directory.data !== null || leftRef.current) return
+    leftRef.current = true
+    navigation.goBack()
+  }, [directory.data, navigation])
   const vs = useViewSettings(scope)
   const filters: FileListParams = useMemo(
     () => ({
@@ -250,7 +260,10 @@ export function DirectoryScreen({ route, navigation }: Props) {
             style: 'destructive',
             onPress: async () => {
               await app().directories.deleteAndTrashFiles(directoryId)
-              navigation.goBack()
+              if (!leftRef.current) {
+                leftRef.current = true
+                navigation.goBack()
+              }
               toast.show(`Deleted "${directoryName}"`)
             },
           },

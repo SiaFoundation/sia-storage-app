@@ -1047,15 +1047,19 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     async trash(id) {
       const service = getService()
       const directoryId = parseDirectoryProviderId(id)
+      // The folder a delete leaves empty stays on this Mac. Finder and the
+      // shell create into a folder by its item id, and `rm Docs/a.txt` then
+      // `cp b.txt Docs/` would fail if the delete had removed Docs. Other
+      // devices still drop it once its last file is gone.
       if (directoryId !== null) {
         // Cascades to the files inside, all reversibly.
-        await service.directories.deleteAndTrashFiles(directoryId)
+        await service.directories.deleteAndTrashFiles(directoryId, { keepParent: true })
         return
       }
       // Always reversible. The OS owns permanent delete, and a shell mistake
       // must never be unrecoverable.
       const file = await ops.queryProviderItem(db, id)
-      if (file) await service.files.trashFile(file.id)
+      if (file) await service.files.trashFile(file.id, { keepFolder: true })
     },
   }
 }

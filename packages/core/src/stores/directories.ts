@@ -21,3 +21,14 @@ export function useDirectoryForFile(fileId: string | null) {
     fileId ? app.directories.getPathForFile(fileId) : undefined,
   )
 }
+
+/**
+ * Fetches a directory by id. Resolves to null once the directory is gone,
+ * deleted here or emptied of its last file here or on another device.
+ */
+export function useDirectoryById(id: string | null) {
+  const app = useApp()
+  return useSWR(id ? app.caches.directories.key(`id/${id}`) : null, () =>
+    id ? app.directories.getById(id) : null,
+  )
+}

@@ -289,6 +289,7 @@ export {
   queryTrashEntries,
   queryTrashEntryCount,
   queryTrashEntryFiles,
+  queryTrashLocation,
   tombstoneFilesAndThumbnails,
   restoreFilesAndThumbnails,
   restoreTrashEntries,

@@ -381,8 +381,11 @@ export interface AppService {
     moveFile(id: string, dirId: string | null): Promise<void>
     /** Moves all versions of every given file to a directory (null to unfile). */
     moveFiles(fileIds: string[], dirId: string | null): Promise<void>
-    /** Trashes all versions of a file by ID. */
-    trashFile(id: string): Promise<void>
+    /**
+     * Trashes all versions of a file by ID. The folder it leaves is deleted when
+     * nothing is left in it, unless `keepFolder` is set.
+     */
+    trashFile(id: string, opts?: { keepFolder?: boolean }): Promise<void>
     /** Tombstones all versions of a file by ID. */
     tombstoneFile(id: string): Promise<void>
     /** Trashes all versions of a file by name and directory. */
@@ -413,7 +416,7 @@ export interface AppService {
     /** Deletes a directory and all descendants without affecting files. */
     delete(id: string): Promise<void>
     /** Deletes a directory, all descendants, and trashes their files. */
-    deleteAndTrashFiles(id: string): Promise<number>
+    deleteAndTrashFiles(id: string, opts?: { keepParent?: boolean }): Promise<number>
     /** Deletes directories that have no active files or subdirectories. Walks up the tree. */
     deleteEmpty(directoryIds: string[], opts?: { skipInvalidation?: boolean }): Promise<number>
     /** Renames a directory and updates all descendant paths. Returns the updated directory. */
@@ -442,9 +445,19 @@ export interface AppService {
       paths: Iterable<string>,
       opts?: { skipInvalidation?: boolean },
     ): Promise<Map<string, string>>
-    /** Batch reconciles directory assignments from metadata. Returns old version groups for recalculation. */
+    /**
+     * Batch reconciles directory assignments from metadata. A live file goes into
+     * `directoryPath`, which is created. A trashed file (`trash` set) goes into no
+     * folder and remembers `trash.from` as the one it restores to. When that is
+     * undefined it keeps the folder it already remembers, else its current one. Returns old version groups for
+     * recalculation.
+     */
     syncManyFromMetadata(
-      entries: { fileId: string; directoryPath: string }[],
+      entries: {
+        fileId: string
+        directoryPath: string
+        trash?: { from: string | undefined; folder: string | null }
+      }[],
       opts?: { skipInvalidation?: boolean },
     ): Promise<{ name: string; directoryId: string | null }[]>
   }

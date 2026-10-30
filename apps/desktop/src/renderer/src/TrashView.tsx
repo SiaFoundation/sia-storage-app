@@ -2,7 +2,8 @@
  * The trash, in the window, opened from the status view.
  *
  * Each row is a file with the versions trashed along with it, as Finder's
- * delete leaves them, with Restore and Delete. Empty Trash deletes everything
+ * delete leaves them, or a deleted folder with every file it held, with
+ * Restore and Delete. Empty Trash deletes everything
  * in it. Delete and Empty Trash take a second click, as Revoke on a share link
  * does, since neither can be undone.
  */
@@ -14,7 +15,7 @@ import type { RestoredFile, TrashEntry } from '@siastorage/core/types'
 import { useEffect, useState } from 'react'
 import { PLAIN_BUTTON, SMALL_BUTTON } from './buttons'
 import { ROW, Section } from './Group'
-import { Trash } from './icons'
+import { Folder, Trash } from './icons'
 import { useConfirm } from './useConfirm'
 
 /**
@@ -55,7 +56,7 @@ function EntryRow({
   return (
     <div className={ROW} data-entry-id={entry.id}>
       <span className="flex w-[15px] shrink-0 text-secondary">
-        <Trash />
+        {entry.kind === 'folder' ? <Folder /> : <Trash />}
       </span>
       <span className="flex min-w-0 flex-auto flex-col gap-px">
         <span data-testid="trash-entry" className="truncate">
@@ -139,9 +140,11 @@ export function TrashView({ onDone }: { onDone: () => void }) {
                 onRestored={(restored) =>
                   // A plain restore needs no words: the row leaving the list says it.
                   setNotice(
-                    restored.length === 1 && !restored[0].renamedFrom
+                    restored.length > 0 &&
+                      restored.every((r) => !r.renamedFrom) &&
+                      (entry.kind === 'folder' || restored.length === 1)
                       ? null
-                      : { text: restoredText(entry.name, restored), error: false },
+                      : { text: restoredText(entry.name, restored, entry.kind), error: false },
                   )
                 }
               />

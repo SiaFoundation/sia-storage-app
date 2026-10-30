@@ -5,7 +5,7 @@ export default defineScenario({
   description:
     "The laptop adds report.txt to docs twice, so docs holds two versions of it, and the desk syncs both. Trashing docs on the laptop succeeds and trashes both versions, the desk takes the trash, and a file the laptop adds afterwards still reaches the desk, so the desk's sync-down did not stop.",
   devices: { laptop: 'cli', desk: 'cli' },
-  async run({ devices: { laptop, desk }, converge, step, check, checkEqual, waitFor, workDir }) {
+  async run({ devices: { laptop, desk }, converge, step, check, checkEqual, workDir }) {
     await step('the laptop adds report.txt to docs, then a second version of it', async () => {
       for (const n of [1, 2]) {
         const path = `${workDir}/v${n}/report.txt`
@@ -36,18 +36,11 @@ export default defineScenario({
       laptopVersions.length === 2 && laptopVersions.every((f) => f.trashed),
     )
 
-    // Waited for directly rather than through converge: the devices still
-    // disagree on which folder the trashed versions are in, because a folder
-    // delete does not reach other devices.
     await step('the laptop adds a file after the trash, and the desk receives it', async () => {
       const path = `${workDir}/after.txt`
       await Bun.write(path, `after ${crypto.randomUUID()}`)
       await laptop.addFile(path)
-      await waitFor(
-        'after.txt on the desk',
-        async () => (await desk.library()).some((f) => f.name === 'after.txt'),
-        { timeoutMs: 60_000, intervalMs: 500 },
-      )
+      await converge()
     })
     check(
       'the desk receives it, so its sync-down is still running',

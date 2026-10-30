@@ -91,7 +91,9 @@ export function buildDbNamespaces(
 
   // Finds the stack a file belongs to and acts on it in one transaction, so a
   // rename committed in between cannot send the change to the stack it left.
-  // Resolves to the ids acted on, none when the file is gone.
+  // Resolves to the ids acted on, none when the file is gone or in the trash.
+  // A trashed file is in no folder, and its name with no folder would name a
+  // live file at the top of the library.
   async function forStack(
     id: string,
     act: (
@@ -102,7 +104,7 @@ export function buildDbNamespaces(
     let ids: string[] = []
     await db.withTransactionAsync(async (tx) => {
       const stack = await ops.queryFileStackKey(tx, id)
-      ids = stack ? await act(tx, stack) : []
+      ids = stack && stack.trashedFrom === null ? await act(tx, stack) : []
     })
     return ids
   }
@@ -116,11 +118,19 @@ export function buildDbNamespaces(
     caches.libraryVersion.invalidate()
   }
 
+  // Trashing or deleting a folder's last file deletes the folder, and a
+  // restore creates its folder again, so these refresh the folder lists too.
+  function invalidateLibraryAndFolders() {
+    caches.directories.invalidateAll()
+    invalidateLibrary()
+  }
+
   async function tombstoneAndCleanup(files: { id: string; type: string }[]) {
     if (files.length === 0) return
     const ids = files.map((f) => f.id)
     uploads.removeMany(ids)
     await ops.tombstoneFilesAndThumbnails(db, ids)
+    caches.directories.invalidateAll()
     await removeTombstoned(files)
   }
 
@@ -255,8 +265,15 @@ export function buildDbNamespaces(
     if (record.kind === 'file') {
       const tags = await ops.queryTagNamesForFile(db, id)
       if (tags && tags.length > 0) metadata = { ...metadata, tags }
-      const directory = await ops.queryDirectoryPathForFile(db, id)
-      if (directory) metadata = { ...metadata, directory }
+      // A trashed file is in no folder, and publishes the one it restores to.
+      const trash = await ops.queryTrashLocation(db, id)
+      if (trash) {
+        metadata = { ...metadata, directory: trash.directory }
+        if (trash.trashedFolder) metadata = { ...metadata, trashedFolder: trash.trashedFolder }
+      } else {
+        const directory = await ops.queryDirectoryPathForFile(db, id)
+        if (directory) metadata = { ...metadata, directory }
+      }
     }
     return { metadata, deletedAt: record.deletedAt }
   }
@@ -579,11 +596,11 @@ export function buildDbNamespaces(
       trash: async (ids) => {
         await ops.trashFilesAndThumbnails(db, ids)
         uploads.removeMany(ids)
-        invalidateLibrary()
+        invalidateLibraryAndFolders()
       },
       restore: async (ids) => {
         await ops.restoreFilesAndThumbnails(db, ids)
-        invalidateLibrary()
+        invalidateLibraryAndFolders()
       },
       getLostCount: (indexerURL) => ops.queryLostFileCount(db, indexerURL),
       getLostStats: (indexerURL) => ops.queryLostFileStats(db, indexerURL),
@@ -596,22 +613,20 @@ export function buildDbNamespaces(
       autoPurge: () => ops.autoPurgeOldTrashedFiles(db),
       tombstoneWithThumbnails: async (ids) => {
         await ops.tombstoneFilesAndThumbnails(db, ids)
-        invalidateLibrary()
+        invalidateLibraryAndFolders()
       },
       tombstoneWithThumbnailsAndCleanup: tombstoneAndCleanup,
       trashEntries: async (opts) => {
         const rows = await ops.queryTrashEntries(db, opts?.limit ?? 500, opts?.offset ?? 0)
-        const folders = await ops.queryDirectoryPathsForFiles(
-          db,
-          rows.map((r) => r.id),
-        )
         return rows.map((r) => ({
           id: r.id,
-          name: r.name,
+          kind: r.kind,
+          name: r.kind === 'folder' ? ops.directoryDisplayName(r.name) : r.name,
           type: r.type,
           size: r.size,
-          folder: folders[r.id] ?? null,
+          folder: (r.kind === 'folder' ? ops.directoryParentPath(r.name) : r.location) || null,
           versions: r.versions,
+          files: r.files,
           trashedAt: r.trashedAt,
           purgeAt: r.trashedAt + TRASH_AUTO_PURGE_AGE,
         }))
@@ -619,7 +634,7 @@ export function buildDbNamespaces(
       trashCount: () => ops.queryTrashEntryCount(db),
       restoreTrashEntries: async (entryIds) => {
         const restored = await ops.restoreTrashEntries(db, entryIds)
-        if (restored.length > 0) invalidateLibrary()
+        if (restored.length > 0) invalidateLibraryAndFolders()
         return restored
       },
       deleteTrashEntries: async (entryIds) => {
@@ -673,13 +688,13 @@ export function buildDbNamespaces(
         caches.directories.invalidateAll()
         invalidateLibrary()
       },
-      trashFile: async (id) => {
+      trashFile: async (id, opts) => {
         const ids = await forStack(id, (tx, stack) =>
-          ops.trashAllFileVersions(tx, stack.name, stack.directoryId),
+          ops.trashAllFileVersions(tx, stack.name, stack.directoryId, opts),
         )
         if (ids.length === 0) return
         uploads.removeMany(ids)
-        invalidateLibrary()
+        invalidateLibraryAndFolders()
       },
       tombstoneFile: async (id) => {
         const ids = await forStack(id, (tx, stack) =>
@@ -687,12 +702,12 @@ export function buildDbNamespaces(
         )
         if (ids.length === 0) return
         uploads.removeMany(ids)
-        invalidateLibrary()
+        invalidateLibraryAndFolders()
       },
       trashAllVersions: async (name, directoryId) => {
         const ids = await ops.trashAllFileVersions(db, normalizeName(name), directoryId)
         if (ids.length > 0) {
-          invalidateLibrary()
+          invalidateLibraryAndFolders()
         }
         return ids
       },
@@ -742,14 +757,14 @@ export function buildDbNamespaces(
         caches.directories.invalidateAll()
         caches.libraryVersion.invalidate()
       },
-      deleteAndTrashFiles: async (id) => {
+      deleteAndTrashFiles: async (id, opts) => {
         // Resolve in-flight imports targeting this directory to `failed` and
         // delete their staged bytes BEFORE the directory goes; otherwise the
         // scanner would try to finalize them into a now-deleted directory (FK
         // violation) and leak bytes.
         const failedImports = await ops.failImportFilesInDirectory(db, id, 'destination-deleted')
         await Promise.all(failedImports.map((f) => removeFile(f)))
-        const count = await ops.deleteDirectoryAndTrashFiles(db, id)
+        const count = await ops.deleteDirectoryAndTrashFiles(db, id, opts)
         caches.directories.invalidateAll()
         await caches.library.invalidateAll()
         caches.libraryVersion.invalidate()
