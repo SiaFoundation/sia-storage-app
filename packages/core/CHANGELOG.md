@@ -1,3 +1,18 @@
+## 0.0.22-rc.0 (2026-10-30)
+
+### Features
+
+- `cache.clear` removes the local copy of every file already uploaded to the current indexer, as Clear local files does on mobile, after any eviction pass already running. Eviction results report `bytesFreed`.
+- `settings.getCacheMaxBytes`, `setCacheMaxBytes`, `getCacheMinAge` and `setCacheMinAge` store the cache limit and minimum age, `cache.evict` runs one eviction pass with them, and a call during a running pass gets that pass's result.
+- `fs.evictionCandidates` and `fs.trashedCachedFiles` take the indexer URL to check, `localObjects.countForFileOnIndexer` is added, and `settings.setIndexerURL` re-reports every file to the provider feed when the URL changes.
+
+### Fixes
+
+- Cache eviction and Clear local files finish when some files cannot be deleted, instead of retrying the same files until they are stopped. `fs.evictionCandidates`, `fs.nonCurrentCachedFiles` and `fs.trashedCachedFiles` take a cursor and return each row's `usedAt`.
+- Opening a file from Finder no longer fails when the cache removes its copy at the same moment, and a download is never cut short by cache cleanup. `fs.removeFile` takes `skipIfLocked` and resolves whether it removed the file.
+- While uploads or sync keep changing the library, the grid's loading spinner clears once the next page arrives, where it could stay stuck until the app restarted. `useFileList` returns `isLoadingMore` and `useLoadMore` takes it in place of `data` and `isValidating`, and list reloads and `invalidateAll()` refreshes each run one at a time, with one more after for changes made meanwhile.
+- The library grid, its counts and the photo viewer load faster in large libraries, for every sort order. `buildLibraryQueryParts` returns `indexedBy` clauses for reads over the whole library, and the name sort no longer moves files without a `nameSortKey` to the end.
+
 ## 0.0.21 (2026-10-30)
 
 ### Features
