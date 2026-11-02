@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
-import useSWR, { useSWRConfig } from 'swr'
+import useSWR, { type Middleware, type ScopedMutator } from 'swr'
 import useSWRInfinite, { unstable_serialize } from 'swr/infinite'
 import type { AppService } from '../app/service'
 import { useApp } from '../app/context'
@@ -106,6 +106,22 @@ function reloadList(app: AppService, key: string, version: number, reload: () =>
   run()
 }
 
+// Stores the mutate bound to the cache useSWRInfinite reads, taken from the
+// config SWR passes to every middleware. In the mobile app's bundle that is
+// not the mutate useSWRConfig() returns. Metro takes the
+// `swr/infinite/package.json` stub, which has no exports map, for the package
+// and follows its main field to the CommonJS build, while `swr` resolves
+// through the root exports map to the ESM build. Each build keeps its own
+// default cache, so the ESM build's mutate finds no list under the key and
+// returns without reloading, and a renamed file keeps its old name on screen.
+function captureCacheMutate(ref: { current: ScopedMutator | null }): Middleware {
+  return (useSWRNext) => (key, fetcher, config) => {
+    // SWRConfiguration leaves out the cache and mutate SWR merges in here.
+    ref.current = (config as { mutate?: ScopedMutator }).mutate ?? null
+    return useSWRNext(key, fetcher, config)
+  }
+}
+
 /** Returns a paginated file list with sorting, filtering, and infinite scroll support. */
 export function useFileList(params: FileListParams) {
   const app = useApp()
@@ -151,18 +167,21 @@ export function useFileList(params: FileListParams) {
     if (pageIndex > 0 && (!prevPage || prevPage.length < PAGE_SIZE)) return null
     return `${base}|page=${pageIndex}`
   }
+  const cacheMutate = useRef<ScopedMutator | null>(null)
   const swr = useSWRInfinite<FileRecord[]>(getKey, fetcher, {
     revalidateOnFocus: false,
     revalidateAll: true,
+    use: [captureCacheMutate(cacheMutate)],
   })
 
-  // Reloads by the list's own key through the global mutate. The hook's
-  // swr.mutate() reloads whichever list the hook shows when it runs, and a
-  // reload queued for this list can run after that hook has switched its sort
-  // or search, or unmounted.
-  const { mutate } = useSWRConfig()
+  // Reloads by the list's own key through the mutate of the hook's cache. The
+  // hook's swr.mutate() reloads whichever list the hook shows when it runs,
+  // and a reload queued for this list can run after that hook has switched
+  // its sort or search, or unmounted.
   const listKey = unstable_serialize(getKey)
-  useOnLibraryListChange((version) => reloadList(app, listKey, version, () => mutate(listKey)))
+  useOnLibraryListChange((version) =>
+    reloadList(app, listKey, version, async () => cacheMutate.current?.(listKey)),
+  )
 
   const pages = swr.data
 
