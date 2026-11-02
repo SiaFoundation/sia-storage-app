@@ -95,12 +95,14 @@ describe('deleting a folder that holds several versions of one file', () => {
     expect(await db().getFirstAsync('SELECT id FROM directories WHERE id = ?', dirId)).toBeNull()
   })
 
-  it('a plain folder delete succeeds with both versions inside', async () => {
+  it('a plain folder delete is refused with both versions inside, and the folder stays', async () => {
     const { dirId } = await twoVersionsIn('Trips')
 
-    await deleteDirectory(db(), dirId)
+    await expect(deleteDirectory(db(), dirId)).rejects.toThrow('This folder still has files in it')
 
-    expect(await db().getFirstAsync('SELECT id FROM directories WHERE id = ?', dirId)).toBeNull()
+    expect(await db().getFirstAsync('SELECT id FROM directories WHERE id = ?', dirId)).toEqual({
+      id: dirId,
+    })
   })
 
   it('a folder the file left once before records the newer departure', async () => {

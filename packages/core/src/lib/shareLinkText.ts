@@ -74,10 +74,6 @@ export function expiryLabel(expiresAtMs: number | null, now: number): string {
 /** What the link's files are waiting on, if anything. Null once recipients see them all. */
 export function linkProgress(link: Pick<ShareLink, 'files'>): string | null {
   const waiting = link.files.filter((f) => f.state === 'pending').length
-  const trashed = link.files.filter((f) => f.state === 'trashed').length
-  const parts: string[] = []
-  if (waiting > 0) parts.push(waiting === 1 ? '1 file uploading' : `${waiting} files uploading`)
-  if (trashed > 0)
-    parts.push(trashed === 1 ? '1 file in the trash' : `${trashed} files in the trash`)
-  return parts.length > 0 ? parts.join(', ') : null
+  if (waiting === 0) return null
+  return waiting === 1 ? '1 file uploading' : `${waiting} files uploading`
 }

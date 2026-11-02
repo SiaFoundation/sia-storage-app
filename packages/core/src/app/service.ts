@@ -244,7 +244,7 @@ export interface AppService {
         directoryId?: string | null
       },
     ): Promise<void>
-    /** Upserts multiple files. */
+    /** Upserts multiple files. One that arrives in the trash leaves every share link. */
     upsertMany(
       records: Omit<FileRecord, 'objects'>[],
       opts?: { skipCurrentRecalc?: boolean; directoryIdByFileId?: Map<string, string> },
@@ -413,9 +413,9 @@ export interface AppService {
     getOrCreate(name: string, parentPath?: string): Promise<Directory>
     /** Creates all intermediate directories for a path and returns the leaf. */
     getOrCreateAtPath(path: string): Promise<Directory>
-    /** Deletes a directory and all descendants without affecting files. */
+    /** Deletes a directory and all descendants, and throws if any of them holds a file. */
     delete(id: string): Promise<void>
-    /** Deletes a directory, all descendants, and trashes their files. */
+    /** Deletes a directory and all descendants, trashes their files, and takes those files off every share link. */
     deleteAndTrashFiles(id: string, opts?: { keepParent?: boolean }): Promise<number>
     /** Deletes directories that have no active files or subdirectories. Walks up the tree. */
     deleteEmpty(directoryIds: string[], opts?: { skipInvalidation?: boolean }): Promise<number>

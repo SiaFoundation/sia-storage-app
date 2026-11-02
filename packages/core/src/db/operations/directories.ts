@@ -642,51 +642,33 @@ export async function moveFileToDirectory(
   })
 }
 
+/**
+ * Deletes a folder and the folders under it when none of them holds a file.
+ * Deleting a folder row moves the files still in it to the top of the
+ * library by the foreign key, where each joins the version stack of any file
+ * there with the same name. A folder with files in it is deleted with
+ * deleteDirectoryAndTrashFiles.
+ */
 export async function deleteDirectory(db: DatabaseAdapter, id: string): Promise<void> {
   await db.withTransactionAsync(async (tx) => {
     const dir = await queryDirectoryById(tx, id)
     if (!dir) return
-
     const escaped = escapeLikePattern(dir.path)
-
-    const subtreeDirIds = await tx.getAllAsync<{ id: string }>(
-      `SELECT id FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'`,
+    const holdsFiles = await tx.getFirstAsync<{ id: string }>(
+      `SELECT f.id FROM files f
+       INNER JOIN directories d ON f.directoryId = d.id
+       WHERE (d.path = ? OR d.path LIKE ? || '/%' ESCAPE '\\')
+         AND f.deletedAt IS NULL
+       LIMIT 1`,
       dir.path,
       escaped,
     )
-    const dirIds = subtreeDirIds.map((d) => d.id)
-
-    const dirPh = dirIds.map(() => '?').join(',')
-    const groups = await tx.getAllAsync<{ name: string }>(
-      `SELECT DISTINCT name FROM files WHERE directoryId IN (${dirPh}) AND kind = 'file'`,
-      ...dirIds,
-    )
-
-    const now = Date.now()
-    // Capture ids before the UPDATE nulls directoryId, the object flag can't
-    // re-derive them afterward.
-    const affected = await tx.getAllAsync<{ id: string }>(
-      `SELECT id FROM files WHERE directoryId IN (${dirPh})`,
-      ...dirIds,
-    )
-    const affectedIds = affected.map((f) => f.id)
-    // max() per row: a plain stamp would move a future-clocked row (a remote
-    // wall clock via sync-down) backwards and lose its reparent to sync.
-    await tx.runAsync(
-      `UPDATE files SET directoryId = NULL, updatedAt = max(?, updatedAt + 1) WHERE directoryId IN (${dirPh})`,
-      now,
-      ...dirIds,
-    )
-    await flagObjectsForFiles(tx, affectedIds)
+    if (holdsFiles) throw new Error('This folder still has files in it')
     await tx.runAsync(
       `DELETE FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'`,
       dir.path,
       escaped,
     )
-
-    for (const g of groups) {
-      await recalculateCurrentForGroup(tx, g.name, null)
-    }
   })
 }
 
@@ -1002,7 +984,8 @@ async function rebaseDirectoryTree(
     )
   }
 
-  // max() per row, same reason as deleteDirectory's child stamp.
+  // max() per row: a plain stamp would move a future-clocked row (a remote
+  // wall clock via sync-down) backwards and lose its move to sync.
   await tx.runAsync(
     `UPDATE files SET updatedAt = max(?, updatedAt + 1) WHERE directoryId IN (
       SELECT id FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'

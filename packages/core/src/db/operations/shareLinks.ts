@@ -108,6 +108,27 @@ export async function deleteShareLinkFile(
   )
 }
 
+/**
+ * Takes trashed files off every link, run in the transaction that trashes
+ * them. Their rows go, and each of their attached objects is marked
+ * `detaching` for the next share link pass, which needs the network to
+ * detach it. The mark holds if the file is restored before that pass, so a
+ * restore never puts a file back on a link.
+ */
+export async function takeTrashedFilesOffLinks(
+  db: DatabaseAdapter,
+  fileIds: string[],
+): Promise<void> {
+  if (fileIds.length === 0) return
+  const ph = fileIds.map(() => '?').join(',')
+  await db.runAsync(`DELETE FROM share_link_files WHERE fileId IN (${ph})`, ...fileIds)
+  await db.runAsync(
+    `UPDATE share_link_objects SET detaching = 1
+     WHERE objectId IN (SELECT id FROM objects WHERE fileId IN (${ph}))`,
+    ...fileIds,
+  )
+}
+
 export async function queryShareLinkFiles(
   db: DatabaseAdapter,
   publicKey: string,
@@ -130,6 +151,34 @@ export async function upsertShareLinkObject(
     publicKey,
     objectId,
     sharedUpdatedAt,
+  )
+}
+
+/**
+ * Records an object syncLink has just put on a link for the file row
+ * `fileId`. When that row left the link while the attach was in flight, as
+ * the trash takes a file off, the object is marked `detaching` so the next
+ * pass takes it off. Recorded plain, it would read as a live object nothing
+ * names once the file is restored, which adoption puts back on the link.
+ */
+export async function recordAttachedObject(
+  db: DatabaseAdapter,
+  publicKey: string,
+  objectId: string,
+  sharedUpdatedAt: number,
+  fileId: string,
+): Promise<void> {
+  await db.runAsync(
+    `INSERT INTO share_link_objects (publicKey, objectId, sharedUpdatedAt, detaching)
+     VALUES (?, ?, ?, NOT EXISTS (SELECT 1 FROM share_link_files WHERE publicKey = ? AND fileId = ?))
+     ON CONFLICT (publicKey, objectId) DO UPDATE SET
+       sharedUpdatedAt = excluded.sharedUpdatedAt,
+       detaching = max(share_link_objects.detaching, excluded.detaching)`,
+    publicKey,
+    objectId,
+    sharedUpdatedAt,
+    publicKey,
+    fileId,
   )
 }
 
@@ -185,15 +234,11 @@ export async function replaceShareLinkObjects(
   return changed
 }
 
-/**
- * A shared file with the stack its row names. Name and directoryId are null
- * once the row is gone. trashedFrom is set while the row is in the trash, as
- * queryFileStackKey gives it.
- */
+/** A shared file with the row it names. The row's fields are null once the row is gone. */
 export type ShareLinkFileStack = ShareLinkFileRow & {
   name: string | null
   directoryId: string | null
-  trashedFrom: string | null
+  trashedAt: number | null
   deletedAt: number | null
 }
 
@@ -202,9 +247,7 @@ export async function queryShareLinkFileStacks(
   publicKey: string,
 ): Promise<ShareLinkFileStack[]> {
   return db.getAllAsync<ShareLinkFileStack>(
-    `SELECT s.publicKey, s.fileId, s.state, f.name, f.directoryId,
-            CASE WHEN f.trashedAt IS NOT NULL THEN coalesce(f.trashedFrom, '') END AS trashedFrom,
-            f.deletedAt
+    `SELECT s.publicKey, s.fileId, s.state, f.name, f.directoryId, f.trashedAt, f.deletedAt
      FROM share_link_files s LEFT JOIN files f ON f.id = s.fileId
      WHERE s.publicKey = ?
      ORDER BY s.rowid`,
@@ -217,11 +260,14 @@ export async function queryShareLinkFileStacks(
  * fields are null for an object this device has not synced yet.
  */
 export type ShareLinkObjectFile = ShareLinkObjectRow & {
+  /** 1 from the trash until a pass detaches the object, else 0. */
+  detaching: number
   fileId: string | null
   name: string | null
   directoryId: string | null
-  trashedFrom: string | null
   updatedAt: number | null
+  trashedAt: number | null
+  deletedAt: number | null
 }
 
 export async function queryShareLinkObjectFiles(
@@ -230,10 +276,8 @@ export async function queryShareLinkObjectFiles(
   indexerURL: string,
 ): Promise<ShareLinkObjectFile[]> {
   return db.getAllAsync<ShareLinkObjectFile>(
-    `SELECT s.publicKey, s.objectId, s.sharedUpdatedAt,
-            f.id AS fileId, f.name, f.directoryId,
-            CASE WHEN f.trashedAt IS NOT NULL THEN coalesce(f.trashedFrom, '') END AS trashedFrom,
-            f.updatedAt
+    `SELECT s.publicKey, s.objectId, s.sharedUpdatedAt, s.detaching,
+            f.id AS fileId, f.name, f.directoryId, f.updatedAt, f.trashedAt, f.deletedAt
      FROM share_link_objects s
      LEFT JOIN objects o ON o.id = s.objectId AND o.indexerURL = ?
      LEFT JOIN files f ON f.id = o.fileId

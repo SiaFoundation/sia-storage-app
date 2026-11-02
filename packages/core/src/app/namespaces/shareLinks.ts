@@ -9,9 +9,28 @@
  * and an attachment keeps the metadata it was made with until it is attached
  * again. `syncLinks` does the following for a `latest` link. For each shared
  * file it attaches the current version, attaches it again after a rename, and
- * detaches the versions it replaced and the file itself while it is trashed.
- * A `snapshot` link attaches the version each file was shared as once it is
- * uploaded, and detaches and reattaches it as the file is trashed and restored.
+ * detaches the versions it replaced. A `snapshot` link attaches the version
+ * each file was shared as once it is uploaded.
+ *
+ * A file put in the trash, on its own or by deleting its folder, leaves every
+ * link for good, and restoring it does not put it back. The trash removes its
+ * share_link_files rows and marks its attached objects `detaching` in the
+ * transaction that trashes it, and the next pass detaches them. Another device
+ * learns of the trash by sync, and its pass drops the file the same way.
+ *
+ * `syncLink` is the only place that picks a version to attach, and it picks
+ * from the row each shared file names in share_link_files:
+ * - A row that is trashed or gone is dropped from the link. Its name and
+ *   folder are never looked up, because a trashed row is in no folder, which
+ *   reads as the top of the library, where another file can have the same
+ *   name.
+ * - A live row puts one version from its own stack on the link, the rows with
+ *   its exact name and folder: the newest for a `latest` link, the row itself
+ *   for a `snapshot`. A file the user saves, moves or renames into that name
+ *   and folder becomes a version of it, on this device or another, and a
+ *   `latest` link shows it.
+ * - An attached object marked `detaching`, or of a trashed or deleted file, is
+ *   detached, and so is any older version of a file a `latest` link shows.
  *
  * Two devices can sync one link at once. Each attaches only the version it
  * holds as current, which is the newest live row by (updatedAt, id) on both,
@@ -62,17 +81,8 @@ function keyOf(link: ops.ShareLinkRow): SharingKeyRef {
   return { publicKey: link.publicKey, seed: hexToUint8(link.seed) }
 }
 
-/**
- * A stack's identity, as queryFileVersions takes it. A trashed row is in no
- * folder, so it is keyed by the folder it restores to and kept apart from the
- * live files at the top of the library, which share its name and null folder.
- */
-function stackOf(row: {
-  name: string | null
-  directoryId: string | null
-  trashedFrom?: string | null
-}): string {
-  if (row.trashedFrom != null) return JSON.stringify(['trash', row.trashedFrom, row.name])
+/** A stack's identity, as queryFileVersions takes it. */
+function stackOf(row: { name: string | null; directoryId: string | null }): string {
   return JSON.stringify([row.directoryId, row.name])
 }
 
@@ -112,29 +122,6 @@ function isGoneError(e: unknown): boolean {
 
 export function buildShareLinks(deps: Deps): ShareLinkMethods {
   const { db } = deps
-
-  /**
-   * The live version a link row's file shows, with its folder. A trashed row
-   * is in no folder, so it looks in the folder it restores to, which finds the
-   * versions left when only some were trashed. Every device gets the same
-   * answer this way, where a stack id is local and a device that synced the
-   * row already trashed gives it one of its own. By name at the top of the
-   * library it would find a different file of the same name.
-   */
-  async function currentVersion(
-    file: ops.ShareLinkFileStack,
-    name: string,
-  ): Promise<{ row: FileRecordRow; directoryId: string | null } | null> {
-    let directoryId = file.directoryId
-    if (file.trashedFrom !== null && file.trashedFrom !== '') {
-      const folder = await ops.queryDirectoryByPath(db, file.trashedFrom)
-      if (!folder) return null
-      directoryId = folder.id
-    }
-    const row = await ops.queryCurrentFileVersion(db, name, directoryId)
-    return row && { row, directoryId }
-  }
-
   let refreshedAt = 0
   // Every operation that reads a link's state and then changes it on the
   // indexer runs one at a time. Without this, the background pass could
@@ -151,12 +138,12 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
     return next
   }
 
-  /** One version row per stack, skipping stacks in `taken` and anything that is not a live file. */
+  /** One version row per stack, skipping stacks in `taken` and anything trashed, deleted or not a file. */
   async function distinctFiles(fileIds: string[], taken = new Set<string>()): Promise<string[]> {
     const picked: string[] = []
     for (const fileId of fileIds) {
       const row = await ops.queryFileById(db, fileId)
-      if (!row || row.kind !== 'file' || row.deletedAt !== null) continue
+      if (!row || row.kind !== 'file' || row.trashedAt !== null || row.deletedAt !== null) continue
       const stack = await ops.queryFileStackKey(db, fileId)
       if (!stack) continue
       const id = stackOf(stack)
@@ -205,7 +192,7 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
           sharedUpdatedAt: decodeFileMetadata(o.metadata()).updatedAt || null,
         })),
       )
-      const adopted = await adoptFiles(r.key.publicKey, indexerURL)
+      const adopted = await adoptFiles(r.key.publicKey, indexerURL, modeOf(r.description))
       if (replaced || adopted) changed = true
     }
     refreshedAt = startedAt
@@ -214,28 +201,49 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
 
   /**
    * Brings this device's list of a link's files in line with what is
-   * attached. A file another device attached is added. A file this device saw
-   * on the link with no version of it attached any more was taken off on
-   * another device, or deleted, and is dropped. Returns whether anything
-   * changed.
+   * attached. A live file another device attached is added, unless the trash
+   * marked its object `detaching` here, which keeps a file restored before
+   * that object came off from going back on. A trashed file is not added, and
+   * `syncLink` detaches it. A file this device saw on the link with nothing of
+   * it attached any more was taken off on another device, or deleted, and is
+   * dropped. A `latest` link names one row per stack, and a `snapshot` link
+   * names each version it shows, so two versions merged into one stack by a
+   * rename both stay. Returns whether anything changed.
    */
-  async function adoptFiles(publicKey: string, indexerURL: string): Promise<boolean> {
+  async function adoptFiles(
+    publicKey: string,
+    indexerURL: string,
+    mode: ShareLinkMode,
+  ): Promise<boolean> {
+    const identity = (row: {
+      fileId: string | null
+      name: string | null
+      directoryId: string | null
+    }) => (mode === 'latest' ? stackOf(row) : String(row.fileId))
     const files = await ops.queryShareLinkFileStacks(db, publicKey)
     const attached = await ops.queryShareLinkObjectFiles(db, publicKey, indexerURL)
-    const fileStacks = new Set(files.filter((f) => f.name !== null).map(stackOf))
+    // A trashed row is left out, since it is in no folder and can share the
+    // name of a live file at the top of the library that is on the link.
+    const named = new Set(
+      files
+        .filter((f) => f.name !== null && f.trashedAt === null && f.deletedAt === null)
+        .map(identity),
+    )
     let changed = false
     for (const object of attached) {
-      if (object.fileId === null || fileStacks.has(stackOf(object))) continue
+      if (object.fileId === null || object.detaching === 1) continue
+      if (object.trashedAt !== null || object.deletedAt !== null) continue
+      if (named.has(identity(object))) continue
       await ops.insertShareLinkFile(db, publicKey, object.fileId, 'shared')
-      fileStacks.add(stackOf(object))
+      named.add(identity(object))
       changed = true
     }
     // An object this device has not synced may be a newer version of any of
     // the link's files, so nothing is taken off until every one is known.
     if (attached.some((o) => o.fileId === null)) return changed
-    const attachedStacks = new Set(attached.map(stackOf))
+    const attachedIds = new Set(attached.filter((o) => o.detaching === 0).map(identity))
     for (const file of files) {
-      if (file.state === 'shared' && (file.name === null || !attachedStacks.has(stackOf(file)))) {
+      if (file.state === 'shared' && (file.name === null || !attachedIds.has(identity(file)))) {
         await ops.deleteShareLinkFile(db, publicKey, file.fileId)
         changed = true
       }
@@ -244,15 +252,16 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
   }
 
   /**
-   * Attaches a version to a link with the metadata recipients see. Only this
-   * step needs the full object, whose slabs open it as a pinned object, so
-   * the checks before it read object refs.
+   * Attaches a version to a link with the metadata recipients see, for the
+   * link's row naming `fileId`. Only this step needs the full object, whose
+   * slabs open it as a pinned object, so the checks before it read object refs.
    */
   async function attach(
     sdk: SdkAdapter,
     indexerURL: string,
     key: SharingKeyRef,
     row: FileRecordRow,
+    fileId: string,
   ): Promise<void> {
     const object = (await ops.queryObjectsForFile(db, row.id)).find(
       (o) => o.indexerURL === indexerURL,
@@ -261,7 +270,7 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
     const pinned = sdk.openPinnedObject(sdk.appKey(), object)
     pinned.updateMetadata(sharedMetadata(row))
     await sdk.shareObject(key, pinned)
-    await ops.upsertShareLinkObject(db, key.publicKey, object.id, row.updatedAt)
+    await ops.recordAttachedObject(db, key.publicKey, object.id, row.updatedAt, fileId)
   }
 
   async function uploadedRef(indexerURL: string, fileId: string) {
@@ -320,7 +329,7 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
     const objectId = ref.id
     const isAttached = inStack.some((a) => a.objectId === objectId)
     if (isAttached && file.state === 'shared') return false
-    if (!isAttached) await attach(sdk, indexerURL, key, row)
+    if (!isAttached) await attach(sdk, indexerURL, key, row, file.fileId)
     await ops.updateShareLinkFile(db, key.publicKey, file.fileId, {
       fileId: row.id,
       state: 'shared',
@@ -331,10 +340,10 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
   }
 
   /**
-   * Brings each of a link's files in line with what the link shows: the
-   * current version for a `latest` link, the shared version for a `snapshot`,
-   * and nothing while every version is trashed. Returns whether anything
-   * changed.
+   * Brings a link's attached objects in line with its files, as the header
+   * describes. An older version comes off only after the version replacing
+   * it is attached, so the link never shows a file missing in between.
+   * Returns whether anything changed.
    */
   async function syncLink(
     sdk: SdkAdapter,
@@ -349,11 +358,13 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
     // them the same name and folder. Moving both rows onto the one current
     // version would collide on the table's key and fail every later pass, so
     // a latest link keeps the first row of each stack and drops the rest
-    // before any row moves.
+    // before any row moves. A trashed row is left out, since it is in no
+    // folder and can share the name of another file on the link at the top
+    // of the library.
     const rows: ops.ShareLinkFileStack[] = []
     const stacks = new Set<string>()
     for (const file of files) {
-      const live = file.name !== null && file.deletedAt === null
+      const live = file.name !== null && file.deletedAt === null && file.trashedAt === null
       if (mode === 'latest' && live && stacks.has(stackOf(file))) {
         await ops.deleteShareLinkFile(db, key.publicKey, file.fileId)
         changed = true
@@ -362,38 +373,44 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
       if (live) stacks.add(stackOf(file))
       rows.push(file)
     }
-    const attachedByStack = new Map<string, ops.ShareLinkObjectFile[]>()
+    // Objects the trash marked, and those of trashed and deleted files, come
+    // off before anything is attached, so a failed attach later in the pass
+    // never leaves one on the link. A marked object comes off even when its
+    // file has been restored since.
+    const live: ops.ShareLinkObjectFile[] = []
     for (const object of attached) {
-      if (object.fileId === null) continue
+      if (object.fileId === null && object.detaching === 0) continue
+      if (object.detaching === 0 && object.trashedAt === null && object.deletedAt === null) {
+        live.push(object)
+        continue
+      }
+      await unshare(sdk, key, object.objectId)
+      changed = true
+    }
+    const attachedByStack = new Map<string, ops.ShareLinkObjectFile[]>()
+    for (const object of live) {
       const stack = stackOf(object)
       const group = attachedByStack.get(stack)
       if (group) group.push(object)
       else attachedByStack.set(stack, [object])
     }
+    const kept = new Set<string>()
     const onLink = new Set(rows.map((file) => file.fileId))
     for (const file of rows) {
       // A deleted file's objects are deleted from the indexer with it, which
-      // detaches them from every key.
-      if (file.name === null || file.deletedAt !== null) {
+      // detaches them from every key. A trashed file's came off above, and it
+      // leaves the link for good.
+      if (file.name === null || file.deletedAt !== null || file.trashedAt !== null) {
         await ops.deleteShareLinkFile(db, key.publicKey, file.fileId)
         onLink.delete(file.fileId)
         changed = true
         continue
       }
       const inStack = attachedByStack.get(stackOf(file)) ?? []
-      const current = (await currentVersion(file, file.name))?.row
-      if (!current) {
-        for (const object of inStack) await unshare(sdk, key, object.objectId)
-        if (inStack.length > 0) changed = true
-        if (file.state !== 'trashed') {
-          await ops.updateShareLinkFile(db, key.publicKey, file.fileId, {
-            fileId: file.fileId,
-            state: 'trashed',
-          })
-          changed = true
-        }
-        continue
-      }
+      // None when a trash took every version after the rows above were read.
+      // The trash removed the row and marked its objects detaching.
+      const current = await ops.queryCurrentFileVersion(db, file.name, file.directoryId)
+      if (!current) continue
       if (mode === 'snapshot') {
         if (await syncSnapshotFile(sdk, indexerURL, key, file, inStack, current, onLink)) {
           changed = true
@@ -403,6 +420,7 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
       const ref = await uploadedRef(indexerURL, current.id)
       // Not uploaded yet. Whatever version is attached stays until this one is.
       if (!ref) {
+        for (const object of inStack) kept.add(object.objectId)
         if (file.state !== 'pending') {
           await ops.updateShareLinkFile(db, key.publicKey, file.fileId, {
             fileId: file.fileId,
@@ -412,6 +430,7 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
         }
         continue
       }
+      kept.add(ref.id)
       const attachedNow = inStack.find((a) => a.objectId === ref.id)
       // Attached again only for metadata newer than what is attached, so a
       // device that has not synced a rename yet never puts the old name back
@@ -421,13 +440,7 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
         attachedNow.sharedUpdatedAt === null ||
         current.updatedAt > attachedNow.sharedUpdatedAt
       ) {
-        await attach(sdk, indexerURL, key, current)
-        changed = true
-      }
-      // After the attach, so the link never shows the file missing in between.
-      for (const replaced of inStack) {
-        if (replaced.objectId === ref.id) continue
-        await unshare(sdk, key, replaced.objectId)
+        await attach(sdk, indexerURL, key, current, file.fileId)
         changed = true
       }
       if (file.fileId !== current.id || file.state !== 'shared') {
@@ -438,27 +451,38 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
         changed = true
       }
     }
+    // Older versions of the files a latest link shows come off after the
+    // attaches. An object with no row here may be a version another device
+    // attached and this one has not synced, and a live file nothing on this
+    // link names may be one another device added since the last listing,
+    // which adds it here, so both are left alone.
+    if (mode === 'latest') {
+      for (const object of live) {
+        if (kept.has(object.objectId) || !stacks.has(stackOf(object))) continue
+        await unshare(sdk, key, object.objectId)
+        changed = true
+      }
+    }
     return changed
   }
 
   async function readLink(link: ops.ShareLinkRow): Promise<ShareLink> {
     const files: ShareLinkFile[] = []
     for (const file of await ops.queryShareLinkFileStacks(db, link.publicKey)) {
-      // No name is a row whose file this device no longer has.
-      if (file.name === null) continue
+      // No name is a row whose file this device no longer has. A trashed row
+      // is one the next pass drops.
+      if (file.name === null || file.trashedAt !== null) continue
       // A snapshot shows the version its row names. A latest link shows the
-      // stack's current version, or the row itself while every version is
-      // trashed.
-      const current = link.mode === 'latest' ? await currentVersion(file, file.name) : null
-      const row = current?.row ?? (await ops.queryFileById(db, file.fileId))
+      // stack's current version.
+      const current =
+        link.mode === 'latest'
+          ? await ops.queryCurrentFileVersion(db, file.name, file.directoryId)
+          : null
+      const row = current ?? (await ops.queryFileById(db, file.fileId))
       if (!row) continue
-      const directoryId = current ? current.directoryId : file.directoryId
-      // A trashed row is in no folder and shows the one it restores to.
-      const folder = directoryId
-        ? ((await ops.queryDirectoryById(db, directoryId))?.path ?? null)
-        : current
-          ? null
-          : file.trashedFrom || null
+      const folder = file.directoryId
+        ? ((await ops.queryDirectoryById(db, file.directoryId))?.path ?? null)
+        : null
       files.push({ fileId: row.id, name: row.name, size: row.size, folder, state: file.state })
     }
     return {

@@ -73,7 +73,6 @@ function shortLink(url: string): string {
 
 function linkFileDetail(file: ShareLinkFile): string | null {
   if (file.state === 'pending') return 'Uploading'
-  if (file.state === 'trashed') return 'In the trash'
   return humanSize(file.size)
 }
 

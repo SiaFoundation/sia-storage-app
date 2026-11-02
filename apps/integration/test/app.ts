@@ -123,6 +123,12 @@ export interface TestAppOptions {
   crypto?: { sha256: (data: ArrayBuffer) => Promise<string> }
   detectMimeType?: (path: string, name?: string) => Promise<string | null>
   readMemory?: MemoryReader
+  /**
+   * The link pass as a phone runs it: on its own interval, slower than sync,
+   * and listing the indexer only every few minutes. By default every test
+   * device lists it on each sync tick.
+   */
+  shareLinkPass?: { interval: number; refresh: boolean }
 }
 
 export interface TestApp {
@@ -352,13 +358,14 @@ export function createTestApp(
 
   // Lists the account's keys on every pass rather than every few minutes, so a
   // link changed on one test device reaches the other within a tick.
+  const shareLinkPass = options?.shareLinkPass ?? { interval: SYNC_INTERVAL, refresh: true }
   const shareLinks = scheduler.createInterval({
     name: 'shareLinks',
     worker: async () => {
       if (!connected) return
-      await appService.shares.syncLinks({ refresh: true })
+      await appService.shares.syncLinks({ refresh: shareLinkPass.refresh })
     },
-    interval: SYNC_INTERVAL,
+    interval: shareLinkPass.interval,
   })
 
   const thumbScan = scheduler.createInterval({
