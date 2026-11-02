@@ -514,6 +514,14 @@ export function buildDbNamespaces(
           skipCurrentRecalc: opts?.skipCurrentRecalc,
           directoryIdByFileId: opts?.directoryIdByFileId,
         })
+        // A trash synced from another device takes the file off this device's
+        // links in the same write. Left to the next link pass, a restore here
+        // before that pass would keep the file shared.
+        const trashed = records.filter((r) => r.trashedAt != null).map((r) => r.id)
+        if (trashed.length > 0) {
+          await ops.takeTrashedFilesOffLinks(db, trashed)
+          caches.shareLinks.invalidateAll()
+        }
         if (records.length > 0 && !opts?.skipCurrentRecalc) {
           invalidateLibrary()
         }
@@ -597,6 +605,7 @@ export function buildDbNamespaces(
         await ops.trashFilesAndThumbnails(db, ids)
         uploads.removeMany(ids)
         invalidateLibraryAndFolders()
+        caches.shareLinks.invalidateAll()
       },
       restore: async (ids) => {
         await ops.restoreFilesAndThumbnails(db, ids)
@@ -695,6 +704,7 @@ export function buildDbNamespaces(
         if (ids.length === 0) return
         uploads.removeMany(ids)
         invalidateLibraryAndFolders()
+        caches.shareLinks.invalidateAll()
       },
       tombstoneFile: async (id) => {
         const ids = await forStack(id, (tx, stack) =>
@@ -766,6 +776,7 @@ export function buildDbNamespaces(
         await Promise.all(failedImports.map((f) => removeFile(f)))
         const count = await ops.deleteDirectoryAndTrashFiles(db, id, opts)
         caches.directories.invalidateAll()
+        caches.shareLinks.invalidateAll()
         await caches.library.invalidateAll()
         caches.libraryVersion.invalidate()
         if (failedImports.length > 0) invalidateImports()

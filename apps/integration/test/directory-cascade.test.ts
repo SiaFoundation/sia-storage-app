@@ -49,6 +49,18 @@ describe('Directory Cascade', () => {
     expect(dirsAfter).toHaveLength(0)
   })
 
+  it('deleting a folder without trashing its files is refused while it holds one', async () => {
+    const dir = await app.createDirectory('Kept')
+    const [file] = await app.addFiles(generateTestFiles(1, { startId: 1 }))
+    await app.app.files.moveFile(file.id, dir.id)
+
+    await expect(app.app.directories.delete(dir.id)).rejects.toThrow(
+      'This folder still has files in it',
+    )
+
+    expect((await app.readAllDirectoriesWithCounts()).map((d) => d.path)).toEqual(['Kept'])
+  })
+
   it('sync-down delete of last file in directory removes the directory', async () => {
     const fileId = 'mock-file-1'
     const stored = app.sdk.injectObject({

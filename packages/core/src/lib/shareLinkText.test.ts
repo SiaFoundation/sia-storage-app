@@ -46,10 +46,11 @@ describe('share links', () => {
     expect(modeLabel('snapshot')).toBe('These versions')
   })
 
-  it('files still uploading or in the trash are named, and a link with neither says nothing', () => {
+  it('files still uploading are counted, and a link with none says nothing', () => {
     expect(linkProgress({ files: [file('a'), file('b')] })).toBeNull()
-    expect(linkProgress({ files: [file('a', 'pending'), file('b', 'trashed')] })).toBe(
-      '1 file uploading, 1 file in the trash',
+    expect(linkProgress({ files: [file('a', 'pending'), file('b')] })).toBe('1 file uploading')
+    expect(linkProgress({ files: [file('a', 'pending'), file('b', 'pending')] })).toBe(
+      '2 files uploading',
     )
   })
 

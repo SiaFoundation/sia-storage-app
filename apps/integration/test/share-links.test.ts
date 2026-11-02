@@ -11,7 +11,6 @@ import * as crypto from 'crypto'
 import * as nodeFs from 'fs'
 import * as path from 'path'
 import { createTestApp, type TestApp, waitForCondition } from './app'
-import { sleep } from './utils'
 
 /** Adds a file through the test app, which joins the stack of any live file with the same name. */
 async function addFile(app: TestApp, id: string, name: string): Promise<void> {
@@ -40,6 +39,24 @@ function attached(storage: MockIndexerStorage, publicKey: string) {
     objectId,
     metadata: decodeFileMetadata(metadata),
   }))
+}
+
+/** Long enough for several sync passes, so a change that should not happen would have. */
+const passes = () => new Promise((r) => setTimeout(r, 1500))
+
+/**
+ * Restores `fileId` on `app` as soon as its sync brings the trash in. On a
+ * device with a slower link pass that is before the pass sees the trash.
+ */
+async function restoreOnceTrashed(app: TestApp, fileId: string): Promise<void> {
+  await waitForCondition(
+    async () => {
+      if ((await app.getFileById(fileId))?.trashedAt == null) return false
+      await app.app.files.restore([fileId])
+      return true
+    },
+    { message: `${fileId} arrives in the trash and is restored` },
+  )
 }
 
 const LATEST = { expiresAt: null, mode: 'latest' } as const
@@ -122,7 +139,7 @@ describe('Share links', () => {
     )
   }, 30_000)
 
-  it('a trashed file leaves the link and comes back when restored', async () => {
+  it('a trashed file leaves the link and stays off it after a restore', async () => {
     await addFile(appA, 'photo', 'photo.txt')
     await appA.waitForNoActiveUploads()
     const link = await appA.app.shares.createLink(['photo'], LATEST)
@@ -131,17 +148,16 @@ describe('Share links', () => {
     await waitForCondition(() => attached(storage, link.publicKey)?.length === 0, {
       message: 'the trashed file is off the link',
     })
-    expect((await appA.app.shares.links())[0].files).toMatchObject([
-      { fileId: 'photo', state: 'trashed' },
-    ])
+    expect((await appA.app.shares.links())[0].files).toEqual([])
 
     await appA.app.files.restore(['photo'])
-    await waitForCondition(() => attached(storage, link.publicKey)?.length === 1, {
-      message: 'the restored file is back on the link',
-    })
+    await passes()
+
+    expect(attached(storage, link.publicKey)).toEqual([])
+    expect((await appA.app.shares.links())[0].files).toEqual([])
   }, 30_000)
 
-  it('a trashed file in a folder leaves the link without a file of the same name at the top of the library taking its place', async () => {
+  it('a trashed file in a folder leaves the link, a file of the same name at the top of the library does not take its place, and a restore does not put it back', async () => {
     await addFile(appA, 'shared', 'notes.txt')
     await appA.moveFileToDirectory('shared', (await appA.createDirectory('Trips')).id)
     await addFile(appA, 'private', 'notes.txt')
@@ -152,85 +168,177 @@ describe('Share links', () => {
 
     await appA.app.files.trashFile('shared')
     await waitForCondition(() => attached(storage, link.publicKey)?.length === 0, {
-      message: 'the trashed file is off the link and nothing took its place',
+      message: 'the trashed file is off the link',
     })
-    expect((await appA.app.shares.links())[0].files).toMatchObject([
-      { fileId: 'shared', state: 'trashed' },
-    ])
+    expect((await appA.app.shares.links())[0].files).toEqual([])
 
     await appA.app.files.restore(['shared'])
-    await waitForCondition(
-      () =>
-        attached(storage, link.publicKey)
-          ?.map((a) => a.objectId)
-          .join() === sharedObject,
-      { message: 'the restored file is back on the link, alone' },
-    )
+    await passes()
+    expect(attached(storage, link.publicKey)).toEqual([])
+    expect((await appA.app.shares.links())[0].files).toEqual([])
   }, 30_000)
 
-  it('a link whose newest version alone is trashed moves to the version left in the folder', async () => {
+  it('trashing the version a link names takes the file off both kinds of link', async () => {
     await addFile(appA, 'v1', 'report.txt')
     // Uploaded first, since the uploader skips a version replaced before its upload.
     await appA.waitForNoActiveUploads()
     await addFile(appA, 'v2', 'report.txt')
     await appA.app.files.moveFile('v1', (await appA.createDirectory('Trips')).id)
     await appA.waitForNoActiveUploads()
-    const link = await appA.app.shares.createLink(['v2'], LATEST)
-    expect(attached(storage, link.publicKey)?.map((a) => a.objectId)).toEqual([
-      await objectIdOf(appA, 'v2'),
-    ])
-
-    await appA.app.files.trash(['v2'])
-    const v1Object = await objectIdOf(appA, 'v1')
-    await waitForCondition(
-      () =>
-        attached(storage, link.publicKey)
-          ?.map((a) => a.objectId)
-          .join() === v1Object,
-      { message: 'the link shows the version left in Trips' },
-    )
-    expect((await appA.app.shares.links())[0].files).toMatchObject([
-      { fileId: 'v1', state: 'shared', folder: 'Trips' },
-    ])
-  }, 30_000)
-
-  it('a device that first syncs after only the newest version was trashed leaves both kinds of link as the first device has them', async () => {
-    await addFile(appA, 'v1', 'report.txt')
-    await appA.waitForNoActiveUploads()
-    await addFile(appA, 'v2', 'report.txt')
-    await appA.app.files.moveFile('v1', (await appA.createDirectory('Trips')).id)
-    await appA.waitForNoActiveUploads()
     const latest = await appA.app.shares.createLink(['v2'], LATEST)
     const snapshot = await appA.app.shares.createLink(['v2'], SNAPSHOT)
-    const v1Object = await objectIdOf(appA, 'v1')
-    const v2Object = await objectIdOf(appA, 'v2')
-    const objectsOn = (publicKey: string) =>
-      attached(storage, publicKey)
-        ?.map((a) => a.objectId)
-        .join()
 
     await appA.app.files.trash(['v2'])
-    await waitForCondition(() => objectsOn(latest.publicKey) === v1Object, {
-      message: 'the latest link moves to v1',
+    for (const { publicKey } of [latest, snapshot]) {
+      await waitForCondition(() => attached(storage, publicKey)?.length === 0, {
+        message: 'each link is empty',
+      })
+    }
+    await passes()
+    expect(attached(storage, latest.publicKey)).toEqual([])
+    expect(attached(storage, snapshot.publicKey)).toEqual([])
+    for (const link of await appA.app.shares.links()) expect(link.files).toEqual([])
+  }, 30_000)
+
+  it('a file trashed and restored while the device is not syncing stays off the link', async () => {
+    await addFile(appA, 'offline', 'offline.txt')
+    await appA.waitForNoActiveUploads()
+    const link = await appA.app.shares.createLink(['offline'], LATEST)
+    expect(attached(storage, link.publicKey)).toHaveLength(1)
+
+    appA.pause()
+    await appA.app.files.trashFile('offline')
+    await appA.app.files.restore(['offline'])
+    appA.resume()
+
+    await waitForCondition(() => attached(storage, link.publicKey)?.length === 0, {
+      message: 'the file is off the link',
+    })
+    await passes()
+    expect(attached(storage, link.publicKey)).toEqual([])
+    expect((await appA.app.shares.links())[0].files).toEqual([])
+  }, 30_000)
+
+  it('a file trashed on one device leaves the link on both, and restoring it on the other does not put it back', async () => {
+    await addFile(appA, 'both', 'both.txt')
+    await appA.waitForNoActiveUploads()
+    const link = await appA.app.shares.createLink(['both'], LATEST)
+    await waitForCondition(async () => (await appB.app.shares.links())[0]?.files.length === 1, {
+      timeout: 15_000,
+      message: 'Device B lists the file',
     })
 
-    const appC = createTestApp(storage)
+    await appB.app.files.trashFile('both')
+    await restoreOnceTrashed(appA, 'both')
+    await waitForCondition(() => attached(storage, link.publicKey)?.length === 0, {
+      message: 'the file is off the link',
+    })
+    await passes()
+
+    expect(attached(storage, link.publicKey)).toEqual([])
+    for (const app of [appA, appB]) expect((await app.app.shares.links())[0].files).toEqual([])
+  }, 30_000)
+
+  it('a device that restores a file as soon as another device trashes it does not put it back on its link', async () => {
+    const appC = createTestApp(storage, { shareLinkPass: { interval: 2_000, refresh: false } })
     await appC.start()
     try {
-      await waitForCondition(
-        async () =>
-          (await appC.getFileById('v2'))?.trashedAt != null &&
-          (await appC.app.shares.links()).length === 2,
-        { message: 'Device C has the trashed v2 and both links' },
-      )
-      // Long enough for Device C to run its link pass several times.
-      await sleep(2_000)
-      expect(objectsOn(latest.publicKey)).toBe(v1Object)
-      expect(objectsOn(snapshot.publicKey)).toBe(v2Object)
+      await addFile(appC, 'quick', 'quick.txt')
+      await appC.waitForNoActiveUploads()
+      const link = await appC.app.shares.createLink(['quick'], LATEST)
+      await waitForCondition(async () => (await appA.getFileById('quick')) !== null, {
+        timeout: 15_000,
+        message: 'Device A has the file',
+      })
+
+      await appA.app.files.trashFile('quick')
+      await restoreOnceTrashed(appC, 'quick')
+      await waitForCondition(() => attached(storage, link.publicKey)?.length === 0, {
+        message: 'the file is off the link',
+      })
+      await passes()
+
+      expect(attached(storage, link.publicKey)).toEqual([])
+      expect((await appC.app.shares.links())[0].files).toEqual([])
     } finally {
       await appC.shutdown()
     }
-  }, 60_000)
+  }, 30_000)
+
+  describe("when a shared file's folder is deleted", () => {
+    /**
+     * Shares Work/notes.txt, with an unrelated notes.txt at the top of the
+     * library, which is where the trashed copy sits, in no folder.
+     */
+    async function shareInFolder(mode: typeof LATEST | typeof SNAPSHOT) {
+      await addFile(appA, 'in-folder', 'notes.txt')
+      const work = await appA.createDirectory('Work')
+      await appA.app.files.moveFile('in-folder', work.id)
+      await addFile(appA, 'at-top', 'notes.txt')
+      await appA.waitForNoActiveUploads()
+      const link = await appA.app.shares.createLink(['in-folder'], mode)
+      expect(attached(storage, link.publicKey)?.map((a) => a.metadata.id)).toEqual(['in-folder'])
+      return { link, work }
+    }
+
+    it('the file comes off a latest link, and the file with its name at the top of the library never goes on', async () => {
+      const { link, work } = await shareInFolder(LATEST)
+
+      await appA.app.directories.deleteAndTrashFiles(work.id)
+
+      await waitForCondition(() => attached(storage, link.publicKey)?.length === 0, {
+        message: 'the file is off the link',
+      })
+      expect((await appA.app.shares.links())[0].files).toEqual([])
+      await passes()
+      expect(attached(storage, link.publicKey)).toEqual([])
+    }, 30_000)
+
+    it('the file comes off a snapshot link the same way', async () => {
+      const { link, work } = await shareInFolder(SNAPSHOT)
+
+      await appA.app.directories.deleteAndTrashFiles(work.id)
+
+      await waitForCondition(() => attached(storage, link.publicKey)?.length === 0, {
+        message: 'the file is off the link',
+      })
+      expect((await appA.app.shares.links())[0].files).toEqual([])
+      await passes()
+      expect(attached(storage, link.publicKey)).toEqual([])
+    }, 30_000)
+
+    it('restoring the file from the trash does not put it back on the link', async () => {
+      const { link, work } = await shareInFolder(LATEST)
+      await appA.app.directories.deleteAndTrashFiles(work.id)
+      await waitForCondition(() => attached(storage, link.publicKey)?.length === 0, {
+        message: 'the file is off the link',
+      })
+
+      await appA.app.files.restore(['in-folder'])
+      await passes()
+
+      expect(attached(storage, link.publicKey)).toEqual([])
+      expect((await appA.app.shares.links())[0].files).toEqual([])
+    }, 30_000)
+
+    it('another device that has the link drops the file, never puts the file with its name on it, and does not put it back on a restore', async () => {
+      const { link, work } = await shareInFolder(LATEST)
+      await waitForCondition(
+        async () => (await appB.app.shares.links())[0]?.files[0]?.fileId === 'in-folder',
+        { timeout: 15_000, message: 'Device B lists the shared file' },
+      )
+
+      await appA.app.directories.deleteAndTrashFiles(work.id)
+      await restoreOnceTrashed(appB, 'in-folder')
+      await waitForCondition(() => attached(storage, link.publicKey)?.length === 0, {
+        message: 'the file is off the link',
+      })
+      await passes()
+
+      expect(attached(storage, link.publicKey)).toEqual([])
+      expect((await appB.app.shares.links())[0].files).toEqual([])
+    }, 30_000)
+  })
 
   it('a link whose first attach fails comes back once with its file pending, and the next pass attaches it', async () => {
     await addFile(appA, 'flaky', 'flaky.txt')
@@ -426,9 +534,6 @@ describe('Share links', () => {
   })
 
   describe('a snapshot link', () => {
-    /** Long enough for several sync passes, so a change that should not happen would have. */
-    const passes = () => new Promise((r) => setTimeout(r, 1500))
-
     it('keeps the version it was made with when another device saves a new one', async () => {
       await addFile(appA, 'snap-v1', 'snap.txt')
       await appA.waitForNoActiveUploads()
@@ -477,28 +582,21 @@ describe('Share links', () => {
       expect(attached(storage, link.publicKey)?.map((a) => a.objectId)).toEqual([v1Object])
     }, 30_000)
 
-    it('takes a trashed file off and puts the same version back when it is restored', async () => {
+    it('takes a trashed file off and leaves it off after a restore', async () => {
       await addFile(appA, 'snap-trash', 'snap-trash.txt')
       await appA.waitForNoActiveUploads()
       const link = await appA.app.shares.createLink(['snap-trash'], SNAPSHOT)
-      const object = await objectIdOf(appA, 'snap-trash')
 
       await appA.app.files.trashFile('snap-trash')
       await waitForCondition(() => attached(storage, link.publicKey)?.length === 0, {
         message: 'the trashed file is off the snapshot',
       })
-      expect((await appA.app.shares.links())[0].files).toMatchObject([
-        { fileId: 'snap-trash', state: 'trashed' },
-      ])
+      expect((await appA.app.shares.links())[0].files).toEqual([])
 
       await appA.app.files.restore(['snap-trash'])
-      await waitForCondition(
-        () =>
-          attached(storage, link.publicKey)
-            ?.map((a) => a.objectId)
-            .join() === object,
-        { message: 'the same version is back on the snapshot' },
-      )
+      await passes()
+
+      expect(attached(storage, link.publicKey)).toEqual([])
     }, 30_000)
 
     it('takes the version saved over a file shared before it uploaded, since the replaced one never uploads', async () => {
@@ -559,6 +657,26 @@ describe('Share links', () => {
       ])
       expect(attached(storage, link.publicKey)).toHaveLength(1)
       appA.resume()
+    }, 30_000)
+
+    it('keeps both files after a rename merges them, on another device too', async () => {
+      await addFile(appA, 'snap-left', 'snap-left.txt')
+      await addFile(appA, 'snap-right', 'snap-right.txt')
+      await appA.waitForNoActiveUploads()
+      const link = await appA.app.shares.createLink(['snap-left', 'snap-right'], SNAPSHOT)
+
+      await appA.app.files.renameFile('snap-right', 'snap-left.txt')
+      await waitForCondition(async () => (await appB.app.shares.links())[0]?.files.length === 2, {
+        timeout: 15_000,
+        message: 'Device B lists both files',
+      })
+      await passes()
+
+      expect(
+        attached(storage, link.publicKey)
+          ?.map((a) => a.metadata.id)
+          .sort(),
+      ).toEqual(['snap-left', 'snap-right'])
     }, 30_000)
 
     it('takes a file shared before its upload finished once it does', async () => {

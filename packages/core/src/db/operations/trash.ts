@@ -6,6 +6,7 @@ import { processInBatches, transaction } from '../sql'
 import { deleteEmptyDirectories, getOrCreateDirectoryAtPath } from './directories'
 import { queryDirectoryIdsForFiles, recalculateCurrentForGroups } from './files'
 import { flagObjectsForFiles } from './localObjects'
+import { takeTrashedFilesOffLinks } from './shareLinks'
 
 /** Ids per statement when deleting in bulk, as the hourly purge does. */
 const TOMBSTONE_BATCH = 500
@@ -134,6 +135,7 @@ export async function trashFilesAndThumbnails(
       ...fileIds,
     )
     await flagObjectsForFiles(tx, fileIds)
+    await takeTrashedFilesOffLinks(tx, fileIds)
     await recalculateCurrentForGroups(tx, groups)
     if (!opts.keepFolders) await deleteEmptyDirectories(tx, folders)
   })

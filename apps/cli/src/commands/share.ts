@@ -95,9 +95,7 @@ export function matchLink(links: ShareLink[], ref: string): ShareLink | string {
 
 /**
  * Splits `targets` into the ids of files `link` already shares, named by id
- * or path, and the targets it does not. Taking a file off a link reads the
- * link first, since a file in the trash is still on the link but no longer
- * found by name in the library, and restoring it would share it again.
+ * or by the path the link lists, and the targets it does not.
  */
 export function filesOnLink(link: ShareLink, targets: string[]): { ids: string[]; rest: string[] } {
   const ids: string[] = []
@@ -217,9 +215,7 @@ export async function linksCommand(dataDir: string, opts: { json?: boolean }) {
     if (waiting) console.log(`  ${c.yellow(waiting)}`)
     for (const file of link.files) {
       const path = file.folder ? `${file.folder}/${file.name}` : file.name
-      const word =
-        file.state === 'pending' ? 'uploading' : file.state === 'trashed' ? 'in the trash' : null
-      const state = word ? c.dim(` (${word})`) : ''
+      const state = file.state === 'pending' ? c.dim(' (uploading)') : ''
       console.log(`  ${path}  ${c.dim(formatBytes(file.size))}${state}`)
     }
   }

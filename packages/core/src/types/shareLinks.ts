@@ -9,11 +9,11 @@ export type ShareLinkMode = 'latest' | 'snapshot'
 
 /**
  * Where a shared file stands on its link. `pending` until the file's current
- * version is uploaded and attached, `shared` once recipients see it, and
- * `trashed` while every version is in the trash, which takes it off the link
- * until it is restored.
+ * version is uploaded and attached, `shared` once recipients see it. A file
+ * put in the trash leaves the link for good, and restoring it does not put it
+ * back.
  */
-export type ShareLinkFileState = 'pending' | 'shared' | 'trashed'
+export type ShareLinkFileState = 'pending' | 'shared'
 
 export type ShareLinkFile = {
   /**

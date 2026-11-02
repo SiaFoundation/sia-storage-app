@@ -90,26 +90,6 @@ describe('needsSyncUp flagging', () => {
     expect(await objectFlag('f1')).toBe(1)
   })
 
-  it('deleteDirectory flags reparented files objects for sync-up', async () => {
-    // Deleting a directory moves its files to root, changing their synced
-    // `directory` field — they must re-sync, else the move never propagates
-    // and the directory resurrects from another device.
-    await createUploadedFile('f1')
-    const dir = await getOrCreateDirectory(db(), 'Photos')
-    await moveFileToDirectory(db(), 'f1', dir.id)
-    await clearObjectsNeedsSyncUp(db(), INDEXER, ['obj-f1'])
-    expect(await objectFlag('f1')).toBe(0)
-
-    await deleteDirectory(db(), dir.id)
-
-    const reparented = await db().getFirstAsync<{ directoryId: string | null }>(
-      'SELECT directoryId FROM files WHERE id = ?',
-      'f1',
-    )
-    expect(reparented!.directoryId).toBeNull()
-    expect(await objectFlag('f1')).toBe(1)
-  })
-
   it('moveFilesAllVersions flags every moved file object', async () => {
     await createUploadedFile('m1')
     await createUploadedFile('m2')
@@ -630,20 +610,19 @@ describe('deleteDirectory', () => {
     expect(dirs).toHaveLength(0)
   })
 
-  it('unlinks files from entire subtree', async () => {
+  it('refuses a folder with a file anywhere under it, and leaves everything in place', async () => {
     const dir = await insertDirectory(db(), 'Photos')
     const sub = await insertDirectory(db(), 'A', 'Photos')
     await createTestFile('f1')
-    await createTestFile('f2')
-    await moveFileToDirectory(db(), 'f1', dir.id)
-    await moveFileToDirectory(db(), 'f2', sub.id)
+    await moveFileToDirectory(db(), 'f1', sub.id)
 
-    await deleteDirectory(db(), dir.id)
+    await expect(deleteDirectory(db(), dir.id)).rejects.toThrow('This folder still has files in it')
 
-    const path1 = await queryDirectoryPathForFile(db(), 'f1')
-    expect(path1).toBeUndefined()
-    const path2 = await queryDirectoryPathForFile(db(), 'f2')
-    expect(path2).toBeUndefined()
+    expect(await queryDirectoryPathForFile(db(), 'f1')).toBe('Photos/A')
+    expect((await queryAllDirectoriesWithCounts(db())).map((d) => d.path).sort()).toEqual([
+      'Photos',
+      'Photos/A',
+    ])
   })
 
   it('does not affect sibling directories or their files', async () => {
@@ -651,9 +630,7 @@ describe('deleteDirectory', () => {
     await insertDirectory(db(), 'Vacation', 'Photos')
     await insertDirectory(db(), 'Videos')
     const work = await insertDirectory(db(), 'Work', 'Videos')
-    await createTestFile('f1')
     await createTestFile('f2')
-    await moveFileToDirectory(db(), 'f1', photos.id)
     await moveFileToDirectory(db(), 'f2', work.id)
 
     await deleteDirectory(db(), photos.id)
