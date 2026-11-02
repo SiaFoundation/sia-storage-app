@@ -164,14 +164,14 @@ function createMainWindow(): BrowserWindow {
     resizable: false,
     maximizable: false,
     fullscreenable: false,
-    // Same material as the popover, so the two read as one surface.
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    // The material AppKit draws behind a standard window, so this one matches
+    // native windows in light and dark, focused or not. The popover's
+    // material lightens what is behind it, which across a whole window reads
+    // as flat mid-gray. A solid `backgroundColor` is one fixed colour, so it
+    // would stay dark after a switch to light appearance.
     transparent: process.platform === 'darwin',
-    vibrancy: process.platform === 'darwin' ? 'popover' : undefined,
-    // macOS draws the material in its lighter inactive tint while a window
-    // is unfocused, so without this the window shown without focus, as from
-    // Finder's Share Link, draws light gray until clicked.
-    visualEffectState: 'active',
+    vibrancy: process.platform === 'darwin' ? 'window' : undefined,
     backgroundColor: process.platform === 'darwin' ? undefined : '#1c1c1e',
     webPreferences: RENDERER_PREFERENCES,
   })
