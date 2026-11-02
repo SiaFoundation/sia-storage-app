@@ -9,7 +9,7 @@
  * attaches to the daemon, brings the OS mount up, and relays calls.
  */
 
-import { app, dialog } from 'electron'
+import { app, dialog, shell } from 'electron'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { registerBridge } from './bridge'
@@ -19,6 +19,7 @@ import { Daemon, type DaemonIdentity, type DaemonSpawn, expectedDaemonBuild } fr
 import { forcedResetPending } from './forcedReset'
 import { confirmSignOut, warnWipeBlocked, wipeLibrary } from './signout'
 import { log } from './log'
+import { createLoginItem, enabledByDefault, type LoginItem } from './loginItem'
 import { createPlatformIntegration } from './platform'
 import type { StopOptions } from './platform/types'
 import { DaemonStream } from './rpc'
@@ -34,6 +35,29 @@ import { beginQuit, broadcast, showMainWindow } from './windows'
  * installed build.
  */
 const BUNDLED = dirname(app.getAppPath())
+
+/** Where System Settings lists the apps that open at login. */
+const LOGIN_ITEMS_SETTINGS = 'x-apple.systempreferences:com.apple.LoginItems-Settings.extension'
+
+/**
+ * Null in a run from source, which would register Electron's own binary
+ * rather than an app bundle.
+ */
+function createAppLoginItem(): LoginItem | null {
+  if (!app.isPackaged || process.platform !== 'darwin') return null
+  return createLoginItem({
+    system: {
+      status: () => app.getLoginItemSettings().status,
+      set: (on) => app.setLoginItemSettings({ openAtLogin: on }),
+      openSettings: () =>
+        void shell
+          .openExternal(LOGIN_ITEMS_SETTINGS)
+          .catch((e) => log.error('login_item', 'settings_not_opened', { error: e as Error })),
+    },
+    enableByDefault: enabledByDefault(buildVariant()),
+    choiceFile: join(app.getPath('userData'), 'open-at-login.json'),
+  })
+}
 
 // Sim drives the windows over Chromium's debugging port. It is read from the
 // environment, not a launch argument, because the daemon reopens a closed app
@@ -73,6 +97,7 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   const platform = createPlatformIntegration()
   const daemon = new Daemon()
+  const loginItem = createAppLoginItem()
   let changes: DaemonStream | null = null
   let spawn: DaemonSpawn | null = null
   let quitting: Promise<void> | null = null
@@ -215,13 +240,16 @@ if (!app.requestSingleInstanceLock()) {
     // Tray-only until the user asks for a window: a dock tile with no window
     // behind it is worse than no tile.
     if (process.platform === 'darwin') app.dock?.hide()
+    // Only true when macOS opened the app as a login item, and read here
+    // because Electron sets it from the launch event.
+    const openedAtLogin = app.getLoginItemSettings().wasOpenedAtLogin
 
     let trayUp = false
 
     // Startup is the one place a failure leaves a running process with nothing
     // working and no window to report it in, so each step says what it did.
     try {
-      registerBridge(platform, () => void signOut())
+      registerBridge(platform, loginItem, () => void signOut())
       createTray()
       trayUp = true
       log.info('app', 'tray_ready')
@@ -268,9 +296,11 @@ if (!app.requestSingleInstanceLock()) {
         log.error('app', 'stale_provider_socket', { socket: shellSocket })
       }
       // Sign-out relaunches into this path. Without the check the user lands
-      // at a bare menu bar and has to find the tray icon to reach sign-in.
+      // at a bare menu bar and has to find the tray icon to reach sign-in. A
+      // login launch with no account stays in the menu bar rather than put
+      // sign-in in front of the user at every login.
       void Daemon.hasAccount().then((has) => {
-        if (!has) showMainWindow()
+        if (!has && !openedAtLogin) showMainWindow()
       })
 
       try {
@@ -287,7 +317,12 @@ if (!app.requestSingleInstanceLock()) {
       }
 
       changes = new DaemonStream(
-        (event) => broadcast('change', event),
+        (event) => {
+          broadcast('change', event)
+          // A sign-in is a connection change, and the first one on this Mac
+          // is when the login item default applies.
+          if (event.scope === 'connection') void loginItem?.applyDefault(Daemon.hasAccount)
+        },
         (message) => broadcast('cache', message),
         () => {
           // The window has no other way to learn the daemon went: its reads
@@ -295,7 +330,12 @@ if (!app.requestSingleInstanceLock()) {
           broadcast('change', { event: 'change', scope: 'connection' })
           void reviveDaemon()
         },
-        () => {
+        (recovered) => {
+          // Checked once the stream has sent its subscribe, not at startup,
+          // where a sign-in finishing before the stream subscribed sent its
+          // connection event to no one.
+          void loginItem?.applyDefault(Daemon.hasAccount)
+          if (!recovered) return
           // A reconnected stream is what starts the extension's warm pass,
           // and this scope is what re-arms the popover's bounded polling.
           broadcast('change', { event: 'change', scope: 'connection' })

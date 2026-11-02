@@ -398,6 +398,30 @@ bun sim device tap mac --label "Copy a share link for report.txt" --window popov
 bun sim device read mac --id activity-share --window popover
 ```
 
+### Opening the Mac app at login
+
+- When: the status window's Open at login switch, which registers the app with
+  macOS as a login item. Beta and shipping builds turn it on the first time
+  they have an account, and sign-out leaves it as it is.
+- Code: files `apps/desktop/src/main/loginItem.ts`,
+  `apps/desktop/src/renderer/src/OpenAtLogin.tsx`,
+  `apps/desktop/src/renderer/src/Switch.tsx`
+- State: the switch's `checked` in `device ui`, and the app's name in
+  System Settings, General, Login Items.
+- Tests: scenarios `desktop/open-at-login`; files
+  `apps/desktop/src/main/loginItem.test.ts`
+- Desktop, turning it on and off again:
+
+```sh
+bun sim device open mac
+bun sim device tap mac --id open-at-login --window main
+bun sim device ui mac --window main
+bun sim device tap mac --id open-at-login --window main
+```
+
+A real launch at login needs a logout, which sim cannot do, so it is checked
+by hand.
+
 ### Signing in on the Mac
 
 - When: the desktop app with no account: asking the indexer for a connection,

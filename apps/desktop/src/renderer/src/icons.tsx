@@ -98,6 +98,15 @@ export const Power = ({ className }: Props) => (
   </svg>
 )
 
+/** An arrow going in, for opening at login. */
+export const Login = ({ className }: Props) => (
+  <svg {...box} className={className} aria-hidden="true">
+    <path d="M9.6 2.2h2.2a1.6 1.6 0 0 1 1.6 1.6v8.4a1.6 1.6 0 0 1-1.6 1.6H9.6" />
+    <path d="M2.4 8h7.4" />
+    <path d="M7.2 5.2 10 8l-2.8 2.8" />
+  </svg>
+)
+
 /** A window, with its title bar. */
 export const AppWindow = ({ className }: Props) => (
   <svg {...box} className={className} aria-hidden="true">

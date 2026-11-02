@@ -33,6 +33,8 @@ export type DesktopElement = {
   label?: string
   id?: string
   disabled?: boolean
+  /** Set on a switch or checkbox, from its aria-checked. */
+  checked?: boolean
 }
 
 type Target = { id: string; type: string; url: string; webSocketDebuggerUrl: string }
@@ -49,7 +51,7 @@ const PAGE_SCRIPT = String.raw`
     const s = getComputedStyle(el)
     return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'
   }
-  const interactive = 'button,a[href],input,select,textarea,[role=button],[role=combobox],[role=option],[role=tab],[role=checkbox],[role=link]'
+  const interactive = 'button,a[href],input,select,textarea,[role=button],[role=combobox],[role=option],[role=tab],[role=checkbox],[role=switch],[role=link]'
   const labelOf = (el) => el.getAttribute('aria-label') || (el.labels && el.labels[0] ? el.labels[0].innerText.trim() : '')
   const textOf = (el) => (el.matches('input,textarea,select') ? el.value : el.innerText || '').trim()
   const idOf = (el) => el.getAttribute('data-testid') || el.id || ''
@@ -63,6 +65,7 @@ const PAGE_SCRIPT = String.raw`
       label: labelOf(el) || undefined,
       id: idOf(el) || undefined,
       disabled: el.disabled || el.getAttribute('aria-disabled') === 'true' || undefined,
+      checked: el.hasAttribute('aria-checked') ? el.getAttribute('aria-checked') === 'true' : undefined,
     }))
   }
   const low = (s) => (s || '').toLowerCase()
@@ -76,6 +79,7 @@ const PAGE_SCRIPT = String.raw`
   if (!el) return null
   const target = el.closest(interactive) || el
   if (action === 'read') return textOf(el)
+  if (action === 'checked') return target.getAttribute('aria-checked') === 'true'
   if (action === 'tap') target.click()
   if (action === 'type' || action === 'clear') {
     target.focus()
@@ -158,6 +162,15 @@ export class DesktopUi {
     for (const { target } of await this.windows()) {
       const text = await this.run<string | null>(target, sel, 'read')
       if (text !== null) return text
+    }
+    return null
+  }
+
+  /** Whether the first switch or checkbox matching `sel` is on, or null when no window has one. */
+  async checked(sel: Selector): Promise<boolean | null> {
+    for (const { target } of await this.windows()) {
+      const on = await this.run<boolean | null>(target, sel, 'checked')
+      if (on !== null) return on
     }
     return null
   }

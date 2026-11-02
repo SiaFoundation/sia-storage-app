@@ -3,8 +3,8 @@
  *
  * The same status line, rows and sources as the popover, plus the rows the
  * popover has no room for: the average upload speed, the folder count, the
- * share links, the Finder folder and the name it goes by in the sidebar, and
- * the connection to the indexer.
+ * share links, the Finder folder and the name it goes by in the sidebar, the
+ * switch for opening at login, and the connection to the indexer.
  */
 
 import { useApp } from '@siastorage/core/app'
@@ -37,6 +37,7 @@ import {
   mountLabel,
   uploadsRow,
 } from './model'
+import { OpenAtLogin } from './OpenAtLogin'
 import { StatusLine } from './StatusLine'
 import { UpdateNotice } from './UpdateNotice'
 import { useAppInfo } from './useAppInfo'
@@ -166,6 +167,8 @@ export function Details({
             />
           ) : null}
         </Section>
+
+        <OpenAtLogin />
 
         <Section header="Connection">
           <Row

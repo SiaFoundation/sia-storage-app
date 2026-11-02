@@ -122,14 +122,15 @@ export class DaemonStream {
   /**
    * `onDown` fires each time a reconnect attempt fails, so the caller can count
    * them and decide the daemon is gone rather than restarting. Deciding that
-   * here would put process supervision inside a transport. `onUp` fires once
-   * per recovery, when the stream is connected again after having dropped.
+   * here would put process supervision inside a transport. `onUp` fires each
+   * time the stream connects and has sent its subscribe, told whether it is
+   * recovering from a drop.
    */
   constructor(
     private readonly onEvent: (event: ChangeEvent) => void,
     private readonly onCache: (message: IpcMessage) => void = () => {},
     private readonly onDown: () => void = () => {},
-    private readonly onUp: () => void = () => {},
+    private readonly onUp: (recovered: boolean) => void = () => {},
     private readonly onShare: (fileIds: string[]) => void = () => {},
   ) {}
 
@@ -144,10 +145,9 @@ export class DaemonStream {
 
     socket.on('connect', () => {
       socket.write(`${JSON.stringify({ id: 'subscribe', method: 'subscribe' })}\n`)
-      if (this.wasDown) {
-        this.wasDown = false
-        this.onUp()
-      }
+      const recovered = this.wasDown
+      this.wasDown = false
+      this.onUp(recovered)
     })
     socket.on('data', (chunk) => {
       buffer += chunk.toString('utf8')
