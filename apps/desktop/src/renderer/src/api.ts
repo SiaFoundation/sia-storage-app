@@ -17,6 +17,12 @@ export type AppInfo = {
   version: string
 }
 
+/**
+ * Whether the app opens at login. `needs-approval` is a login item the user
+ * turned off in System Settings, which only System Settings can turn back on.
+ */
+export type LoginItemStatus = 'on' | 'off' | 'needs-approval'
+
 /** The main process's update state. Only `ready` asks anything of the user. */
 export type UpdateState =
   | { status: 'idle' }
@@ -53,6 +59,10 @@ export type SiaApi = {
   revealFile(fileId: string): Promise<void>
   showMoreMenu(): Promise<void>
   quit(): Promise<void>
+  /** Null in a build that cannot open at login, such as a run from source. */
+  loginItemStatus(): Promise<LoginItemStatus | null>
+  /** Answers with the status the system reports after the change. */
+  setLoginItem(on: boolean): Promise<LoginItemStatus | null>
   updateState(): Promise<UpdateState>
   installUpdate(): Promise<void>
   onUpdate(listener: (state: UpdateState) => void): () => void

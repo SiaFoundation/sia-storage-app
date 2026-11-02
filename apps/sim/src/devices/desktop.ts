@@ -170,6 +170,24 @@ function removeDomain(identity: DesktopIdentity): void {
 }
 
 /**
+ * Takes the build off the apps macOS opens at login, which a scenario that
+ * turns the app's switch on and stops partway would otherwise leave behind,
+ * opening the test build at every login on this Mac. System Events removes an
+ * item the app registered itself. With none to remove it exits with an error,
+ * which is the usual case and is ignored.
+ */
+function removeLoginItem(identity: DesktopIdentity): void {
+  Bun.spawnSync(
+    [
+      'osascript',
+      '-e',
+      `tell application "System Events" to delete login item "${identity.appName}"`,
+    ],
+    { timeout: 15_000 },
+  )
+}
+
+/**
  * Whether `path` is the copy macOS keeps of a removed Finder folder: directly
  * in CloudStorage, named like the folder with a date in parentheses after it.
  */
@@ -252,6 +270,7 @@ export async function release(): Promise<string[]> {
   const running = appPids(identity).length > 0
   await quitApp(identity)
   const registered = runAgent(identity, ['list']).domains?.includes(identity.domainId) ?? false
+  removeLoginItem(identity)
   removeDomain(identity)
   rmSync(leaseFile(identity), { force: true })
   return running || registered ? [identity.appName] : []
@@ -452,6 +471,7 @@ export class DesktopDevice extends CliDevice {
     if (this.holdsLease()) {
       try {
         await this.stop().catch(() => {})
+        removeLoginItem(this.identity)
         removeDomain(this.identity)
       } finally {
         rmSync(leaseFile(this.identity), { force: true })

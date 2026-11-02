@@ -10,6 +10,7 @@ import { app, BrowserWindow, clipboard, ipcMain, shell } from 'electron'
 import { desktopConfig } from './config'
 import { Daemon } from './daemon'
 import { log } from './log'
+import type { LoginItem } from './loginItem'
 import { showMoreMenu } from './menu'
 import type { PlatformIntegration } from './platform'
 import { revealFile } from './reveal'
@@ -32,7 +33,11 @@ async function openPath(path: string): Promise<void> {
   if (reason) log.error('shell', 'open_failed', { path, reason })
 }
 
-export function registerBridge(platform: PlatformIntegration, signOut: () => void): void {
+export function registerBridge(
+  platform: PlatformIntegration,
+  loginItem: LoginItem | null,
+  signOut: () => void,
+): void {
   // The caller sets the timeout because only it knows how long its call takes.
   // Method and args arrive from the renderer, so neither is taken on trust.
   ipcMain.handle('rpc', (_event, method: unknown, args: unknown, timeoutMs?: number) => {
@@ -120,6 +125,12 @@ export function registerBridge(platform: PlatformIntegration, signOut: () => voi
     finderName: desktopConfig().displayName,
     version: app.getVersion(),
   }))
+
+  // Null where there is no app bundle to register, which hides the switch.
+  ipcMain.handle('loginItem:status', () => loginItem?.status() ?? null)
+  ipcMain.handle('loginItem:set', (_event, on: unknown) =>
+    typeof on === 'boolean' && loginItem ? loginItem.set(on) : null,
+  )
 
   ipcMain.handle('update:state', () => updateState())
   ipcMain.handle('update:install', () => installUpdate())

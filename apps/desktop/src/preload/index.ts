@@ -62,6 +62,11 @@ const api = {
   showMoreMenu: () => ipcRenderer.invoke('menu:more'),
   quit: () => ipcRenderer.invoke('app:quit'),
 
+  /** Whether the app opens at login, or null in a build that cannot. */
+  loginItemStatus: () => ipcRenderer.invoke('loginItem:status'),
+  /** Turns opening at login on or off, and answers with the status the system reports after. */
+  setLoginItem: (on: boolean) => ipcRenderer.invoke('loginItem:set', on),
+
   /** Where the app is with its own updates: idle, checking, downloading or ready. */
   updateState: () => ipcRenderer.invoke('update:state'),
   /** Quits, installs the staged update and relaunches. Does nothing until one is ready. */

@@ -22,6 +22,7 @@
   --color-orange: var(--orange);
   --color-red: var(--red);
   --color-accent: var(--accent);
+  --color-switch-off: var(--switch-off);
   --radius-card: 8px;
   /* The popover's three rhythm values: outer inset, row padding x and y. */
   --spacing-inset: 14px;
@@ -141,6 +142,8 @@
   --orange: #ff9f0a;
   --red: #ff453a;
   --accent: #0a84ff;
+  /* An off switch's track, the system's fill for a control at rest. */
+  --switch-off: rgba(120, 120, 128, 0.32);
 
   font-family: var(--font-sans);
   font-size: 13px;
@@ -160,6 +163,7 @@
     --orange: #ff9500;
     --red: #ff3b30;
     --accent: #007aff;
+    --switch-off: rgba(120, 120, 128, 0.16);
   }
 }
 
