@@ -29,4 +29,10 @@ export {
   WORKING_SET_ID,
 } from './provider'
 export type { PinnedSector, Slab } from './slabs'
-export type { ShareLink, ShareLinkFile, ShareLinkFileState, ShareLinkMode } from './shareLinks'
+export type {
+  ShareFile,
+  ShareLink,
+  ShareLinkFile,
+  ShareLinkFileState,
+  ShareLinkMode,
+} from './shareLinks'

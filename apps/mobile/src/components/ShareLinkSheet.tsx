@@ -102,7 +102,7 @@ function NewLink({
   const [expiry, setExpiry] = useState<ExpiryChoice>(DEFAULT_EXPIRY)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const files = useSWR(['share-link-files', ...fileIds], () => app().files.getByIds(fileIds))
+  const files = useSWR(['share-link-files', ...fileIds], () => app().shares.filesToShare(fileIds))
 
   const create = useCallback(async () => {
     setCreating(true)
@@ -123,7 +123,7 @@ function NewLink({
     <>
       <FileRows
         files={(files.data ?? []).map((f) => ({
-          id: f.id,
+          id: f.fileId,
           name: f.name,
           detail: humanSize(f.size),
         }))}

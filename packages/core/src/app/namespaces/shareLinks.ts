@@ -44,8 +44,9 @@ import { SHARE_LINK_URL_PREFIX, SHARE_LINKS_REFRESH_INTERVAL } from '../../confi
 import * as ops from '../../db/operations'
 import { decodeFileMetadata, encodeFileMetadata } from '../../encoding/fileMetadata'
 import { hexToUint8, uint8ToHex } from '../../lib/hex'
+import { naturalSortKey } from '../../lib/naturalSortKey'
 import type { FileRecordRow } from '../../types/files'
-import type { ShareLink, ShareLinkFile, ShareLinkMode } from '../../types/shareLinks'
+import type { ShareFile, ShareLink, ShareLinkFile, ShareLinkMode } from '../../types/shareLinks'
 import type { AppService } from '../service'
 
 const PAGE_SIZE = 100
@@ -66,7 +67,13 @@ function modeOf(description: string): ShareLinkMode {
 
 type ShareLinkMethods = Pick<
   AppService['shares'],
-  'createLink' | 'links' | 'addLinkFiles' | 'removeLinkFiles' | 'revokeLink' | 'syncLinks'
+  | 'filesToShare'
+  | 'createLink'
+  | 'links'
+  | 'addLinkFiles'
+  | 'removeLinkFiles'
+  | 'revokeLink'
+  | 'syncLinks'
 >
 
 type Deps = {
@@ -113,6 +120,47 @@ async function allPages<T>(read: (offset: number) => Promise<T[]>): Promise<T[]>
     all.push(...page)
     if (page.length < PAGE_SIZE) return all
   }
+}
+
+/**
+ * Compares two strings by code point, which is the order SQLite's byte
+ * comparison gives the nameSortKey column the library lists by. The `<`
+ * operator compares UTF-16 code units instead, which puts a character past
+ * U+FFFF, such as an emoji, before one from U+E000 to U+FFFF, such as a
+ * full-width letter, where SQLite puts it after.
+ */
+function compareKeys(a: string, b: string): number {
+  let i = 0
+  while (i < a.length && i < b.length) {
+    const x = a.codePointAt(i) as number
+    const y = b.codePointAt(i) as number
+    if (x !== y) return x < y ? -1 : 1
+    i += x > 0xffff ? 2 : 1
+  }
+  return a.length - b.length
+}
+
+/**
+ * Sorts files into ShareFile's order. Two folders can share a sort key, such
+ * as "Trips 2" and "Trips 02", so their exact paths are compared before the
+ * file names, which keeps each folder's files together for the Mac's grouping.
+ * The file id breaks the last ties so the order holds across reads.
+ */
+function sortShareFiles<T extends ShareFile>(files: T[]): T[] {
+  const keyed = files.map((file) => ({
+    file,
+    // Every folder path is non-empty, so '' puts the top of the library first.
+    folder: file.folder === null ? '' : (naturalSortKey(file.folder) ?? ''),
+    name: naturalSortKey(file.name) ?? '',
+  }))
+  keyed.sort(
+    (a, b) =>
+      compareKeys(a.folder, b.folder) ||
+      compareKeys(a.file.folder ?? '', b.file.folder ?? '') ||
+      compareKeys(a.name, b.name) ||
+      compareKeys(a.file.fileId, b.file.fileId),
+  )
+  return keyed.map((k) => k.file)
 }
 
 function isGoneError(e: unknown): boolean {
@@ -491,7 +539,7 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
       createdAt: link.createdAt,
       expiresAt: link.expiresAt,
       mode: link.mode,
-      files,
+      files: sortShareFiles(files),
     }
   }
 
@@ -550,6 +598,21 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
   }
 
   return {
+    async filesToShare(fileIds) {
+      const [rows, folders] = await Promise.all([
+        ops.readFilesByIds(db, fileIds),
+        ops.queryDirectoryPathsForFiles(db, fileIds),
+      ])
+      return sortShareFiles(
+        rows.map((row) => ({
+          fileId: row.id,
+          name: row.name,
+          size: row.size,
+          folder: folders[row.id] ?? null,
+        })),
+      )
+    },
+
     createLink: (fileIds, { expiresAt, mode }) =>
       exclusive(async () => {
         if (expiresAt !== null && expiresAt <= Date.now()) {

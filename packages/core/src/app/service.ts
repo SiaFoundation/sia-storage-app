@@ -34,7 +34,7 @@ import type {
   ProviderPage,
   ProviderProgress,
 } from '../types/provider'
-import type { ShareLink, ShareLinkMode } from '../types/shareLinks'
+import type { ShareFile, ShareLink, ShareLinkMode } from '../types/shareLinks'
 import type { AdoptFileHashed, AdoptFilePlain, ImportCopyResult } from '../services/fsFileUri'
 import type {
   FileKind,
@@ -1197,6 +1197,12 @@ export interface AppService {
     /** Pins a shared URL to the current indexer and returns the new local object. */
     pin(url: string, fileId: string): Promise<LocalObject>
     /**
+     * The files named by these ids, as the view that makes a link lists them
+     * before it is made, in ShareFile's order. An id with no file row is left
+     * out.
+     */
+    filesToShare(fileIds: string[]): Promise<ShareFile[]>
+    /**
      * Makes a link that opens these files on the share page. Any version id of
      * a file names the file, and a file named twice is shared once.
      * `expiresAt` is milliseconds since the epoch and has to be in the
@@ -1208,7 +1214,10 @@ export interface AppService {
       fileIds: string[],
       opts: { expiresAt: number | null; mode: ShareLinkMode },
     ): Promise<ShareLink>
-    /** The links on the current indexer that have not expired, newest first. */
+    /**
+     * The links on the current indexer that have not expired, newest first,
+     * each with its files in ShareFile's order.
+     */
     links(): Promise<ShareLink[]>
     addLinkFiles(publicKey: string, fileIds: string[]): Promise<void>
     /** Takes every version of these files off the link. */
