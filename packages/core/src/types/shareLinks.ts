@@ -15,7 +15,21 @@ export type ShareLinkMode = 'latest' | 'snapshot'
  */
 export type ShareLinkFileState = 'pending' | 'shared'
 
-export type ShareLinkFile = {
+/**
+ * A file as the share views list it. Every list of these from the core is in
+ * the same order: the top of the library first, then each folder by path,
+ * and by name within a folder, both compared as the library's name sort
+ * compares them.
+ */
+export type ShareFile = {
+  fileId: string
+  name: string
+  size: number
+  /** The path of the folder the file is in, or null for the top of the library. */
+  folder: string | null
+}
+
+export type ShareLinkFile = ShareFile & {
   /**
    * The version the link shows. On a `latest` link that is the current
    * version while the file has one, else the version it was shared as. On a
@@ -23,10 +37,6 @@ export type ShareLinkFile = {
    * over it if that one never uploaded.
    */
   fileId: string
-  name: string
-  size: number
-  /** The path of the folder the file is in, or null for the top of the library. */
-  folder: string | null
   state: ShareLinkFileState
 }
 

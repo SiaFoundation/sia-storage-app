@@ -22,7 +22,7 @@ import {
   shareErrorText,
 } from '@siastorage/core/lib/shareLinkText'
 import { useShareLinks } from '@siastorage/core/stores'
-import type { ShareLink, ShareLinkMode } from '@siastorage/core/types'
+import type { ShareFile, ShareLink, ShareLinkMode } from '@siastorage/core/types'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import useSWR from 'swr'
 import { sia } from './api'
@@ -34,10 +34,8 @@ import { formatBytes } from './model'
 import { folderName, groupByFolder } from './shareModel'
 import { useAppInfo } from './useAppInfo'
 
-type SharedFile = { fileId: string; name: string; size: number; folder: string | null }
-
 /** The files as Finder shows them: each folder with its icon, and its files under it. */
-function SharedFiles({ files }: { files: SharedFile[] }) {
+function SharedFiles({ files }: { files: ShareFile[] }) {
   // The name the top of the library goes by in Finder differs per build.
   const libraryName = useAppInfo()?.finderName ?? 'Sia Storage'
   return (
@@ -162,24 +160,11 @@ function NewLink({
   const [mode, setMode] = useState<ShareLinkMode>('latest')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // Not reread when the window regains focus: each read is two daemon round
-  // trips, and nothing about the chosen files changes while this is open.
-  const files = useSWR(
-    ['share-request', ...fileIds],
-    async () => {
-      const [rows, folders] = await Promise.all([
-        app.files.getByIds(fileIds),
-        app.directories.getPathsForFiles(fileIds),
-      ])
-      return rows.map((row) => ({
-        fileId: row.id,
-        name: row.name,
-        size: row.size,
-        folder: folders[row.id] ?? null,
-      }))
-    },
-    { revalidateOnFocus: false },
-  )
+  // Not reread when the window regains focus: each read is a daemon round
+  // trip, and nothing about the chosen files changes while this is open.
+  const files = useSWR(['share-request', ...fileIds], () => app.shares.filesToShare(fileIds), {
+    revalidateOnFocus: false,
+  })
 
   async function create() {
     setCreating(true)

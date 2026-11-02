@@ -1,4 +1,5 @@
 import type { SdkAdapter, SharingKeyRecord } from '../../adapters/sdk'
+import { insertDirectory } from '../../db/operations/directories'
 import { insertFile } from '../../db/operations/files'
 import { insertObject } from '../../db/operations/localObjects'
 import {
@@ -488,5 +489,120 @@ describe('a file another device put on a link', () => {
     await links.syncLinks()
 
     expect(sdk.unshareObject).not.toHaveBeenCalled()
+  })
+})
+
+describe('the order share views list files in', () => {
+  const offline = () =>
+    buildShareLinks({
+      db: db(),
+      requireSdk: () => {
+        throw new Error('offline')
+      },
+      getIndexerURL: async () => INDEXER,
+      invalidate: () => {},
+    })
+
+  async function addFile(id: string, name: string, directoryId: string | null = null) {
+    await insertFile(
+      db(),
+      {
+        id,
+        name,
+        type: 'image/jpeg',
+        kind: 'file',
+        size: 100,
+        hash: `sha256:${id}`,
+        createdAt: 1,
+        updatedAt: 1,
+        addedAt: 1,
+        mediaAssetId: null,
+        trashedAt: null,
+        deletedAt: null,
+      },
+      { directoryId },
+    )
+  }
+
+  /**
+   * Files picked out of name order. A plain string sort would put Saturn
+   * before aurora and Day 10 before Day 2. Earth and Earthset, and Trips and
+   * Trips/Rome, check that a name or path comes before one it is a prefix of.
+   */
+  async function addLibrary(): Promise<string[]> {
+    const trips = await insertDirectory(db(), 'Trips')
+    const rome = await insertDirectory(db(), 'Rome', 'Trips')
+    await addFile('saturn', 'Saturn.jpg')
+    await addFile('rome-10', 'Day 10.jpg', rome.id)
+    await addFile('earthset', 'Earthset.jpg')
+    await addFile('trips-map', 'map.png', trips.id)
+    await addFile('aurora', 'aurora.jpg')
+    await addFile('rome-2', 'Day 2.jpg', rome.id)
+    await addFile('earth', 'Earth.jpg')
+    return ['saturn', 'rome-10', 'earthset', 'trips-map', 'aurora', 'rome-2', 'earth']
+  }
+
+  const ORDER = [
+    { name: 'aurora.jpg', folder: null },
+    { name: 'Earth.jpg', folder: null },
+    { name: 'Earthset.jpg', folder: null },
+    { name: 'Saturn.jpg', folder: null },
+    { name: 'map.png', folder: 'Trips' },
+    { name: 'Day 2.jpg', folder: 'Trips/Rome' },
+    { name: 'Day 10.jpg', folder: 'Trips/Rome' },
+  ]
+
+  it('files about to be shared come back top of the library first, then by folder, then by name', async () => {
+    const ids = await addLibrary()
+    const files = await offline().filesToShare(ids)
+    expect(files.map((f) => ({ name: f.name, folder: f.folder }))).toEqual(ORDER)
+  })
+
+  it('files about to be shared come back in the same order whatever order the ids are in', async () => {
+    const ids = await addLibrary()
+    const forward = await offline().filesToShare(ids)
+    const backward = await offline().filesToShare([...ids].reverse())
+    expect(backward.map((f) => f.fileId)).toEqual(forward.map((f) => f.fileId))
+  })
+
+  it('a link lists its files in the same order as the files about to be shared, whatever order they were added in', async () => {
+    const ids = await addLibrary()
+    await insertShareLink(db(), {
+      publicKey: 'ed25519:link',
+      seed: '07'.repeat(32),
+      indexerURL: INDEXER,
+      createdAt: 1,
+      expiresAt: null,
+      mode: 'latest',
+    })
+    for (const id of ids) await insertShareLinkFile(db(), 'ed25519:link', id, 'shared')
+
+    const shares = offline()
+    const [link] = await shares.links()
+    expect(link.files.map((f) => ({ name: f.name, folder: f.folder }))).toEqual(ORDER)
+    expect(link.files.map((f) => f.fileId)).toEqual(
+      (await shares.filesToShare(ids)).map((f) => f.fileId),
+    )
+  })
+
+  it('a name starting past U+FFFF sorts after a full-width letter, as the library sorts it', async () => {
+    await addFile('emoji', '\u{1F600}.jpg')
+    await addFile('wide', '\uFF21.jpg')
+    const files = await offline().filesToShare(['emoji', 'wide'])
+    expect(files.map((f) => f.fileId)).toEqual(['wide', 'emoji'])
+  })
+
+  it('two folders whose names sort the same each keep their files together', async () => {
+    const two = await insertDirectory(db(), 'Trips 2')
+    const zeroTwo = await insertDirectory(db(), 'Trips 02')
+    await addFile('two-a', 'a.jpg', two.id)
+    await addFile('zero-two-b', 'b.jpg', zeroTwo.id)
+    await addFile('two-c', 'c.jpg', two.id)
+    const files = await offline().filesToShare(['two-a', 'zero-two-b', 'two-c'])
+    expect(files.map((f) => [f.folder, f.name])).toEqual([
+      ['Trips 02', 'b.jpg'],
+      ['Trips 2', 'a.jpg'],
+      ['Trips 2', 'c.jpg'],
+    ])
   })
 })
