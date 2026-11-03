@@ -11,6 +11,7 @@ import { join, relative } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 import { addDevice, type Device, PhoneStartFailed } from './devices'
 import { desktopUnavailable } from './devices/desktop'
+import { releaseRunHolds } from './desktop-lock'
 import { networkControl, startNetwork, stopNetwork } from './network'
 import {
   progressOf,
@@ -179,6 +180,7 @@ export async function runScenarios(
   } finally {
     process.off('SIGINT', stopOnSignal)
     process.off('SIGTERM', stopOnSignal)
+    releaseRunHolds(runId)
   }
   const report = snapshot()
   const paths = writeReport(reportDir, report)

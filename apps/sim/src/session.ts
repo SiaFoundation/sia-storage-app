@@ -104,18 +104,19 @@ export function sessionDir(name: string): string {
 
 /**
  * What sim keeps in SIM_HOME beside the sessions: run reports in `runs`, each
- * checkout's phone pools, Metro and Appium, and the Appium drivers. A session
+ * checkout's phone pools, Metro and Appium, the Appium drivers, and native
+ * build turns and waiting commands in `builds` and `waiting`. A session
  * named like one of those would share its directory, and one named `run-`
  * would be pruned as a scenario run's leftover.
  */
-const RESERVED_NAME = /^(runs$|run-|metro-|appium-|ios-pool-|android-pool-)/
+const RESERVED_NAME = /^(runs$|builds$|waiting$|run-|metro-|appium-|ios-pool-|android-pool-)/
 
 /** Refuses a name `up` would create a session under when sim uses it for something else. */
 export function checkNewSessionName(name: string): void {
   sessionDir(name)
   if (RESERVED_NAME.test(name)) {
     throw new Error(
-      `Session names cannot be runs or start with run-, metro-, appium-, ios-pool- or android-pool-, which sim uses for its own directories: ${name}`,
+      `Session names cannot be runs, builds or waiting, or start with run-, metro-, appium-, ios-pool- or android-pool-, which sim uses for its own directories: ${name}`,
     )
   }
 }

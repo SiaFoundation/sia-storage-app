@@ -110,7 +110,9 @@ Check the line count against the summary lines before believing it.
 inputs, skips the rebuild when nothing changed, and writes full output to
 `.build-cache/<target>/build.log`. Raw `expo run:ios` bypasses that cache and is the
 usual cause of a stale binary. `bun run mobile:start` runs Metro against an installed
-build.
+build. A rebuild waits while a native build from any other checkout on the machine
+runs, since one Xcode or Gradle build at a time is the default (`SIM_NATIVE_BUILDS`
+raises it), and prints which build it waits behind.
 
 ### Desktop
 
@@ -129,6 +131,10 @@ builds anything and names the file. `bun run desktop:package <dev|test|beta|prod
 the same build without the dev server, and the four contexts install side by side under
 different bundle ids. `test` is the build automated device tests install. It needs its own
 `test.env`, with development profiles for the two test App IDs in `test.example.env`.
+
+The signed build takes its turn with other native builds on the machine, and the install
+waits while a `bun sim` session in another checkout, or a `bun sim run`, is driving that
+build, so it never replaces the app under someone else's test.
 
 `bun run desktop:dev:no-mount` skips all of that and runs from source. Use it for UI
 work with no account or signing setup. The app reports it: the Finder row in its

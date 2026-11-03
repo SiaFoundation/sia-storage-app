@@ -23,16 +23,29 @@ export interface BuildOptions {
 }
 
 /**
- * Kill any existing build processes to prevent zombies.
+ * Kill any existing build processes to prevent zombies. Only this checkout's:
+ * every checkout on the machine builds the same scheme and tasks, so matching
+ * those alone would kill another checkout's build halfway.
  */
-async function killExistingBuilds(platform: 'ios' | 'android'): Promise<void> {
-  if (platform === 'ios') {
-    // Kill xcodebuild processes for this project
-    await $`pkill -f "xcodebuild.*SiaStorageDev" 2>/dev/null`.quiet().nothrow()
-  } else {
-    // Kill gradle processes for this project
-    await $`pkill -f "gradlew.*assemble(Debug|Release)" 2>/dev/null`.quiet().nothrow()
-  }
+async function killExistingBuilds(target: BuildTarget, platform: 'ios' | 'android'): Promise<void> {
+  const path =
+    platform === 'ios'
+      ? getTargetPaths(target).derivedData
+      : join(PROJECT_ROOT, 'android', 'gradle', 'wrapper', 'gradle-wrapper.jar')
+  await $`pkill -f ${ownBuildPattern(platform, path)}`.quiet().nothrow()
+}
+
+/**
+ * The `pkill -f` pattern for a build of this checkout: xcodebuild given its
+ * derived data folder, or the Gradle wrapper's Java running its
+ * gradle-wrapper.jar. pkill reads the pattern as a regex, so the path is
+ * escaped, or a `.` in a checkout's name would match another checkout's `-`.
+ */
+export function ownBuildPattern(platform: 'ios' | 'android', path: string): string {
+  const literal = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return platform === 'ios'
+    ? `xcodebuild.*-derivedDataPath ${literal}`
+    : `${literal}.*assemble(Debug|Release)`
 }
 
 /**
@@ -45,7 +58,7 @@ export async function buildIosSim(options: BuildOptions): Promise<void> {
   console.log(`   Build log: ${paths.buildLog}`)
   $.cwd(PROJECT_ROOT)
   ensureCacheDir(target)
-  await killExistingBuilds('ios')
+  await killExistingBuilds(target, 'ios')
 
   const iosDir = join(PROJECT_ROOT, 'ios')
 
@@ -125,7 +138,7 @@ export async function buildIosDevice(options: BuildOptions): Promise<void> {
   console.log(`   Build log: ${paths.buildLog}`)
   $.cwd(PROJECT_ROOT)
   ensureCacheDir(target)
-  await killExistingBuilds('ios')
+  await killExistingBuilds(target, 'ios')
 
   const iosDir = join(PROJECT_ROOT, 'ios')
 
@@ -211,7 +224,7 @@ export async function buildAndroid(options: BuildOptions): Promise<void> {
   console.log(`   Build log: ${paths.buildLog}`)
   $.cwd(PROJECT_ROOT)
   ensureCacheDir(target)
-  await killExistingBuilds('android')
+  await killExistingBuilds(target, 'android')
 
   const androidDir = join(PROJECT_ROOT, 'android')
 

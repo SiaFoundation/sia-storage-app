@@ -8,30 +8,43 @@
  */
 
 import { dirname } from 'node:path'
+import { withDesktopInstall } from '@siastorage/sim/desktop-lock'
 import { type BuildEnv, loadEnv } from './env'
 import { install, isExtensionRegistered, launch, linkCli } from './install'
 import { buildSigned } from './release'
 
 export async function packageApp(
+  /** The build context `env` was read for, such as `test`. */
+  context: string,
   env: BuildEnv,
   /** What the launched app gets on top of a normal launch context. */
   launchEnv: Record<string, string> = {},
 ): Promise<string> {
   const result = await buildSigned(env)
 
-  console.log('Installing…')
-  const installed = await install(result.appPath)
-  const cli = env.linkCli ? linkCli(installed) : null
-  await launch(installed, launchEnv)
+  // Installing quits the app and replaces it, so it waits until no sim
+  // session in another checkout, and no sim run, is driving this build, and
+  // holds it until the new app is up so none starts on it halfway.
+  const { installed, cli, registered } = await withDesktopInstall(
+    context,
+    env.appName,
+    async () => {
+      console.log('Installing…')
+      const installed = await install(result.appPath)
+      const cli = env.linkCli ? linkCli(installed) : null
+      await launch(installed, launchEnv)
 
-  // PluginKit registration is asynchronous after launch, and the app spends
-  // its daemon-attach retries before registering, so this polls rather than
-  // report a failure that has not happened yet.
-  let registered = false
-  for (const deadline = Date.now() + 15_000; Date.now() < deadline; await Bun.sleep(500)) {
-    registered = await isExtensionRegistered(env.extBundleId)
-    if (registered) break
-  }
+      // PluginKit registration is asynchronous after launch, and the app spends
+      // its daemon-attach retries before registering, so this polls rather than
+      // report a failure that has not happened yet.
+      let registered = false
+      for (const deadline = Date.now() + 15_000; Date.now() < deadline; await Bun.sleep(500)) {
+        registered = await isExtensionRegistered(env.extBundleId)
+        if (registered) break
+      }
+      return { installed, cli, registered }
+    },
+  )
 
   console.log(`\nInstalled: ${installed}`)
   console.log(
@@ -56,5 +69,6 @@ export async function packageApp(
 
 if (import.meta.main) {
   // `bun run desktop:package prod` reads env/prod.env.
-  await packageApp(loadEnv(process.argv[2] ?? process.env.SIA_CONTEXT ?? 'dev'))
+  const context = process.argv[2] ?? process.env.SIA_CONTEXT ?? 'dev'
+  await packageApp(context, loadEnv(context))
 }

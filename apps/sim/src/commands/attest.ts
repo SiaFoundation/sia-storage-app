@@ -17,10 +17,13 @@ import {
   repoFromPrUrl,
 } from '../attest'
 import type { Progress } from '../report'
+import { allowDatalessDownloads } from '../dataless'
+import { desktopHold, installedBuild } from '../desktop-lock'
 import { desktopIdentity, desktopUnavailable } from '../devices/desktop'
+import { describeHolder } from '../machine'
 import { findScenarios } from '../run'
 import { REPO_ROOT } from '../session'
-import type { CommandContext } from './shared'
+import { type CommandContext, integer } from './shared'
 
 const desktopSetup = (context: string) =>
   `To set it up, copy apps/desktop/env/${context}.example.env to ${context}.env, fill in its five blanks from your Apple Developer account, and run \`bun run desktop:package ${context}\`.`
@@ -37,9 +40,26 @@ async function capture(cmd: string[]): Promise<{ code: number; out: string; err:
 
 type PullRequest = { number: number; headRefOid: string; url: string }
 
-async function currentPullRequest(): Promise<PullRequest | null> {
-  const { code, out, err } = await capture(['gh', 'pr', 'view', '--json', 'number,headRefOid,url'])
+/**
+ * The PR numbered `number`, or the current branch's when none is given. gh
+ * finds a branch's PR through the branch it pushes to, so on a detached HEAD,
+ * such as a checkout of the PR's exact commit, only a number works.
+ */
+async function pullRequest(number?: number): Promise<PullRequest | null> {
+  const { code, out, err } = await capture([
+    'gh',
+    'pr',
+    'view',
+    ...(number === undefined ? [] : [String(number)]),
+    '--json',
+    'number,headRefOid,url',
+  ])
   if (code === 0) return JSON.parse(out) as PullRequest
+  if (number === undefined && /not on any branch/i.test(err)) {
+    throw new Error(
+      'HEAD is detached, so there is no branch to find the PR from. Pass --pr <number>.',
+    )
+  }
   if (/no pull requests found/i.test(err)) return null
   throw new Error(`gh pr view failed: ${err.trim()}`)
 }
@@ -73,13 +93,18 @@ export function registerAttestCommand({ program }: CommandContext): void {
       "Run a platform's suite on this checkout and post the result as the sim/<platform> status on the PR's head commit",
     )
     .addArgument(new Argument('<platform>').choices(ATTEST_PLATFORMS))
-    .action(async (platform: AttestPlatform) => {
+    .option(
+      '--pr <number>',
+      "The PR to attest, for a checkout on a detached HEAD. HEAD must still be that PR's head",
+      integer,
+    )
+    .action(async (platform: AttestPlatform, opts: { pr?: number }) => {
       const uncommitted = await capture(['git', 'status', '--porcelain', '--untracked-files=no'])
       const head = await capture(['git', 'rev-parse', 'HEAD'])
       if (uncommitted.code !== 0 || head.code !== 0) {
         throw new Error(`git failed: ${(uncommitted.err || head.err).trim()}`)
       }
-      const pr = await currentPullRequest()
+      const pr = await pullRequest(opts.pr)
       const refusal = attestRefusal({
         uncommitted: uncommitted.out,
         localHead: head.out.trim(),
@@ -91,6 +116,23 @@ export function registerAttestCommand({ program }: CommandContext): void {
         const identity = desktopIdentity()
         const unavailable = desktopUnavailable(identity)
         if (unavailable) throw new Error(`${unavailable}\n${desktopSetup(identity.context)}`)
+        // The run would refuse every desktop scenario and post a failure the
+        // build never earned.
+        const hold = desktopHold(identity.context)
+        if (hold?.kind === 'install') {
+          throw new Error(
+            `${identity.appName} is being installed by ${describeHolder(hold)}. Nothing was posted. Run attest again once that finishes.`,
+          )
+        }
+        const installed = installedBuild(identity.context)
+        if (installed) {
+          const same = installed.commit === head.out.trim() && !installed.dirty
+          console.error(
+            `${identity.appName} was installed from checkout ${installed.checkout} at ${installed.commit.slice(0, 9)}${installed.dirty ? ' with uncommitted changes' : ''}${same ? '' : ', not this commit'}.`,
+          )
+        }
+        // `sim run` is a child of this process, and inherits the policy.
+        allowDatalessDownloads()
       }
       const suite = ATTEST_SUITES[platform]
       if ((await findScenarios(suite.filters)).length === 0) {

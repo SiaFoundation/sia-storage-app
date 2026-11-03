@@ -67,6 +67,7 @@
         "zod": "4.6.7",
       },
       "devDependencies": {
+        "@siastorage/sim": "workspace:*",
         "@tailwindcss/vite": "4.3.3",
         "@types/bun": "1.4.3",
         "@types/node": "24.19.2",
@@ -170,6 +171,7 @@
       "devDependencies": {
         "@babel/core": "7.29.7",
         "@react-native/jest-preset": "0.88.0-rc.5",
+        "@siastorage/sim": "workspace:*",
         "@testing-library/react-native": "14.1.0",
         "@types/bun": "1.4.3",
         "@types/jest": "30.0.0",

@@ -1,7 +1,11 @@
 /** `up`, `down` and `status`: a session's network and devices as a whole. */
+import { phoneMemory } from '../capacity'
+import { desktopHold, describeSession, installedBuild, leaseHolder } from '../desktop-lock'
 import { addDevice, allDevices, DEVICE_KINDS, openDevice } from '../devices'
+import { desktopIdentity } from '../devices/desktop'
 import { recordCommand, transcript } from '../evidence'
-import { liveAccount, wipeAccount } from '../live'
+import { liveAccount, otherLiveSession, wipeAccount } from '../live'
+import { buildHolders, buildLimit, waiters } from '../machine'
 import { startNetwork, stopNetwork } from '../network'
 import { checkNewSessionName, type DeviceKind, Session } from '../session'
 import { type CommandContext, print } from './shared'
@@ -136,24 +140,66 @@ export function registerSessionCommands({ program, sessionName, current }: Comma
 
   program
     .command('status')
-    .description('Show the session, its network and devices')
+    .description(
+      'Show the session, its network and devices, and what every checkout on this machine holds and waits for',
+    )
     .action(async () => {
-      const session = current()
-      const devices = await Promise.all(
-        allDevices(session).map(async (d) => ({
-          name: d.name,
-          kind: d.kind,
-          running: await d.isRunning(),
-          files: (await d.library().catch(() => [])).length,
-        })),
-      )
+      const session = Session.load(sessionName())
+      const devices = session
+        ? await Promise.all(
+            allDevices(session).map(async (d) => ({
+              name: d.name,
+              kind: d.kind,
+              running: await d.isRunning(),
+              files: (await d.library().catch(() => [])).length,
+            })),
+          )
+        : []
       print({
-        session: session.name,
-        dir: session.dir,
-        fastTimers: session.state.fastTimers,
-        live: !!session.state.live,
-        network: session.state.networkUrl ?? null,
-        devices,
+        session: session
+          ? {
+              name: session.name,
+              dir: session.dir,
+              fastTimers: session.state.fastTimers,
+              live: !!session.state.live,
+              network: session.state.networkUrl ?? null,
+              devices,
+            }
+          : null,
+        machine: await machineStatus(),
       })
     })
+}
+
+/**
+ * What every checkout on this machine holds and waits for: the desktop build, the
+ * live test account, the native build slots and the phone memory budget.
+ */
+async function machineStatus() {
+  const live = await otherLiveSession('').catch(() => null)
+  return {
+    desktop: desktopStatus(),
+    live: live ? describeSession(live) : null,
+    builds: { limit: buildLimit(), running: buildHolders() },
+    phoneMemory: await phoneMemory(),
+    waiting: waiters(),
+  }
+}
+
+function desktopStatus() {
+  if (process.platform !== 'darwin') return null
+  let identity: ReturnType<typeof desktopIdentity>
+  try {
+    identity = desktopIdentity()
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) }
+  }
+  const { context, appName } = identity
+  const lease = leaseHolder(context)
+  return {
+    app: appName,
+    session: lease ? describeSession(lease) : null,
+    hold: desktopHold(context),
+    installedFrom: installedBuild(context),
+  }
 }

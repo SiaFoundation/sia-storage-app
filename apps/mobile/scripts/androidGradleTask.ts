@@ -23,6 +23,7 @@ import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
+import { takeBuildSlot } from '@siastorage/sim/machine'
 
 const projectRoot = path.resolve(__dirname, '..')
 
@@ -72,6 +73,10 @@ if (storeFile) {
 }
 
 const finalEnv = { ...process.env, ...envOverrides }
+
+// Held until this process exits, so the Gradle run takes its turn with every
+// other native build on this machine.
+await takeBuildSlot(`gradle ${task}`)
 
 // Pass JVM args as system property to override gradle.properties
 // This ensures the memory settings are applied even if gradle.properties is regenerated

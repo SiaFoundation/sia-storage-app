@@ -25,6 +25,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@siastorage/sim": "workspace:*",
     "@tailwindcss/vite": "4.3.3",
     "@types/bun": "1.4.3",
     "@types/node": "24.19.2",

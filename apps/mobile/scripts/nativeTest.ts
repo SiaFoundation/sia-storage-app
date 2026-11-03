@@ -10,10 +10,17 @@ import { Database } from 'bun:sqlite'
 import { existsSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
+import { takeBuildSlot } from '@siastorage/sim/machine'
 
 const appRoot = path.resolve(import.meta.dir, '..')
 const platform = process.argv[2]
 const simulator = process.argv.includes('--simulator')
+
+// Held until the process exits, which every path below ends in. The test
+// builds compile with Xcode or Gradle like any other build on this machine.
+if (platform === 'ios' || platform === 'android') {
+  await takeBuildSlot(`${platform} native tests${simulator ? ' on a simulator' : ''}`)
+}
 
 function run(cmd: string[], cwd: string): number {
   console.log(`$ ${cmd.join(' ')}`)
