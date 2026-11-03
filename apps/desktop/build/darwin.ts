@@ -47,12 +47,24 @@ export function releaseFileName(
   return `${appName.replace(/\s+/g, '-')}-${version}-${arch}.${extension}`
 }
 
+/**
+ * The file name the Bun runtime ships under, which is also the daemon's
+ * process name. A bare executable outside a bundle shows in Activity Monitor
+ * under its file name, so as `bun` the daemon is unrecognisable, and the
+ * variant is in the name because several often run on one Mac.
+ */
+export function daemonRuntimeName(appName: string): string {
+  return `${appName} Sync`
+}
+
 export type BuildResult = {
   appPath: string
   appexPath: string
   agentPath: string
   resourcesPath: string
   frameworksPath: string
+  /** The bundled Bun runtime the daemon runs under. */
+  runtimePath: string
 }
 
 export type BuildOptions = {
@@ -101,8 +113,9 @@ export async function build(env: BuildEnv, options: BuildOptions = {}): Promise<
   cpSync(icon, join(resources, 'icon.icns'))
 
   const swiftBuild = join(out, 'swift-build')
+  const runtimePath = join(resources, daemonRuntimeName(env.appName))
   await installApp(resources, env, stamp, daemonBuild)
-  await buildDaemon(resources, daemonBuild)
+  await buildDaemon(resources, runtimePath, daemonBuild)
   await compileShared(swiftBuild)
   await compileExtension(join(appexContents, 'MacOS', 'SiaFileProvider'), swiftBuild)
   await compileAgent(join(agentContents, 'MacOS', AGENT_NAME))
@@ -121,6 +134,7 @@ export async function build(env: BuildEnv, options: BuildOptions = {}): Promise<
     agentPath,
     resourcesPath: resources,
     frameworksPath: frameworks,
+    runtimePath,
   }
 }
 
@@ -161,6 +175,7 @@ async function installApp(
         displayName: env.domainDisplay,
         extensionBundleId: env.extBundleId,
         daemonBuild,
+        daemonRuntime: daemonRuntimeName(env.appName),
         ...(env.updateChannel
           ? {
               updates: {
@@ -185,7 +200,11 @@ async function installApp(
  * payload to lose, the addon is an ordinary file, and signing the runtime is
  * signing a stock executable.
  */
-async function buildDaemon(resources: string, daemonBuild: string): Promise<void> {
+async function buildDaemon(
+  resources: string,
+  runtimePath: string,
+  daemonBuild: string,
+): Promise<void> {
   const entry = join(repoRoot, 'apps', 'cli', 'src', 'index.ts')
   const define = `SIA_DAEMON_BUILD=${JSON.stringify(daemonBuild)}`
   // One directory, not --outfile: the CLI pulls in assets Bun emits alongside
@@ -197,7 +216,7 @@ async function buildDaemon(resources: string, daemonBuild: string): Promise<void
   // Whichever bun is first on PATH is the one that ships, so two builds of one
   // commit can carry different runtimes.
   const bun = (await $`which bun`.text()).trim()
-  await $`cp ${bun} ${join(resources, 'bun')}`
+  await $`cp ${bun} ${runtimePath}`
 
   const addon = '@siafoundation/sia-storage-darwin-arm64'
   const destination = join(resources, 'node_modules', addon)

@@ -32,7 +32,11 @@ import { basename, join } from 'node:path'
  * standalone CLI wins and the two can be different builds against one library,
  * which is the thing worth knowing about.
  */
-export function linkCli(appPath: string): {
+export function linkCli(
+  appPath: string,
+  /** The bundled runtime's file name, from `daemonRuntimeName`. */
+  runtimeName: string,
+): {
   path: string
   effective: boolean
   shadowedBy: string | null
@@ -49,18 +53,21 @@ export function linkCli(appPath: string): {
     return { ...resolveCli(process.env.PATH ?? '', target, isExecutableFile), occupied: true }
   }
   rmSync(target, { force: true })
-  writeFileSync(
-    target,
-    `#!/bin/sh\nexec "${join(resources, 'bun')}" "${join(resources, 'daemon.js')}" "$@"\n`,
-    { mode: 0o755 },
-  )
+  writeFileSync(target, cliShim(resources, runtimeName), { mode: 0o755 })
   return { ...resolveCli(process.env.PATH ?? '', target, isExecutableFile), occupied: false }
+}
+
+/** The shim script for an app whose daemon files are in `resources`. */
+export function cliShim(resources: string, runtimeName: string): string {
+  return `#!/bin/sh\nexec "${join(resources, runtimeName)}" "${join(resources, 'daemon.js')}" "$@"\n`
 }
 
 /**
  * Whether the path is free, or holds a shim this packaging wrote before. The
  * whole generated form is matched, not a substring: a user's own script that
- * happens to mention `daemon.js` must not count as ours.
+ * happens to mention `daemon.js` must not count as ours. Builds before the
+ * runtime was named `<app name> Sync` wrote it as `bun`, and that shim is still
+ * ours to replace.
  */
 export function replaceableShim(target: string): boolean {
   let stat
@@ -72,7 +79,9 @@ export function replaceableShim(target: string): boolean {
   if (!stat.isFile()) return false
   try {
     const content = readFileSync(target, 'utf8')
-    return /^#!\/bin\/sh\nexec "[^"\n]*\/bun" "[^"\n]*\/daemon\.js" "\$@"\n$/.test(content)
+    return /^#!\/bin\/sh\nexec "[^"\n]*\/(?:bun|[^"\n/]+ Sync)" "[^"\n]*\/daemon\.js" "\$@"\n$/.test(
+      content,
+    )
   } catch {
     return false
   }

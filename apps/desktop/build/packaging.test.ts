@@ -3,8 +3,8 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { envOverrides, loadEnv, parseEnv, resolveEnv } from './env'
-import { daemonBuildId, plist } from './darwin'
-import { replaceableShim, resolveCli } from './install'
+import { daemonBuildId, daemonRuntimeName, plist } from './darwin'
+import { cliShim, replaceableShim, resolveCli } from './install'
 import {
   appEntitlements,
   assertNoForbiddenEntitlements,
@@ -117,9 +117,13 @@ describe('what the CLI shim may replace', () => {
       expect(replaceableShim(target)).toBe(true)
       fs.writeFileSync(target, '#!/bin/sh\nexec "/x/bun" "/x/daemon.js" "$@"\n')
       expect(replaceableShim(target)).toBe(true)
+      fs.writeFileSync(target, '#!/bin/sh\nexec "/x/Sia Storage Beta Sync" "/x/daemon.js" "$@"\n')
+      expect(replaceableShim(target)).toBe(true)
       fs.writeFileSync(target, 'a user binary')
       expect(replaceableShim(target)).toBe(false)
       fs.writeFileSync(target, '#!/bin/sh\n# wraps daemon.js\nexec /somewhere/else "$@"\n')
+      expect(replaceableShim(target)).toBe(false)
+      fs.writeFileSync(target, '#!/bin/sh\nexec "/usr/local/bin/node" "/x/daemon.js" "$@"\n')
       expect(replaceableShim(target)).toBe(false)
       fs.rmSync(target)
       fs.symlinkSync('/usr/bin/true', target)
@@ -128,6 +132,23 @@ describe('what the CLI shim may replace', () => {
       fs.rmSync(dir, { recursive: true, force: true })
     }
   })
+
+  it.each(['Sia Storage', 'Sia Storage Beta', 'Sia Storage Dev', 'Sia Storage Test'])(
+    'replaces the shim it writes for %s',
+    (appName) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sia-shim-'))
+      const target = path.join(dir, 'sia')
+      try {
+        const resources = `/Applications/${appName}.app/Contents/Resources`
+        const shim = cliShim(resources, daemonRuntimeName(appName))
+        expect(shim).toContain(`exec "${resources}/${appName} Sync" `)
+        fs.writeFileSync(target, shim)
+        expect(replaceableShim(target)).toBe(true)
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true })
+      }
+    },
+  )
 })
 
 describe('the CLI shim', () => {

@@ -262,7 +262,7 @@ if (!app.requestSingleInstanceLock()) {
       startUpdates(config, (state) => broadcast('update', state))
       const { shellSocket, handoffDir } = platform.shellPaths(config)
       spawn = {
-        runtime: process.env.SIA_DAEMON_RUNTIME ?? join(BUNDLED, 'bun'),
+        runtime: process.env.SIA_DAEMON_RUNTIME ?? join(BUNDLED, config.daemonRuntime ?? 'bun'),
         script: process.env.SIA_DAEMON_SCRIPT ?? join(BUNDLED, 'daemon.js'),
         shellSocket,
         handoffDir,

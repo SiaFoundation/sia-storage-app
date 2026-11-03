@@ -132,7 +132,7 @@ export async function sign(build: BuildResult, env: BuildEnv): Promise<void> {
   // Same identity as the runtime: a hardened process only dlopens its own team's
   // libraries, and the SDK reports that as "Native addon not found".
   for (const addon of find(build.resourcesPath, '**/*.node')) await seal(addon)
-  await seal(join(build.resourcesPath, 'bun'), helperEntPath, env.appBundleId)
+  await seal(build.runtimePath, helperEntPath, env.appBundleId)
 
   await seal(build.agentPath, appEntPath, env.appBundleId)
   await seal(build.appexPath, extEntPath, env.extBundleId)
