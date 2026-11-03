@@ -109,6 +109,26 @@ export async function queryThumbnailFileInfoByFileIds(
   )
 }
 
+/**
+ * Which of `fileIds` have a thumbnail of `size` whose bytes are on this
+ * device, in one query for a whole page of files.
+ */
+export async function queryFileIdsWithLocalThumbnail(
+  db: DatabaseAdapter,
+  fileIds: string[],
+  size: ThumbSize,
+): Promise<Set<string>> {
+  if (fileIds.length === 0) return new Set()
+  const ph = fileIds.map(() => '?').join(',')
+  const rows = await db.getAllAsync<{ thumbForId: string }>(
+    `SELECT t.thumbForId FROM files t JOIN fs ON fs.fileId = t.id
+     WHERE t.thumbForId IN (${ph}) AND t.thumbSize = ?`,
+    ...fileIds,
+    size,
+  )
+  return new Set(rows.map((r) => r.thumbForId))
+}
+
 export async function queryThumbnailByFileIdAndSize(
   db: DatabaseAdapter,
   fileId: string,

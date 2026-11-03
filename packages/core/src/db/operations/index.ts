@@ -252,6 +252,7 @@ export {
 } from './tags'
 export {
   queryBestThumbnailByFileId,
+  queryFileIdsWithLocalThumbnail,
   queryThumbnailCandidatePage,
   queryThumbnailExistsForFileIdAndSize,
   queryThumbnailFileInfoByFileIds,

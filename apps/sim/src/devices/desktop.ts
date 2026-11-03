@@ -268,6 +268,45 @@ export type FinderState = {
   cloudOnly: boolean
 }
 
+/** What Quick Look's thumbnail service draws for a file. */
+export type FinderThumbnail = {
+  /**
+   * `thumbnail` is a picture of the file's content, `icon` the generic icon
+   * for its type, and `none` means the service gave nothing in 30 seconds.
+   */
+  kind: 'icon' | 'lowQuality' | 'thumbnail' | 'none'
+  width: number
+  height: number
+}
+
+// QLThumbnailGenerator is the service Finder draws its icons through, and for
+// a cloud-only file it asks the File Provider extension rather than
+// downloading. `qlmanage -t` does not: it reads the file, which downloads it.
+// The completion arrives on the run loop, so the script spins it until then.
+const FINDER_THUMBNAIL_SCRIPT = String.raw`
+ObjC.import('Foundation')
+ObjC.import('CoreGraphics')
+ObjC.import('QuickLookThumbnailing')
+function run(argv) {
+  const request = $.QLThumbnailGenerationRequest.alloc.initWithFileAtURLSizeScaleRepresentationTypes(
+    $.NSURL.fileURLWithPath(argv[0]), { width: 256, height: 256 }, 2, 0xffffffff)
+  let out = null
+  $.QLThumbnailGenerator.sharedGenerator.generateBestRepresentationForRequestCompletionHandler(
+    request,
+    (rep) => {
+      const kinds = ['icon', 'lowQuality', 'thumbnail']
+      out = rep && !rep.isNil()
+        ? { kind: kinds[Number(rep.type)] || 'none', width: Number($.CGImageGetWidth(rep.CGImage)),
+            height: Number($.CGImageGetHeight(rep.CGImage)) }
+        : { kind: 'none', width: 0, height: 0 }
+    })
+  const deadline = Date.now() + 30000
+  while (out === null && Date.now() < deadline) {
+    $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(0.05))
+  }
+  return JSON.stringify(out || { kind: 'none', width: 0, height: 0 })
+}`
+
 // `NSURLContentTypeKey` answers with a Swift UTType, which crashes the
 // JavaScript bridge (osascript exits 133), so the type comes from
 // `NSURLTypeIdentifierKey`, the same identifier as a string.
@@ -613,6 +652,22 @@ export class DesktopDevice extends CliDevice {
 
   async finderRemove(path: string): Promise<void> {
     await rm(this.finderPath(path), { recursive: true })
+  }
+
+  /**
+   * Asks Quick Look for a file's thumbnail the way Finder does. A cloud-only
+   * file stays cloud-only: its thumbnail comes from the File Provider
+   * extension.
+   */
+  finderThumbnail(path: string): FinderThumbnail {
+    const out = Bun.spawnSync(
+      ['osascript', '-l', 'JavaScript', '-e', FINDER_THUMBNAIL_SCRIPT, this.finderPath(path)],
+      { timeout: 45_000 },
+    )
+    if (out.exitCode !== 0) {
+      throw new Error(`Thumbnail of ${path} failed: ${out.stderr.toString().trim()}`)
+    }
+    return JSON.parse(out.stdout.toString()) as FinderThumbnail
   }
 
   /** Whether a file in the Finder folder is a placeholder whose bytes have not been downloaded. */

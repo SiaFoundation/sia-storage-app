@@ -75,6 +75,12 @@ export type FsIOAdapter = FsFileUriAdapter & {
     data: ArrayBuffer,
   ): Promise<{ uri: string; size: number }>
   /**
+   * Reads a managed file's bytes into memory. Optional: only a host that
+   * hands small files such as thumbnails to another process inline needs it,
+   * and nothing large should go through it.
+   */
+  readFile?(file: { id: string; type: string }): Promise<Uint8Array>
+  /**
    * Places a managed file's bytes at an absolute path outside managed storage
    * and returns the byte count. Hardlinks when both sides share a volume and
    * falls back to a copy, so a large file is never held in memory.

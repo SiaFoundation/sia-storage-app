@@ -156,6 +156,13 @@ public final class Rpc: @unchecked Sendable {
     /// it has given up on.
     public static let transferTimeout = timeval(tv_sec: 3600, tv_usec: 0)
 
+    /// Receive timeout for a thumbnail, which the daemon may first download
+    /// from the network. An expired request leaves the plain icon in Finder
+    /// until the daemon retries the download, so this allows for a slow
+    /// connection where `ioTimeout` would not. The system cancels a request
+    /// it has given up on.
+    public static let thumbnailTimeout = timeval(tv_sec: 60, tv_usec: 0)
+
     /// `receiveTimeout: nil` for a connection that waits indefinitely: on a
     /// subscription an expired read is indistinguishable from a hang-up, so a
     /// timeout tears the stream down and reconnects it on a loop.

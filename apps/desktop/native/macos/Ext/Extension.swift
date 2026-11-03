@@ -42,7 +42,7 @@ extension Logger {
 
 @objc(FileProviderExtension)
 public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
-    private let rpc: Rpc
+    let rpc: Rpc
     private let handoff: Handoff
     private let domain: NSFileProviderDomain
     private let handshake: Handshake
@@ -336,7 +336,7 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
     /// Every callback that reaches the daemon waits on this. The OS keeps an
     /// extension alive across app upgrades, so a stale one would otherwise drive
     /// a surface it was not built against.
-    private func ready() async throws {
+    func ready() async throws {
         do {
             // The epoch marker is bumped synchronously when the stream drops,
             // so a callback landing before the asynchronous reset still forces
@@ -581,7 +581,7 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
 /// down the change stream, which carries a scope and no payload, and is shared
 /// by every fetch in flight.
 final class ProgressPoller: @unchecked Sendable {
-    private let rpc: Rpc
+    let rpc: Rpc
     private let id: String
     private let progress: Progress
     private let lock = NSLock()

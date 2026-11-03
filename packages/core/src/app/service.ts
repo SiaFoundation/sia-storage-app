@@ -29,6 +29,7 @@ import type {
   ProviderChanges,
   ProviderFetchResult,
   ProviderRangeResult,
+  ProviderThumbnail,
   ProviderItem,
   ProviderItemKind,
   ProviderPage,
@@ -1129,6 +1130,24 @@ export interface AppService {
      * ids with no visible file are left out.
      */
     fileIds(itemIds: string[]): Promise<string[]>
+    /**
+     * The 512px thumbnail of a file's current version, downloaded first if
+     * only another device has it. For a recently changed file it waits a few
+     * seconds for the thumbnail to sync. Throws while the file could get one
+     * but none is available, and the file is re-reported in the change feed,
+     * with its `modifiedAt` one second later, once its thumbnail is on this
+     * device.
+     */
+    thumbnail(id: string): Promise<ProviderThumbnail>
+    /**
+     * Retries the thumbnails `thumbnail` failed to serve, downloading each at
+     * background priority once its row has synced, backing off to once an
+     * hour, until it lands or the file's version is replaced, removed or
+     * downloaded. The list survives a restart. A host runs it on a timer while
+     * connected. Aborting `signal`
+     * returns without waiting for downloads in progress, which carry on.
+     */
+    retryThumbnails(signal?: AbortSignal): Promise<void>
   }
   /** Download management: queue, track, cancel, and read downloaded files. */
   downloads: {

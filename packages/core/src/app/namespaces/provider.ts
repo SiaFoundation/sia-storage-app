@@ -10,8 +10,8 @@
  * row an identifier names, what a folder holds, and the transfer flags a file
  * browser draws as badges.
  *
- * It reads through the other namespaces and its own queries, and owns no
- * storage.
+ * It reads through the other namespaces and its own queries. The only state
+ * it keeps is the list of thumbnails to retry, in key-value storage.
  */
 import { logger } from '@siastorage/logger'
 import type { DatabaseAdapter } from '../../adapters/db'
@@ -20,6 +20,8 @@ import * as ops from '../../db/operations'
 import { UNFILED_DIRECTORY_ID } from '../../db/operations'
 import type { Directory, ProviderChangeRow } from '../../db/operations'
 import { uniqueId } from '../../lib/uniqueId'
+import { bytesToBase64 } from '../../lib/base64'
+import { getErrorMessage } from '../../lib/errors'
 import { normalizeName } from '../../lib/names'
 import type { FsIOAdapter } from '../../services/fsFileUri'
 import {
@@ -30,9 +32,11 @@ import {
   type ProviderItem,
   type ProviderPage,
 } from '../../types/provider'
+import type { FileRecord, ThumbSize } from '../../types/files'
 import type { AppService, AppServiceInternal } from '../service'
 import type { TransferMemoryBudget } from '../../services/transferMemoryBudget'
 import type { LocalCopyLock } from '../../services/localCopyLock'
+import type { DownloadPriority } from '../stores'
 import type { DownloadObjectAdapter } from './downloads'
 import { ANCHOR_START, formatAnchor, parseAnchor, type ProviderAnchor } from '../providerAnchor'
 
@@ -40,6 +44,49 @@ import { ANCHOR_START, formatAnchor, parseAnchor, type ProviderAnchor } from '..
 const MAX_PAGE_SIZE = 500
 /** Marks a working set cursor as still working through folders. */
 const FOLDER_CURSOR = 'dirs:'
+/**
+ * The one thumbnail size served. macOS asks for the same size, larger than
+ * any the library keeps, from every Finder view and from Quick Look, so the
+ * request says nothing about where the image will be drawn.
+ */
+const PROVIDER_THUMB_SIZE: ThumbSize = 512
+/**
+ * Every generator writes a 512px thumbnail far below this. A larger row is
+ * malformed and is refused rather than sent over the socket as one line.
+ */
+const MAX_INLINE_THUMBNAIL_BYTES = 1024 * 1024
+/**
+ * The wait before a failed thumbnail's first retry, doubling after each
+ * failure up to `MAX_THUMBNAIL_RETRY_BACKOFF_MS`. A thumbnail is retried for
+ * as long as its file's version is current and cloud-only, because one can
+ * sync hours late, from a phone that was asleep, and a file that never gets
+ * one, such as a video from a device that cannot make one, costs one lookup
+ * an hour.
+ */
+const THUMBNAIL_RETRY_BACKOFF_MS = 30_000
+const MAX_THUMBNAIL_RETRY_BACKOFF_MS = 60 * 60_000
+/**
+ * Retry downloads in flight at once. The background download queue drops its
+ * oldest waiting entry once it holds `MAX_BACKGROUND_DOWNLOADS_QUEUED`, so
+ * starting every retry together would drop most of a long list each pass.
+ */
+const THUMBNAIL_RETRY_CONCURRENCY = 4
+/**
+ * How long `thumbnail` holds Finder's request for a recently changed file
+ * whose thumbnail has not synced yet. The device that made the version
+ * uploads its thumbnail just after the file, and answering an error first
+ * leaves the plain icon up until the retry lands it.
+ */
+const THUMBNAIL_WAIT_MS = 15_000
+const THUMBNAIL_POLL_MS = 500
+/**
+ * Only a version changed this recently is waited for. An older file without
+ * a thumbnail, such as a video added from a device that cannot make one,
+ * would otherwise hold every request for it for the whole wait.
+ */
+const RECENT_VERSION_MS = 5 * 60_000
+/** Key-value storage key holding the thumbnails waiting for a retry. */
+const THUMBNAIL_RETRIES_KEY = 'providerThumbnailRetries'
 
 export type ProviderNamespaceDeps = {
   getService: () => AppService
@@ -55,6 +102,10 @@ export type ProviderNamespaceDeps = {
   handoffDir?: string
   /** Lowered by tests, which cannot afford to write a full page of rows. */
   maxPageSize?: number
+  /** Lowered by tests, which cannot afford to wait out a missing thumbnail. */
+  thumbnailWaitMs?: number
+  /** Zero in tests, so every `retryThumbnails` pass retries every thumbnail. */
+  thumbnailRetryBackoffMs?: number
   getSdk: () => SdkAdapter | null
   downloadObject: DownloadObjectAdapter
   transferBudget: TransferMemoryBudget
@@ -64,6 +115,8 @@ export type ProviderNamespaceDeps = {
 /** Transfer flags for a batch of files, resolved in one pass over the library. */
 type TransferFlags = {
   uploaded: Set<string>
+  /** Files whose 512px thumbnail is on this device. */
+  thumbnailLocal: Set<string>
   uploading: Map<string, number>
   downloading: Map<string, number>
 }
@@ -136,14 +189,16 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       }
     }
 
-    const [refs, indexerURL] = await Promise.all([
+    const [refs, indexerURL, thumbnailLocal] = await Promise.all([
       service.localObjects.getRefsForFiles(fileIds),
       service.settings.getIndexerURL(),
+      ops.queryFileIdsWithLocalThumbnail(db, fileIds, PROVIDER_THUMB_SIZE),
     ])
     return {
       uploaded: new Set(
         fileIds.filter((id) => refs[id]?.some((ref) => ref.indexerURL === indexerURL) ?? false),
       ),
+      thumbnailLocal,
       uploading,
       downloading,
     }
@@ -157,6 +212,18 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     const uploading = flags.uploading.get(row.id)
     const downloading = flags.downloading.get(row.id)
     const uploaded = flags.uploaded.has(row.id)
+    const downloaded = (row.fsExists ?? 0) === 1
+    // Finder forgets a thumbnail it failed to get only when the file's
+    // modification date changes: a new metadata version alone does not make
+    // it ask again. A cloud-only file whose 512px thumbnail is on this device
+    // reports its date one second later, which flips once, when the thumbnail
+    // lands, and the fs trigger re-reports the file then. A whole second,
+    // because the date is compared to the second, so a smaller nudge moves it
+    // only when it happens to cross one. A file whose bytes the daemon holds
+    // never carries it, so downloading a file does not move its date. Finder
+    // can keep its own copy after the daemon evicts one, and that copy's date
+    // then moves by the second the next time the file is re-reported.
+    const thumbnailNudge = !downloaded && flags.thumbnailLocal.has(row.id) ? 1000 : 0
     return {
       // The file's stackId, not the row id: a save or another device's version
       // is a new row, and the item the OS holds must survive it.
@@ -167,7 +234,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       mimeType: row.type,
       size: row.size,
       createdAt: row.createdAt,
-      modifiedAt: row.updatedAt,
+      modifiedAt: row.updatedAt + thumbnailNudge,
       // The content hash is the only value that moves exactly when the bytes
       // do; updatedAt also moves on a rename, which would make the OS discard
       // a cached copy it could have kept.
@@ -177,7 +244,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       // same millisecond as the previous write leaves it unchanged and the OS
       // keeps showing the old name indefinitely.
       // The upload flag is in it because the OS redraws the badge only for a
-      // new metadata version.
+      // new metadata version, and the thumbnail nudge for the same reason.
       metadataVersion: [
         row.updatedAt,
         row.name,
@@ -185,10 +252,11 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
         row.type,
         parentId ?? '',
         +uploaded,
+        thumbnailNudge,
       ].join(':'),
       uploaded,
       uploading: uploading !== undefined,
-      downloaded: (row.fsExists ?? 0) === 1,
+      downloaded,
       downloading: downloading !== undefined,
       progress: uploading ?? downloading ?? 0,
     }
@@ -670,6 +738,142 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     throw new Error(`Local copy is ${local ?? 0} of ${file.size} bytes for ${fileId}`)
   }
 
+  /**
+   * Files Finder asked for a thumbnail of and got an error, keyed by provider
+   * id: no thumbnail had synced, or its download failed. Each entry names the
+   * version Finder asked about and when to retry it next. Finder does not ask
+   * again until the thumbnail nudge in `fileToItem` moves the file's
+   * modification date, so `retryThumbnails` downloads these later. Persisted,
+   * because Finder keeps the failure across a daemon restart, and a list held
+   * only in memory would leave those icons plain until each file changed.
+   */
+  type FailedThumbnail = { fileId: string; attempts: number; nextAt: number }
+  let failedThumbnails: Promise<Map<string, FailedThumbnail>> | null = null
+  let saveQueued = false
+  let saving = Promise.resolve()
+  const thumbnailWaitMs = deps.thumbnailWaitMs ?? THUMBNAIL_WAIT_MS
+  const retryBackoffMs = deps.thumbnailRetryBackoffMs ?? THUMBNAIL_RETRY_BACKOFF_MS
+
+  function loadFailedThumbnails(): Promise<Map<string, FailedThumbnail>> {
+    failedThumbnails ??= getService()
+      .storage.getItem(THUMBNAIL_RETRIES_KEY)
+      .then((raw) => new Map<string, FailedThumbnail>(raw ? JSON.parse(raw) : []))
+      .catch((e: unknown) => {
+        logger.warn('provider', 'thumbnail_retries_unreadable', { error: getErrorMessage(e) })
+        return new Map<string, FailedThumbnail>()
+      })
+    return failedThumbnails
+  }
+
+  /** Queues one write of the whole list, taken when the write runs. */
+  function saveFailedThumbnails(failed: Map<string, FailedThumbnail>): void {
+    if (saveQueued) return
+    saveQueued = true
+    saving = saving
+      .then(() => {
+        saveQueued = false
+        return getService().storage.setItem(THUMBNAIL_RETRIES_KEY, JSON.stringify([...failed]))
+      })
+      .catch((e: unknown) => {
+        logger.warn('provider', 'thumbnail_retries_unsaved', { error: getErrorMessage(e) })
+      })
+  }
+
+  async function recordFailedThumbnail(id: string, fileId: string): Promise<void> {
+    const failed = await loadFailedThumbnails()
+    failed.set(id, { fileId, attempts: 0, nextAt: 0 })
+    saveFailedThumbnails(failed)
+  }
+
+  /** The file's 512px thumbnail row, polled for until `thumbnailWaitMs` passes. */
+  async function waitForThumbnailRow(fileId: string): Promise<FileRecord | null> {
+    const deadline = Date.now() + thumbnailWaitMs
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, THUMBNAIL_POLL_MS))
+      const thumb = await getService().thumbnails.getByFileIdAndSize(fileId, PROVIDER_THUMB_SIZE)
+      if (thumb) return thumb
+    }
+    return null
+  }
+
+  async function thumbnailIsLocal(thumb: { id: string; type: string; size: number }) {
+    return (await fsIO.size(thumb.id, thumb.type)).value === thumb.size
+  }
+
+  /**
+   * Downloads a thumbnail, then signals the change feed. A download moves no
+   * library counter, and the change signal a shell waits on fires only when
+   * one moves. Without it the shell never reads the feed, so the file's new
+   * date never reaches Finder, which matters whenever Finder already got an
+   * error: from a failed request, or from the extension giving up on a slow
+   * download that later finishes.
+   */
+  async function downloadThumbnail(thumb: FileRecord, priority: DownloadPriority) {
+    const service = getService()
+    await service.downloads.downloadFile(thumb.id, priority)
+    service.caches.libraryVersion.invalidate()
+  }
+
+  /** One pass at one failed thumbnail. Removes it from `failed` once settled. */
+  async function retryThumbnail(
+    failed: Map<string, FailedThumbnail>,
+    id: string,
+    entry: FailedThumbnail,
+    aborted: Promise<void>,
+  ): Promise<void> {
+    const service = getService()
+    const row = await ops.queryProviderItem(db, id)
+    // Gone, replaced by a version Finder asks about afresh, or downloaded, which
+    // Finder thumbnails itself.
+    if (!row || row.id !== entry.fileId || (row.fsExists ?? 0) === 1) {
+      failed.delete(id)
+      return
+    }
+    const thumb = await service.thumbnails.getByFileIdAndSize(entry.fileId, PROVIDER_THUMB_SIZE)
+    if (thumb && thumb.size > MAX_INLINE_THUMBNAIL_BYTES) {
+      failed.delete(id)
+      return
+    }
+    if (thumb && !(await thumbnailIsLocal(thumb))) {
+      const download = downloadThumbnail(thumb, 'background').catch((e: unknown) => {
+        logger.debug('provider', 'thumbnail_retry_failed', {
+          thumbId: thumb.id,
+          error: getErrorMessage(e),
+        })
+      })
+      let stopped = false
+      await Promise.race([download, aborted.then(() => (stopped = true))])
+      if (stopped) return
+      // Dropped from a full background queue without trying, so not a failure.
+      if (service.downloads.wasDropped(thumb.id)) return
+    }
+    if (thumb && (await thumbnailIsLocal(thumb))) {
+      failed.delete(id)
+      return
+    }
+    entry.attempts += 1
+    // The exponent stops growing well past the cap, where 2 ** n would reach
+    // Infinity after about six weeks of hourly failures.
+    const backoff = retryBackoffMs * 2 ** Math.min(entry.attempts - 1, 16)
+    entry.nextAt = Date.now() + Math.min(backoff, MAX_THUMBNAIL_RETRY_BACKOFF_MS)
+  }
+
+  async function readThumbnail(thumb: FileRecord): Promise<Uint8Array | null> {
+    const readFile = fsIO.readFile
+    if (!readFile) throw new Error('This host cannot read thumbnails')
+    if (!(await thumbnailIsLocal(thumb))) {
+      // At user priority, because Finder asks only for the icons on screen.
+      // A background download dropped from its queue would leave the icon
+      // plain until the file changed.
+      await downloadThumbnail(thumb, 'user')
+    }
+    // Under the lock, so eviction of a trashed file's thumbnails cannot
+    // remove the bytes between the size check and the read.
+    return deps.localCopyLock.run(thumb.id, async () =>
+      (await thumbnailIsLocal(thumb)) ? readFile(thumb) : null,
+    )
+  }
+
   /** Reads one item. Hoisted because other verbs read back through it. */
   async function item(id: string): Promise<ProviderItem | null> {
     const service = getService()
@@ -688,6 +892,72 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
 
   return {
     item,
+
+    async thumbnail(id) {
+      if (parseDirectoryProviderId(id) !== null) return { kind: 'none' }
+      const file = await currentRow(id)
+      // Only images and videos get thumbnails on any platform. Anything else
+      // is answered "none", which the OS keeps until the content changes.
+      if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+        return { kind: 'none' }
+      }
+      let thumb = await getService().thumbnails.getByFileIdAndSize(file.id, PROVIDER_THUMB_SIZE)
+      if (!thumb && Date.now() - file.updatedAt < RECENT_VERSION_MS) {
+        thumb = await waitForThumbnailRow(file.id)
+      }
+      // An error rather than "none": the device holding the file may not
+      // have generated it yet. Error text reaches Finder, so it names no
+      // file or row.
+      if (!thumb) {
+        await recordFailedThumbnail(id, file.id)
+        throw new Error('No thumbnail yet for this file')
+      }
+      if (thumb.size > MAX_INLINE_THUMBNAIL_BYTES) {
+        throw new Error(`Thumbnail is ${thumb.size} bytes, over the inline limit`)
+      }
+      const bytes = await readThumbnail(thumb).catch((e: unknown) => {
+        logger.warn('provider', 'thumbnail_download_failed', {
+          thumbId: thumb.id,
+          error: getErrorMessage(e),
+        })
+        return null
+      })
+      if (bytes === null) {
+        await recordFailedThumbnail(id, file.id)
+        throw new Error('Thumbnail did not download')
+      }
+      return { kind: 'image', mimeType: thumb.type, data: bytesToBase64(bytes) }
+    },
+
+    async retryThumbnails(signal) {
+      const failed = await loadFailedThumbnails()
+      const now = Date.now()
+      const due = [...failed].filter(([, entry]) => entry.nextAt <= now)
+      if (due.length === 0) return
+      // The scheduler waits for this worker on shutdown. A stalled transfer
+      // must not hold the daemon open, and cancelling the download itself
+      // would also fail a Finder request waiting on the same file.
+      let onAbort = () => {}
+      const aborted = new Promise<void>((resolve) => {
+        onAbort = resolve
+        if (signal?.aborted) resolve()
+        signal?.addEventListener('abort', onAbort, { once: true })
+      })
+      try {
+        for (let i = 0; i < due.length && !signal?.aborted; i += THUMBNAIL_RETRY_CONCURRENCY) {
+          await Promise.all(
+            due
+              .slice(i, i + THUMBNAIL_RETRY_CONCURRENCY)
+              .map(([id, entry]) => retryThumbnail(failed, id, entry, aborted)),
+          )
+        }
+      } finally {
+        signal?.removeEventListener('abort', onAbort)
+      }
+      // Skipped after an abort, which means shutdown, when storage may close
+      // before the write runs. The next run repeats what this one did.
+      if (!signal?.aborted) saveFailedThumbnails(failed)
+    },
 
     async fileIds(itemIds) {
       const ids: string[] = []

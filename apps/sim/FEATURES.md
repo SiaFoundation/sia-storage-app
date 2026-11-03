@@ -316,7 +316,12 @@ bun sim device expect phone --label Menu
 - Check:
   `bun sim sql <device> "SELECT thumbForId, thumbSize FROM files WHERE kind = 'thumb'"`
 - Tests: scenarios `sync/file-types`, `sync/thumbnails-by-type`,
-  `mobile/file-types`; integration `thumbnail-generation`, `thumbnail-scanner`
+  `mobile/file-types`, `desktop/finder-thumbnails-for-cloud-files`;
+  integration `thumbnail-generation`, `thumbnail-scanner`, `provider-thumbnails`
+- Desktop: Finder draws a cloud-only file's icon from its 512px thumbnail,
+  which the extension asks the daemon for with `provider.thumbnail`. A desktop
+  device's `finderThumbnail()` asks Quick Look the way Finder does and says
+  whether it got a `thumbnail` or an `icon`, without downloading the file.
 
 ### Finder on the Mac
 
@@ -334,9 +339,11 @@ bun sim device expect phone --label Menu
   `finder/concurrent-opens`, `finder/stale-base-save`,
   `finder/edit-against-remote-trash`, `finder/offline-edit-not-stranded`,
   `finder/rename-and-edit-elsewhere`, `finder/same-name-create`,
-  `finder/save-survives-restart`; integration `provider-handoff`,
+  `finder/save-survives-restart`,
+  `desktop/finder-thumbnails-for-cloud-files`; integration `provider-handoff`,
   `provider-reads`, `provider-changes`, `provider-bulk-create`,
-  `provider-concurrent-opens`, `provider-write-integrity`
+  `provider-concurrent-opens`, `provider-write-integrity`,
+  `provider-thumbnails`
 - Desktop: `bun sim device finder mac` prints the folder, and `cp`, `mv`, `rm`
   and reading a file in it take the path Finder takes. `finder-state` shows what
   Finder shows for a file, `download` reads a cloud-only file through Finder,

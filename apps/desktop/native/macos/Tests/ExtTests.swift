@@ -989,3 +989,146 @@ final class BundleOnDiskTests: XCTestCase {
         XCTAssertFalse(BundleOnDisk.replaced(loaded: "0.0.7", bundleURL: noKey))
     }
 }
+
+final class ThumbnailDecodingTests: XCTestCase {
+    func testAnImageReplyDecodesToItsBytes() throws {
+        let reply: [String: Any] = [
+            "kind": "image", "mimeType": "image/webp",
+            "data": Data("webp".utf8).base64EncodedString(),
+        ]
+        XCTAssertEqual(try decodeThumbnail(reply), .image(Data("webp".utf8)))
+    }
+
+    func testANoneReplyMeansTheFileHasNoThumbnail() throws {
+        XCTAssertEqual(try decodeThumbnail(["kind": "none"]), ThumbnailAnswer.none)
+    }
+
+    func testAnImageReplyWithoutDataIsAnErrorRatherThanNone() {
+        // Answering nil would tell the system the file has no thumbnail,
+        // which it keeps until the content changes.
+        XCTAssertThrowsError(try decodeThumbnail(["kind": "image", "data": "%%%"]))
+        XCTAssertThrowsError(try decodeThumbnail(["kind": "image"]))
+    }
+
+    func testAnUnknownKindIsAnError() {
+        XCTAssertThrowsError(try decodeThumbnail(["kind": "video"]))
+        XCTAssertThrowsError(try decodeThumbnail(nil))
+    }
+}
+
+private final class Answers: @unchecked Sendable {
+    private let lock = NSLock()
+    private var items: [String: (Data?, Error?)] = [:]
+    private var completions: [Error?] = []
+    func record(_ id: String, _ data: Data?, _ error: Error?) {
+        lock.withLock { items[id] = (data, error) }
+    }
+    func complete(_ error: Error?) { lock.withLock { completions.append(error) } }
+    var snapshot: (items: [String: (Data?, Error?)], completions: [Error?]) {
+        lock.withLock { (items, completions) }
+    }
+}
+
+final class ThumbnailBatchTests: XCTestCase {
+    private struct NotYet: Error {}
+
+    private func waitForCompletion(_ answers: Answers) async {
+        for _ in 0..<200 where answers.snapshot.completions.isEmpty {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
+    func testEachItemGetsItsOwnAnswerThenTheBatchCompletesOnce() async {
+        let answers = Answers()
+        let batch = ThumbnailBatch(
+            ids: ["img", "txt", "late"],
+            fetch: { id in
+                switch id {
+                case "img": return .image(Data([1, 2, 3]))
+                case "txt": return .none
+                default: throw NotYet()
+                }
+            },
+            perItem: answers.record, done: answers.complete)
+
+        let progress = batch.start()
+        await waitForCompletion(answers)
+
+        let (items, completions) = answers.snapshot
+        XCTAssertEqual(items["img"]?.0, Data([1, 2, 3]))
+        XCTAssertNil(items["img"]?.1)
+        XCTAssertNil(items["txt"]?.0)
+        XCTAssertNil(items["txt"]?.1)
+        // An error, never nil data alone, so the system does not keep it.
+        XCTAssertNotNil(items["late"]?.1)
+        XCTAssertEqual(completions.count, 1)
+        XCTAssertNil(completions.first ?? nil)
+        XCTAssertEqual(progress.completedUnitCount, 3)
+    }
+
+    func testACancelAfterCompletionIsIgnored() async {
+        let answers = Answers()
+        let batch = ThumbnailBatch(
+            ids: ["img"], fetch: { _ in .image(Data([1])) }, perItem: answers.record,
+            done: answers.complete)
+
+        let progress = batch.start()
+        await waitForCompletion(answers)
+        progress.cancel()
+
+        XCTAssertEqual(answers.snapshot.completions.count, 1)
+        XCTAssertNil(answers.snapshot.completions.first ?? nil)
+    }
+
+    /// The system may cancel the progress from inside an answer's handler,
+    /// on the thread delivering it, while other answers are arriving.
+    func testACancelFromAnAnswerHandlerDeliversNothingAfterTheCompletion() async {
+        final class Log: @unchecked Sendable {
+            private let lock = NSLock()
+            private var events: [String] = []
+            func add(_ event: String) { lock.withLock { events.append(event) } }
+            var all: [String] { lock.withLock { events } }
+        }
+        let log = Log()
+        let ids = (0..<50).map { "img\($0)" }
+        var progress: Progress?
+        let batch = ThumbnailBatch(
+            ids: ids, fetch: { _ in .image(Data([1])) },
+            perItem: { _, _, _ in
+                log.add("item")
+                progress?.cancel()
+            },
+            done: { _ in log.add("done") })
+
+        progress = batch.start()
+        for _ in 0..<200 where !log.all.contains("done") {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        let events = log.all
+        XCTAssertEqual(events.filter { $0 == "done" }.count, 1)
+        XCTAssertEqual(events.last, "done")
+    }
+
+    func testACancelMidBatchCompletesWithUserCancelledAndDropsLaterAnswers() async {
+        let answers = Answers()
+        let batch = ThumbnailBatch(
+            ids: ["slow"],
+            fetch: { _ in
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                return .image(Data([1]))
+            },
+            perItem: answers.record, done: answers.complete)
+
+        let progress = batch.start()
+        progress.cancel()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+
+        let (items, completions) = answers.snapshot
+        XCTAssertEqual(completions.count, 1)
+        XCTAssertEqual((completions.first ?? nil) as NSError?, NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError))
+        XCTAssertTrue(items.isEmpty)
+    }
+}
+

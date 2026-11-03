@@ -65,7 +65,7 @@ export function seedPhotos(dir: string, opts: { count: number; prefix?: string }
 }
 
 /** An 8-bit RGB PNG with random pixels. */
-function randomPng(width: number, height: number): Uint8Array {
+export function randomPng(width: number, height: number): Uint8Array {
   const rows: Uint8Array[] = []
   for (let y = 0; y < height; y++) {
     const row = new Uint8Array(1 + width * 3)
