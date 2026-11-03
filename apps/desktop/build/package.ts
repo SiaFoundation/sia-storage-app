@@ -9,6 +9,7 @@
 
 import { dirname } from 'node:path'
 import { withDesktopInstall } from '@siastorage/sim/desktop-lock'
+import { daemonRuntimeName } from './darwin'
 import { type BuildEnv, loadEnv } from './env'
 import { install, isExtensionRegistered, launch, linkCli } from './install'
 import { buildSigned } from './release'
@@ -31,7 +32,7 @@ export async function packageApp(
     async () => {
       console.log('Installing…')
       const installed = await install(result.appPath)
-      const cli = env.linkCli ? linkCli(installed) : null
+      const cli = env.linkCli ? linkCli(installed, daemonRuntimeName(env.appName)) : null
       await launch(installed, launchEnv)
 
       // PluginKit registration is asynchronous after launch, and the app spends

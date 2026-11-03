@@ -27,6 +27,12 @@ export type DesktopConfig = {
    */
   daemonBuild?: string
   /**
+   * The bundled runtime's file name, `<app name> Sync`, which is the name the
+   * daemon shows in Activity Monitor. Absent in a checkout, which has no
+   * bundled runtime.
+   */
+  daemonRuntime?: string
+  /**
    * Where this build looks for its own updates. Absent unless packaging set
    * `SIA_UPDATE_CHANNEL`, which beta and prod do and dev and test do not by
    * default, and from a source run.
