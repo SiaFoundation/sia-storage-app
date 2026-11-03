@@ -15,16 +15,17 @@
  * command again.
  *
  * A build has one Finder folder per Mac, so one desktop device runs at a time
- * across every checkout, under a lease every checkout checks.
+ * across every checkout, under the lease in desktop-lock.ts.
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { sendIpcCommand } from '@siastorage/node-adapters/ipc'
-import { withFileLock } from '../lock'
-import { freePort, isAlive } from '../process'
-import { REPO_ROOT, SIM_HOME, Session } from '../session'
+import { allowDatalessDownloads } from '../dataless'
+import { desktopHold, leaseHolder, releaseLease, takeLease } from '../desktop-lock'
+import { freePort } from '../process'
+import { REPO_ROOT } from '../session'
 import { waitFor } from '../wait'
 import { CLI_ENTRY, CliDevice } from './cli'
 import { DesktopUi } from './desktop-ui'
@@ -198,62 +199,21 @@ async function quitApp(identity: DesktopIdentity): Promise<void> {
   })
 }
 
-const leaseFile = (identity: DesktopIdentity) => join(SIM_HOME, `desktop-${identity.context}.lease`)
-
 /**
- * The session holding the build, if that session still exists. A scenario
- * run's session outlives a runner that was killed, until `prune` removes it,
- * so a `run-` session whose runner has exited holds nothing.
- */
-function leaseHolder(identity: DesktopIdentity): string | null {
-  const file = leaseFile(identity)
-  if (!existsSync(file)) return null
-  const name = readFileSync(file, 'utf8').trim()
-  let session: Session | null
-  try {
-    session = Session.load(name)
-  } catch {
-    return null
-  }
-  if (!session) return null
-  if (name.startsWith('run-') && !isAlive(session.state.createdBy)) return null
-  return name
-}
-
-async function takeLease(identity: DesktopIdentity, session: string): Promise<void> {
-  let told = false
-  await waitFor(
-    `the ${identity.appName} build to be free`,
-    () =>
-      withFileLock(join(SIM_HOME, `desktop-${identity.context}.lock`), async () => {
-        const holder = leaseHolder(identity)
-        if (holder && holder !== session) {
-          if (!told)
-            console.error(`Waiting for session ${holder} to finish with ${identity.appName}`)
-          told = true
-          return false
-        }
-        mkdirSync(SIM_HOME, { recursive: true })
-        writeFileSync(leaseFile(identity), session)
-        return true
-      }),
-    { timeoutMs: 30 * 60_000, intervalMs: 5000 },
-  )
-}
-
-/**
- * Quits the build and removes its Finder folder when no session holds it,
- * which `prune --all` runs, and returns the app's name when it did either.
+ * Quits the build and removes its Finder folder when no session, run or
+ * install holds it, which `prune --all` runs, and returns the app's name
+ * when it did either.
  */
 export async function release(): Promise<string[]> {
   if (process.platform !== 'darwin') return []
   const identity = desktopIdentity()
-  if (!existsSync(identity.appPath) || leaseHolder(identity)) return []
+  if (!existsSync(identity.appPath) || leaseHolder(identity.context)) return []
+  if (desktopHold(identity.context)) return []
   const running = appPids(identity).length > 0
   await quitApp(identity)
   const registered = runAgent(identity, ['list']).domains?.includes(identity.domainId) ?? false
   removeDomain(identity)
-  rmSync(leaseFile(identity), { force: true })
+  releaseLease(identity.context)
   return running || registered ? [identity.appName] : []
 }
 
@@ -311,6 +271,13 @@ export class DesktopDevice extends CliDevice {
   override readonly kind = 'desktop' as const
   readonly identity = desktopIdentity()
 
+  constructor(...args: ConstructorParameters<typeof CliDevice>) {
+    super(...args)
+    // Every command that acts on the Finder folder creates the device first,
+    // so this covers `device download` and `device finder` as well as a run.
+    allowDatalessDownloads()
+  }
+
   /** What the app is launched with. The app hands it on to the daemon it starts. */
   private launchEnv(): Record<string, string> {
     return {
@@ -328,7 +295,7 @@ export class DesktopDevice extends CliDevice {
   override async start(): Promise<void> {
     const unavailable = desktopUnavailable(this.identity)
     if (unavailable) throw new Error(unavailable)
-    await takeLease(this.identity, this.session.name)
+    await takeLease(this.identity.context, this.identity.appName, this.session.name)
     mkdirSync(this.paths.dataDir, { recursive: true })
     if (!this.signedOut && !existsSync(this.paths.secretsPath)) await this.mustCli('connect')
     await quitApp(this.identity)
@@ -382,7 +349,7 @@ export class DesktopDevice extends CliDevice {
    * while another session holds the lease would stop that session's device.
    */
   private holdsLease(): boolean {
-    return leaseHolder(this.identity) === this.session.name
+    return leaseHolder(this.identity.context) === this.session.name
   }
 
   override async stop(): Promise<void> {
@@ -415,7 +382,7 @@ export class DesktopDevice extends CliDevice {
         await this.stop().catch(() => {})
         removeDomain(this.identity)
       } finally {
-        rmSync(leaseFile(this.identity), { force: true })
+        releaseLease(this.identity.context)
       }
     }
     await this.session.update((s) => {

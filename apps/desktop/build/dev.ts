@@ -8,6 +8,7 @@
  * restart.
  */
 
+import { desktopHold } from '@siastorage/sim/desktop-lock'
 import { $ } from 'bun'
 import { createServer } from 'vite'
 import viteConfig from '../electron.vite.config'
@@ -16,7 +17,8 @@ import { packageApp } from './package'
 
 const RENDERER_URL = 'http://localhost:5173'
 
-const env = loadEnv(process.argv[2] ?? process.env.SIA_CONTEXT ?? 'dev')
+const context = process.argv[2] ?? process.env.SIA_CONTEXT ?? 'dev'
+const env = loadEnv(context)
 
 /*
  * Vite serves the renderer directly, from the same config section the packaged
@@ -30,11 +32,14 @@ const env = loadEnv(process.argv[2] ?? process.env.SIA_CONTEXT ?? 'dev')
 const server = await createServer({ ...viteConfig.renderer, configFile: false })
 await server.listen()
 
+let launched = false
 const stop = () => {
   // The installed app keeps running otherwise, holding the tray with a dead
-  // renderer URL until something quits it.
-  void $`osascript -e ${`quit app "${env.appName}"`}`
-    .nothrow()
+  // renderer URL until something quits it. A stop while the install still
+  // waits its turn leaves the app alone, since another checkout's session or
+  // a run is using it.
+  const ours = launched || desktopHold(context)?.pid === process.pid
+  void (ours ? $`osascript -e ${`quit app "${env.appName}"`}`.nothrow() : Promise.resolve())
     .then(() => server.close())
     .then(() => process.exit(0))
 }
@@ -47,7 +52,8 @@ try {
   const launchEnv: Record<string, string> = { ELECTRON_RENDERER_URL: RENDERER_URL }
   if (process.env.SIA_DATA_DIR) launchEnv.SIA_DATA_DIR = process.env.SIA_DATA_DIR
 
-  await packageApp(env, launchEnv)
+  await packageApp(context, env, launchEnv)
+  launched = true
 
   console.log(`\nRenderer: ${RENDERER_URL}, reloading on save.`)
   console.log('Main process, preload and Swift changes need this restarted.')

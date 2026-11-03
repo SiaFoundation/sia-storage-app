@@ -32,6 +32,7 @@ import { join } from 'node:path'
 import { $ } from 'bun'
 import { buildAndroid, buildIosDevice, buildIosSim, findIosDeviceApp } from './build'
 import { type BuildTarget, getTargetPaths, needsRebuild, PROJECT_ROOT } from './buildCache'
+import { withBuildSlot } from '@siastorage/sim/machine'
 import { confirmRebuild } from './lib/confirm'
 import {
   type Device,
@@ -139,16 +140,20 @@ const [rebuildNeeded, reason] = release
 if (rebuildNeeded) {
   console.log(`🔨 Build needed: ${reason}`)
 
-  // Platform-specific build
-  if (platform === 'ios') {
-    if (isDevice) {
-      await buildIosDevice({ target, release })
+  // Builds in every checkout on this machine take turns, since one Xcode or
+  // Gradle build uses every core and a second beside it leaves booted
+  // phones waiting on memory.
+  await withBuildSlot(`${target} build`, async () => {
+    if (platform === 'ios') {
+      if (isDevice) {
+        await buildIosDevice({ target, release })
+      } else {
+        await buildIosSim({ target })
+      }
     } else {
-      await buildIosSim({ target })
+      await buildAndroid({ target, release })
     }
-  } else {
-    await buildAndroid({ target, release })
-  }
+  })
 
   console.log('✅ Build complete')
 } else {

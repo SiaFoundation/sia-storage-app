@@ -95,7 +95,8 @@ Booted phones share one memory budget across every checkout on the machine,
 that would take them past it waits, as does any phone while macOS reports
 memory pressure, and takes a pooled phone another session hands back in the
 meantime. The first phone boots whatever the budget, but waits like any other
-while macOS reports memory pressure.
+while macOS reports memory pressure. A waiting phone prints which sessions,
+from which checkouts, hold the booted phones.
 
 A desktop device is the installed test build of the desktop app, launched with
 the session's network and a library in its device directory, and with its daemon
@@ -104,9 +105,31 @@ File Provider extension needs `bun run desktop:package test` again. Its first st
 the build's Finder folder, and so everything macOS listed or downloaded for it,
 and handing the device back removes it again. The test build has one Finder
 folder per Mac, so one desktop device runs at a time across every checkout, and
-a second waits for the first. `SIM_DESKTOP_CONTEXT` launches another build
+a second waits for the first. A `bun sim run` holds the build from its first
+desktop scenario until the run ends, so another checkout's session, or an
+install, waits for the whole run rather than taking the app between two of its
+scenarios. `SIM_DESKTOP_CONTEXT` launches another build
 context, such as `dev`, which resets that build's Finder folder the same way.
 It refuses `prod` and `beta`, the builds people use.
+
+Installing a build with `desktop:package` or `desktop:dev` waits, once the
+build is signed, until no session in another checkout and no `sim run` holds
+that build, so an install never replaces the app under someone else's test. A
+session in the same checkout does not hold it up, since repackaging under one's
+own device is how the app's native code is changed, and the install says that
+session's device has to be started again. While an install runs, a desktop
+device refuses to start and names it, since what it would drive is then that
+checkout's build. `bun sim attest desktop` refuses the same way before it runs
+anything, and prints the checkout and commit the installed build came from.
+
+A desktop device turns on, for sim's own process, the downloading of files
+macOS has not fetched yet, and `attest desktop` does the same before it starts
+its run. A launchd job has that off unless its plist turns it on, and every
+process the job starts inherits it, so a shell opened by an app running as a
+background job has it off too. Opening a cloud-only file in the Finder folder
+from such a process fails at once with EDEADLK, before the extension is asked
+for it. The setting is per process
+and inherited by what that process starts.
 
 A desktop device is signed in from the command line before the app starts, so
 the app comes up with an account and no window. Added signed out, with
@@ -118,6 +141,27 @@ page in a browser. The test approves the request on the network instead.
 macOS syncs the test build's Finder folder only once it has been switched on
 under File Providers in System Settings, General, Login Items & Extensions.
 Until then the device stops at start and says so.
+
+### Sharing a machine
+
+Several checkouts can run sim and build at once on one machine. sim keeps
+what they share under `SIM_HOME`, `/tmp/sia-sim` by default, so every checkout sees the same holds
+whatever commit it is on. `bun sim status` prints, as well as this checkout's
+session, what the whole machine holds and waits for: the session or run
+holding the desktop test build and the checkout it was last installed from,
+the live session, the native builds running against `SIM_NATIVE_BUILDS`, the
+phone memory budget with the gigabytes booted phones take and the sessions
+holding them, and every sim command or build waiting on any of these, with what
+it waits behind. It works with no session too. Each command that waits prints
+once what it waits for and who holds it, and again only when that changes.
+
+Native builds take turns across every checkout on the machine:
+`mobile:dev:*` when it rebuilds, `mobile:test:native:*`, the `gradle:*`
+scripts, and the signed build in `desktop:package`, `desktop:dev` and
+`desktop:release`. One runs at a time, since one Xcode or Gradle build already
+uses every core, and a second beside it mostly adds the memory it holds, which
+booted phones then wait for. `SIM_NATIVE_BUILDS` allows more. A build that has
+to wait prints the build it waits behind and the checkout running it.
 
 ## Interactive use
 
@@ -330,7 +374,9 @@ run uploads its report and the sessions it kept, and the CLI-device run
 uploads them when it fails.
 
 `bun sim attest <ios|android|desktop>` runs that platform's suite on this
-checkout and posts the same status from the local run. It refuses unless the
+checkout and posts the same status from the local run. It finds the PR from the
+current branch, or takes it as `--pr <number>`, which a checkout on a detached
+HEAD needs. It refuses unless the
 tracked files have no uncommitted changes and local HEAD is the PR's head, and
 it posts nothing when the run is interrupted or skips a scenario. The release
 PR needs `sim/ios` and `sim/android` on its head commit, and `sim/desktop` when

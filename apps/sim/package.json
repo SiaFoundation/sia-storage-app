@@ -5,6 +5,10 @@
   "bin": {
     "sim": "src/cli.ts"
   },
+  "exports": {
+    "./machine": "./src/machine.ts",
+    "./desktop-lock": "./src/desktop-lock.ts"
+  },
   "scripts": {
     "sim": "bun src/cli.ts",
     "lint": "oxlint . && oxfmt --check .",

@@ -24,6 +24,7 @@
     "swr": "2.5.1"
   },
   "devDependencies": {
+    "@siastorage/sim": "workspace:*",
     "@tailwindcss/vite": "4.3.3",
     "@types/bun": "1.4.3",
     "@types/node": "24.19.2",

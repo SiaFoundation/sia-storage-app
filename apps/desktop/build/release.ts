@@ -23,6 +23,7 @@ import { APP_VERSION, build, releaseFileName, type BuildOptions, type BuildResul
 import { createDmg } from './dmg'
 import { type BuildEnv, readEnvValues, resolveEnv } from './env'
 import { developerIdIdentity } from './identity'
+import { withBuildSlot } from '@siastorage/sim/machine'
 import {
   assertGatekeeperAccepts,
   notarize,
@@ -69,16 +70,20 @@ export function assertTagMatchesPackage(tag: string, packageVersion: string): vo
 
 /**
  * Bundle, assemble, sign. electron-vite runs first because `build` copies its
- * output rather than building it.
+ * output rather than building it. The whole of it takes one of the machine's
+ * native build slots, which builds in every checkout share, so it queues
+ * behind an Xcode or Gradle build rather than running beside one.
  */
 export async function buildSigned(env: BuildEnv, options?: BuildOptions): Promise<BuildResult> {
-  console.log('Bundling…')
-  await $`bun run build`.cwd(root)
-  console.log('Assembling…')
-  const result = await build(env, options)
-  console.log('Signing…')
-  await sign(result, env)
-  return result
+  return withBuildSlot(`${env.appName} build`, async () => {
+    console.log('Bundling…')
+    await $`bun run build`.cwd(root)
+    console.log('Assembling…')
+    const result = await build(env, options)
+    console.log('Signing…')
+    await sign(result, env)
+    return result
+  })
 }
 
 export async function release(input: {

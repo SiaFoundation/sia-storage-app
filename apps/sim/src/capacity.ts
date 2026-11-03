@@ -9,11 +9,13 @@
  * so a simulator a person booted counts too, and a record a killed run left
  * behind cannot claim memory that is free.
  */
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { totalmem } from 'node:os'
 import { basename, join } from 'node:path'
 import * as simctl from './ios/simctl'
 import { withFileLock } from './lock'
-import { type PhoneKind, SIM_HOME } from './session'
+import { waitInLine } from './machine'
+import { type PhoneKind, SIM_HOME, Session, sessionDir } from './session'
 
 /**
  * What each booted phone is budgeted at, in GB. An emulator's covers the 4 GB
@@ -62,6 +64,13 @@ function pressureLevel(): number {
   return Number(out.stdout.toString().trim()) || 1
 }
 
+function usedGb(booted: Record<PhoneKind, number>): number {
+  return (Object.keys(booted) as PhoneKind[]).reduce(
+    (sum, k) => sum + booted[k] * PHONE_MEMORY_GB[k],
+    0,
+  )
+}
+
 /**
  * Why one more phone of `kind` cannot boot, or null when it can. The first
  * phone boots whatever the budget, so a machine whose budget is smaller than
@@ -74,11 +83,73 @@ export function refusal(
   pressure: number,
 ): string | null {
   if (pressure > 1) return 'macOS reports memory pressure'
-  const kinds = Object.keys(booted) as PhoneKind[]
-  if (kinds.every((k) => booted[k] === 0)) return null
-  const used = kinds.reduce((sum, k) => sum + booted[k] * PHONE_MEMORY_GB[k], 0)
+  const used = usedGb(booted)
+  if (used === 0) return null
   if (used + PHONE_MEMORY_GB[kind] <= budgetGb) return null
   return `booted phones hold about ${used.toFixed(1)} GB of the ${budgetGb.toFixed(1)} GB budget (SIM_PHONE_MEMORY_GB)`
+}
+
+/** Phones a session holds from a pool, in every checkout on this machine. */
+type PhoneLease = { kind: PhoneKind; target: string; session: string; checkout: string | null }
+
+/**
+ * Every phone a session holds, read from each checkout's pool, so a wait can
+ * say whose phones fill the budget. A lease names its session and counts only
+ * while that session's directory exists, as pool.ts reads it.
+ */
+export function phoneLeases(): PhoneLease[] {
+  if (!existsSync(SIM_HOME)) return []
+  const leases: PhoneLease[] = []
+  for (const dir of readdirSync(SIM_HOME)) {
+    const kind = /^(ios|android)-pool-/.exec(dir)?.[1] as PhoneKind | undefined
+    if (!kind) continue
+    for (const file of readdirSync(join(SIM_HOME, dir)).filter((f) => f.endsWith('.lease'))) {
+      try {
+        const session = readFileSync(join(SIM_HOME, dir, file), 'utf8').trim()
+        if (!existsSync(sessionDir(session))) continue
+        const checkout = Session.load(session)?.state.owner ?? null
+        leases.push({ kind, target: file.slice(0, -'.lease'.length), session, checkout })
+      } catch {
+        // A lease being written or removed as this reads it.
+      }
+    }
+  }
+  return leases
+}
+
+/** The sessions holding phones, as a waiter prints them: `session a (2 ios) from checkout b`. */
+export function describePhoneLeases(leases: PhoneLease[]): string {
+  const bySession = new Map<string, PhoneLease[]>()
+  for (const l of leases) bySession.set(l.session, [...(bySession.get(l.session) ?? []), l])
+  return [...bySession.entries()]
+    .map(([session, held]) => {
+      const counts = (['ios', 'android'] as const)
+        .map((k) => [k, held.filter((l) => l.kind === k).length] as const)
+        .filter(([, n]) => n > 0)
+        .map(([k, n]) => `${n} ${k}`)
+        .join(', ')
+      const checkout = held[0].checkout ? ` from checkout ${held[0].checkout}` : ''
+      return `session ${session} (${counts})${checkout}`
+    })
+    .join('; ')
+}
+
+async function bootedPhones(): Promise<Record<PhoneKind, number>> {
+  const booted = {} as Record<PhoneKind, number>
+  for (const k of Object.keys(countBooted) as PhoneKind[]) booted[k] = await countBooted[k]()
+  return booted
+}
+
+/** The budget, what booted phones hold of it, and who holds them, as `sim status` shows it. */
+export async function phoneMemory() {
+  const booted = await bootedPhones()
+  return {
+    budgetGb: Number(phoneMemoryBudgetGb().toFixed(1)),
+    usedGb: Number(usedGb(booted).toFixed(1)),
+    booted,
+    memoryPressure: pressureLevel() > 1,
+    heldBy: phoneLeases().map(({ kind, session, checkout }) => ({ kind, session, checkout })),
+  }
 }
 
 /**
@@ -94,8 +165,6 @@ export async function withPhoneRoom<T>(
   kind: PhoneKind,
   attempt: (room: boolean) => Promise<T | null>,
 ): Promise<T> {
-  const deadline = Date.now() + WAIT_MS
-  let told = false
   // Any SIGINT listener turns off the default exit on Ctrl-C. Under `sim run`
   // the runner listens too and tears its devices down, and this one stops the
   // wait, which can last half an hour, rather than leaving it until the
@@ -103,42 +172,38 @@ export async function withPhoneRoom<T>(
   // `up` or `device add` starting one phone or several, the command exits once
   // the lock is released.
   const othersListen = process.listeners('SIGINT').some((l) => !roomListeners.has(l))
-  let interrupted = false
-  const onInterrupt = () => {
-    interrupted = true
-  }
+  const interrupted = new AbortController()
+  const onInterrupt = () => interrupted.abort()
   roomListeners.add(onInterrupt)
   process.once('SIGINT', onInterrupt)
   try {
-    return await waitForRoom()
+    return await waitInLine<T>({
+      waitsFor: `room to boot a${kind === 'ios' ? 'n' : ''} ${kind} phone`,
+      what: `boot a${kind === 'ios' ? 'n' : ''} ${kind} phone`,
+      timeoutMs: WAIT_MS,
+      intervalMs: 5000,
+      signal: interrupted.signal,
+      attempt: () =>
+        withFileLock(
+          LOCK,
+          async () => {
+            const reason = refusal(
+              kind,
+              await bootedPhones(),
+              phoneMemoryBudgetGb(),
+              pressureLevel(),
+            )
+            const got = await attempt(reason === null)
+            if (got !== null) return { got: got as T }
+            const why = reason ?? 'no phone came free'
+            const holders = describePhoneLeases(phoneLeases())
+            return { blockedBy: holders ? `${why}, held by ${holders}` : why }
+          },
+          { timeoutMs: WAIT_MS },
+        ),
+    })
   } finally {
     process.off('SIGINT', onInterrupt)
-    if (interrupted && !othersListen) process.exit(130)
-  }
-
-  async function waitForRoom(): Promise<T> {
-    for (;;) {
-      const { got, reason } = await withFileLock(
-        LOCK,
-        async () => {
-          const booted = {} as Record<PhoneKind, number>
-          for (const k of Object.keys(countBooted) as PhoneKind[])
-            booted[k] = await countBooted[k]()
-          const reason = refusal(kind, booted, phoneMemoryBudgetGb(), pressureLevel())
-          return { got: await attempt(reason === null), reason }
-        },
-        { timeoutMs: WAIT_MS },
-      )
-      if (got !== null) return got
-      if (Date.now() >= deadline) {
-        throw new Error(
-          `No room to boot a ${kind} phone after ${WAIT_MS / 60_000} minutes: ${reason}`,
-        )
-      }
-      if (!told) console.error(`Waiting to boot a ${kind} phone: ${reason}`)
-      told = true
-      for (let waited = 0; waited < 5000 && !interrupted; waited += 250) await Bun.sleep(250)
-      if (interrupted) throw new Error(`Stopped waiting to boot a ${kind} phone`)
-    }
+    if (interrupted.signal.aborted && !othersListen) process.exit(130)
   }
 }
