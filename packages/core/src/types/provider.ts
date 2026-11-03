@@ -62,6 +62,11 @@ export type ProviderItem = {
   /** Always 0 for a directory. */
   size: number
   createdAt: number
+  /**
+   * The edit time, except that a cloud-only file whose thumbnail is on this
+   * device reports it one second later, which is what makes Finder ask for a
+   * thumbnail it failed to get before.
+   */
   modifiedAt: number
   /** Changes when and only when the bytes change; a fixed value makes the OS serve a stale copy forever. */
   contentVersion: string
@@ -135,6 +140,16 @@ export type ProviderRangeResult = {
   offset: number
   bytes: number
 }
+
+/**
+ * A file's thumbnail for a file browser to draw in place of its icon. `none`
+ * means the file can never have one, such as a text file, and a shell may
+ * cache that answer until the file's content changes. A file that may get one
+ * later is answered with an error instead, so the shell asks again.
+ */
+export type ProviderThumbnail =
+  | { kind: 'image'; mimeType: string; /** The image bytes, base64. */ data: string }
+  | { kind: 'none' }
 
 /**
  * What the shell and the daemon agree on before any other call. A shell built

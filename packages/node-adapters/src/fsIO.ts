@@ -168,6 +168,10 @@ export function createNodeFsIO(filesDir: string): FsIOAdapter {
       return { uri: target, size: buf.byteLength }
     },
 
+    async readFile(file) {
+      return new Uint8Array(await fs.readFile(filePath(file.id, file.type)))
+    },
+
     async renameToType(file, newType) {
       const oldPath = filePath(file.id, file.type)
       const newPath = filePath(file.id, newType)

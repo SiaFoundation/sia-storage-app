@@ -100,6 +100,9 @@ export function createFsAdapter(params: { tempDir: string }) {
       nodeFs.writeFileSync(fp, buf)
       return { uri: `file://${fp}`, size: buf.byteLength }
     },
+    async readFile(file) {
+      return new Uint8Array(nodeFs.readFileSync(fsFilePath(file.id, file.type)))
+    },
     async renameToType(file, newType) {
       const oldFp = fsFilePath(file.id, file.type)
       const newFp = fsFilePath(file.id, newType)

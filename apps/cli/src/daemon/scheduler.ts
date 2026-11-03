@@ -1,6 +1,7 @@
 import {
   DB_OPTIMIZE_INTERVAL,
   FS_EVICTION_FREQUENCY,
+  PROVIDER_THUMBNAIL_RETRY_INTERVAL,
   PRUNE_SLABS_INTERVAL,
   SHARE_LINKS_INTERVAL,
   SYNC_EVENTS_INTERVAL,
@@ -56,6 +57,13 @@ export function initializeScheduler(app: CliApp): { scheduler: ServiceScheduler 
       worker: async (signal: AbortSignal) => {
         await thumbnailScanner.runScan(signal)
       },
+    },
+    {
+      // Finder shows a plain icon for a file whose thumbnail failed to
+      // download, and asks again only once a retry lands it.
+      name: 'providerThumbnails',
+      interval: PROVIDER_THUMBNAIL_RETRY_INTERVAL,
+      worker: whenConnected((signal) => app.service.provider.retryThumbnails(signal)),
     },
     {
       name: 'dbOptimize',

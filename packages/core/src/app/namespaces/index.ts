@@ -50,6 +50,10 @@ export interface AppServiceAdapters {
   handoffDir?: string
   /** Lowered by tests, which cannot afford to write a full page of rows. */
   maxPageSize?: number
+  /** Lowered by tests, which cannot afford to wait out a missing thumbnail. */
+  thumbnailWaitMs?: number
+  /** Zero in tests, so every `retryThumbnails` pass retries every thumbnail. */
+  thumbnailRetryBackoffMs?: number
   /** Reads how much memory the device can spare. Left out, transfers get a fixed budget. */
   readMemory?: MemoryReader
 }
@@ -266,6 +270,8 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       fsIO: adapters.fsIO,
       handoffDir: adapters.handoffDir,
       maxPageSize: adapters.maxPageSize,
+      thumbnailWaitMs: adapters.thumbnailWaitMs,
+      thumbnailRetryBackoffMs: adapters.thumbnailRetryBackoffMs,
       getSdk: () => sdkRef,
       downloadObject: adapters.downloadObject,
       transferBudget,

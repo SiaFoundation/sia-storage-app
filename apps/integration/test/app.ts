@@ -118,6 +118,10 @@ export interface TestAppOptions {
   handoffDir?: string
   /** Lowered so a paging test does not have to write 500 rows. */
   maxPageSize?: number
+  /** Lowered so a test of a thumbnail that never arrives does not wait out the default. */
+  thumbnailWaitMs?: number
+  /** Zero so a test can run retry passes back to back. */
+  thumbnailRetryBackoffMs?: number
   fsIO?: Partial<FsIOAdapter>
   thumbnail?: Partial<ThumbnailAdapter>
   crypto?: { sha256: (data: ArrayBuffer) => Promise<string> }
@@ -289,6 +293,8 @@ export function createTestApp(
     db,
     handoffDir: options?.handoffDir,
     maxPageSize: options?.maxPageSize,
+    thumbnailWaitMs: options?.thumbnailWaitMs,
+    thumbnailRetryBackoffMs: options?.thumbnailRetryBackoffMs,
     readMemory: options?.readMemory,
     storage,
     secrets,

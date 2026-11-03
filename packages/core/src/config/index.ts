@@ -162,6 +162,8 @@ export const IMPORT_IDLE_SEAL_MS = minutesInMs(3) // 3 minutes
 export const IMPORTS_CACHE_COALESCE_MS = secondsInMs(1) // 1 second
 // Thumbnail scanner interval.
 export const THUMBNAIL_SCANNER_INTERVAL = secondsInMs(5) // 5 seconds
+// How often a File Provider host retries thumbnail downloads Finder failed to get.
+export const PROVIDER_THUMBNAIL_RETRY_INTERVAL = secondsInMs(30)
 // Maximum number of bytes to retain in the local file system before evicting.
 export const FS_MAX_BYTES = 4_000_000_000 // 4 GB
 // File system orphaned file cleanup frequency.

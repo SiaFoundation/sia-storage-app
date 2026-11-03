@@ -75,6 +75,14 @@ describe('writeFile', () => {
   })
 })
 
+describe('readFile', () => {
+  it('returns the bytes of a managed file', async () => {
+    fs.writeFileSync(path.join(filesDir, 'abc123.webp'), 'thumb')
+    const bytes = await fsIO.readFile!({ id: 'abc123', type: 'image/webp' })
+    expect(Buffer.from(bytes).toString()).toBe('thumb')
+  })
+})
+
 describe('list', () => {
   it('returns filenames in directory', async () => {
     fs.writeFileSync(path.join(filesDir, 'a.jpg'), '')
