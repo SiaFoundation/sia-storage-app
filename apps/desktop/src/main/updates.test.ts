@@ -4,9 +4,9 @@ import { EventEmitter } from 'node:events'
 /*
  * The updater's states against a stand-in for Electron's autoUpdater, which
  * only emits what the test tells it to. The module keeps its state between
- * tests, so they run in order: a stalled check, a staged update, a background
- * check that leaves it alone, a failed newer download, then installs that
- * fail, stall, and go through.
+ * tests, so they run in order: a stalled check, a staged update, a newer one
+ * downloading behind it and a Restart during that download, the newer one
+ * staged, an install that fails, a newer download that fails, and the quit.
  *
  * The package's test script runs this file in a bun process of its own. Bun
  * shares `mock.module` across the files of one run, and once another file's
@@ -122,6 +122,7 @@ describe('the updater', () => {
     await checkForUpdates(false)
     expect(updateState()).toEqual({ status: 'downloading', version: '1.1.0' })
     expect(updater.setFeedURL).toHaveBeenCalledTimes(1)
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1)
 
     updater.emit('update-downloaded')
 
@@ -131,46 +132,87 @@ describe('the updater', () => {
     ])
   })
 
-  it('leaves a staged update alone on a background check, so Restart stays offered', async () => {
+  it('downloads a newer release on a background check, offering Restart for the staged one meanwhile', async () => {
     respond = feedOffering('1.2.0')
-    fetched.mockClear()
 
     await checkForUpdates(false)
 
-    expect(fetched).not.toHaveBeenCalled()
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(2)
     expect(updateState()).toEqual({ status: 'ready', version: '1.1.0' })
+    // The same feed URL, so Squirrel keeps the updater that staged 1.1.0 and
+    // with it the staged bundle.
+    expect(updater.setFeedURL).toHaveBeenCalledTimes(1)
+    const [[{ url }]] = updater.setFeedURL.mock.calls as unknown as [[{ url: string }]]
+    expect(await (await fetch(url)).json()).toEqual({
+      url: 'https://example.test/Sia-Storage-Beta-1.2.0-arm64.zip',
+      name: '1.2.0',
+    })
   })
 
-  it('keeps the staged update, and says so, when a newer download the user asked for fails', async () => {
-    respond = feedOffering('1.2.0')
-    await checkForUpdates(true)
-    expect(updateState()).toEqual({ status: 'downloading', version: '1.2.0' })
+  it('hands a Restart clicked during that download to Squirrel at once, and lets it be tried again when it stalls', async () => {
+    jest.useFakeTimers()
+    notifications[0]!.click!()
+    await settle()
+    expect(calls).toEqual(['beginQuit', 'destroyAllWindows', 'quitAndInstall'])
     showMessageBox.mockClear()
 
-    updater.emit('error', new Error('connection reset'))
+    // Squirrel's error does not say whether the install or the download
+    // failed. The download goes on to finish in the next test.
+    updater.emit('error', new Error('install or download'))
+    expect(calls).toEqual(['beginQuit', 'destroyAllWindows', 'quitAndInstall'])
+    jest.advanceTimersByTime(15_000)
+    jest.useRealTimers()
 
-    expect(updateState()).toEqual({ status: 'ready', version: '1.1.0' })
+    expect(calls).toEqual(['beginQuit', 'destroyAllWindows', 'quitAndInstall', 'cancelQuit'])
     expect(showMessageBox).toHaveBeenCalledTimes(1)
+    expect(updateState()).toEqual({ status: 'ready', version: '1.1.0' })
   })
 
-  it('restarts from the notification, handing over to Squirrel only once the windows are gone, and undoes it when the install fails', async () => {
-    notifications[0]!.click!()
-    expect(calls).toEqual(['beginQuit', 'destroyAllWindows'])
+  it('offers the newer release, and announces it once, when its download is staged', async () => {
+    updater.emit('update-downloaded')
+
+    expect(updateState()).toEqual({ status: 'ready', version: '1.2.0' })
+    expect(notifications.map((n) => n.body)).toEqual([
+      'Restart Sia Storage Beta to install version 1.1.0.',
+      'Restart Sia Storage Beta to install version 1.2.0.',
+    ])
+  })
+
+  it('undoes a Restart whose install fails, and says so', async () => {
+    calls.length = 0
+    showMessageBox.mockClear()
+    notifications[1]!.click!()
     await settle()
     expect(calls).toEqual(['beginQuit', 'destroyAllWindows', 'quitAndInstall'])
     fetched.mockClear()
     await checkForUpdates(true)
     expect(fetched).not.toHaveBeenCalled()
-    showMessageBox.mockClear()
 
     updater.emit('error', new Error('read-only volume'))
 
     expect(calls).toEqual(['beginQuit', 'destroyAllWindows', 'quitAndInstall', 'cancelQuit'])
-    expect(updateState()).toEqual({ status: 'ready', version: '1.1.0' })
+    expect(updateState()).toEqual({ status: 'ready', version: '1.2.0' })
     expect(showMessageBox).toHaveBeenCalledTimes(1)
   })
 
-  it('gives up on an install Squirrel never quits for, says so, and lets Restart try again', async () => {
+  it('keeps the staged update, says so, and stops checking when a newer download the user asked for fails', async () => {
+    respond = feedOffering('1.3.0')
+    await checkForUpdates(true)
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(3)
+    showMessageBox.mockClear()
+
+    updater.emit('error', new Error('connection reset'))
+
+    expect(updateState()).toEqual({ status: 'ready', version: '1.2.0' })
+    expect(showMessageBox).toHaveBeenCalledTimes(1)
+
+    // Squirrel's next check would delete the staged 1.2.0 before downloading.
+    fetched.mockClear()
+    await checkForUpdates(false)
+    expect(fetched).not.toHaveBeenCalled()
+  })
+
+  it('leaves the install alone once Squirrel has asked the app to quit', async () => {
     calls.length = 0
     showMessageBox.mockClear()
     jest.useFakeTimers()
@@ -178,28 +220,12 @@ describe('the updater', () => {
     await settle()
     expect(calls).toEqual(['beginQuit', 'destroyAllWindows', 'quitAndInstall'])
 
-    jest.advanceTimersByTime(15_000)
-
-    expect(calls).toEqual(['beginQuit', 'destroyAllWindows', 'quitAndInstall', 'cancelQuit'])
-    expect(showMessageBox).toHaveBeenCalledTimes(1)
-    expect(updateState()).toEqual({ status: 'ready', version: '1.1.0' })
-
-    calls.length = 0
-    installUpdate()
-    await settle()
-    expect(calls).toEqual(['beginQuit', 'destroyAllWindows', 'quitAndInstall'])
-  })
-
-  it('leaves the install alone once Squirrel has asked the app to quit', () => {
-    // The install the previous test started again is still on its timer.
-    calls.length = 0
-    showMessageBox.mockClear()
-
     appEvents.emit('before-quit')
+    updater.emit('error', new Error('terminated'))
     jest.advanceTimersByTime(15_000)
     jest.useRealTimers()
 
-    expect(calls).toEqual([])
+    expect(calls).toEqual(['beginQuit', 'destroyAllWindows', 'quitAndInstall'])
     expect(showMessageBox).not.toHaveBeenCalled()
   })
 })

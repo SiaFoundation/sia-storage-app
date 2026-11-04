@@ -8,13 +8,23 @@
  * this one's designated requirement, and stages it. Once it is staged the
  * tray and overflow menus, a card in the popover and the window, and a
  * notification say so, and Restart to Update closes the windows, quits, lets
- * Squirrel swap the bundle, and relaunches. A staged update the user never
- * restarts for is applied the next time the app starts.
+ * Squirrel swap the bundle, and relaunches. Quitting any other way installs
+ * the staged update too, without the relaunch.
+ *
+ * Checks go on while an update waits for its restart, so a release published
+ * in the meantime replaces it and one restart lands on the newest. Restart
+ * keeps offering the staged version until the newer one is staged in its
+ * place, and a Restart clicked during that download installs the staged one.
+ * Squirrel stages each download in a directory of its own and points its
+ * install request (`ShipItState.plist` in its caches directory) at the new
+ * bundle only once that bundle has passed its signature check, and ShipIt
+ * reads the request after the app exits, so it installs whichever bundle was
+ * complete last.
  *
  * Squirrel makes no version decision of its own. Its feed is a URL answering
  * 204 for no update or JSON naming a zip, and GitHub serves nothing of that
  * shape, so the choice is made here and its answer served to Squirrel from
- * 127.0.0.1 for the length of one download.
+ * 127.0.0.1.
  *
  * After the relaunch the previous build's daemon may still be running, and
  * startup replaces it (`Daemon.reconcile`).
@@ -73,11 +83,27 @@ export type UpdateState =
 let settings: NonNullable<DesktopConfig['updates']> | null = null
 let appName = 'Sia Storage'
 let state: UpdateState = { status: 'idle' }
-/** What a failed check or download goes back to, so a staged update is not forgotten. */
-let settled: UpdateState = { status: 'idle' }
+/** The version Squirrel has staged and will install when the app quits. */
+let staged: string | null = null
+/** A check or download in flight. While an update is staged it runs out of sight. */
+let work: Extract<UpdateState, { status: 'checking' | 'downloading' }> | null = null
+/**
+ * Every Squirrel check starts by deleting all its update directories unless
+ * its updater object holds a staged update, and that object stops holding one
+ * when a later download fails. A check after such a failure deletes the staged
+ * bundle while the install request still names it, and Restart then fails to
+ * install and relaunches the old version. So a failed download of a newer
+ * release clears this, and checking stops until a restart installs the staged
+ * update.
+ */
+let stagedSurvivesCheck = true
+/** The release the local feed offers Squirrel, until its download is staged. */
+let offered: AvailableUpdate | null = null
 let feedServer: Server | null = null
 let installing = false
 let installTimer: ReturnType<typeof setTimeout> | undefined
+/** Set once the app has begun to exit, after which an error has nothing left to undo. */
+let quitting = false
 /** Set while a check the user asked for downloads, so a failure is reported. */
 let reportDownloadFailure = false
 let announced: string | null = null
@@ -101,31 +127,56 @@ export function startUpdates(config: DesktopConfig, onChange: (state: UpdateStat
   changed = onChange
 
   autoUpdater.on('update-downloaded', () => {
-    closeFeed()
     reportDownloadFailure = false
-    if (state.status !== 'downloading') return
-    const { version } = state
-    log.info('updates', 'ready', { version })
-    settle({ status: 'ready', version })
-    announce(version)
+    // Read from the feed's offer rather than from `work`, which an error
+    // during Restart clears even though the download may still finish.
+    const version = offered?.version
+    if (!version) return
+    log.info('updates', 'ready', { version, replaced: staged })
+    offered = null
+    if (work?.status === 'downloading') work = null
+    staged = version
+    stagedSurvivesCheck = true
+    show()
+    // A download that finishes after Restart was clicked is installed by
+    // the same quit, so there is nothing to announce.
+    if (!installing) announce(version)
   })
+  // Squirrel's answer when the zip server says it already has the zip. Only a
+  // download that failed is repeated here, and Squirrel forgets the zip's
+  // ETag when one fails, so this is not expected.
   autoUpdater.on('update-not-available', () => {
-    closeFeed()
-    set(settled)
+    work = null
+    show()
   })
   autoUpdater.on('error', (error) => {
-    closeFeed()
-    log.error('updates', installing ? 'install_failed' : 'download_failed', { error })
-    if (reportDownloadFailure && !installing) {
-      void report('Could not download the update', 'Check the connection and try again.')
+    if (quitting) return
+    // A Restart clicked during a download leaves both in flight, and the event
+    // does not say which failed. It is put down to the download. An install
+    // that failed as well is still caught by its timer, and a download that
+    // finishes after all is still staged.
+    if (work?.status === 'downloading') {
+      log.error('updates', 'download_failed', { version: work.version, error })
+      work = null
+      if (staged) stagedSurvivesCheck = false
+      if (reportDownloadFailure && !installing) {
+        void report('Could not download the update', 'Check the connection and try again.')
+      }
+      reportDownloadFailure = false
+    } else if (installing) {
+      log.error('updates', 'install_failed', { error })
+      abandonInstall()
+    } else {
+      log.error('updates', 'updater_failed', { error })
     }
-    reportDownloadFailure = false
-    if (installing) abandonInstall()
-    set(settled)
+    show()
   })
   // Squirrel asks the app to quit only after writing the request to install
   // and relaunch, so from here the quit decides when the process exits.
-  app.on('before-quit', () => clearTimeout(installTimer))
+  app.on('before-quit', () => {
+    quitting = true
+    clearTimeout(installTimer)
+  })
 
   setTimeout(() => void checkForUpdates(false), FIRST_CHECK_MS)
   setInterval(() => void checkForUpdates(false), CHECK_EVERY_MS)
@@ -136,18 +187,16 @@ export function updateState(): UpdateState {
 }
 
 /**
- * Looks for a newer release and starts its download. `manual` is a check the
- * user asked for, which reports its outcome when there is nothing to download.
+ * Looks for a release newer than the running one, or than the staged one if
+ * there is one, and starts its download. `manual` is a check the user asked
+ * for, which reports its outcome when there is nothing to download.
  */
 export async function checkForUpdates(manual: boolean): Promise<void> {
-  if (!settings || installing || state.status === 'checking' || state.status === 'downloading') {
-    return
-  }
-  // A download hides the staged update's Restart until it ends, so only a
-  // check the user asked for replaces a staged update with a newer one.
-  if (state.status === 'ready' && !manual) return
-  const current = state.status === 'ready' ? state.version : app.getVersion()
-  set({ status: 'checking' })
+  if (!settings || installing || work) return
+  if (staged && !stagedSurvivesCheck) return
+  const current = staged ?? app.getVersion()
+  work = { status: 'checking' }
+  show()
   let update: AvailableUpdate | null
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
@@ -159,41 +208,46 @@ export async function checkForUpdates(manual: boolean): Promise<void> {
     ])
   } catch (e) {
     log.error('updates', 'check_failed', { error: e as Error })
-    set(settled)
+    work = null
+    show()
     if (manual) await report('Could not check for updates', 'Check the connection and try again.')
     return
   } finally {
     clearTimeout(timer)
   }
   if (!update) {
-    set(settled)
+    work = null
+    show()
     if (manual) {
       await report(
-        settled.status === 'ready' ? 'An update is ready' : `${appName} is up to date`,
-        settled.status === 'ready'
-          ? `Restart ${appName} to install version ${settled.version}.`
+        staged ? 'An update is ready' : `${appName} is up to date`,
+        staged
+          ? `Restart ${appName} to install version ${staged}.`
           : `Version ${app.getVersion()} is the newest.`,
       )
     }
     return
   }
-  log.info('updates', 'downloading', { version: update.version })
-  set({ status: 'downloading', version: update.version })
+  log.info('updates', 'downloading', { version: update.version, staged })
+  work = { status: 'downloading', version: update.version }
+  show()
   reportDownloadFailure = manual
   try {
-    autoUpdater.setFeedURL({ url: await serveFeed(update) })
+    await offer(update)
     autoUpdater.checkForUpdates()
   } catch (e) {
-    closeFeed()
-    log.error('updates', 'download_failed', { error: e as Error })
-    set(settled)
+    log.error('updates', 'download_failed', { version: update.version, error: e as Error })
+    work = null
+    show()
     if (manual) await report('Could not download the update', 'Check the connection and try again.')
   }
 }
 
 /**
  * Quits and lets Squirrel swap the bundle and relaunch. Nothing to do until one
- * is staged.
+ * is staged. A download still running is left to finish or not: Squirrel
+ * installs the bundle its install request names when the app exits, which is
+ * the staged one unless the download completes first.
  *
  * quitAndInstall hands the app to Squirrel only once Electron's window list is
  * empty. Given open windows it closes them and waits for the list to empty,
@@ -209,13 +263,15 @@ export async function checkForUpdates(manual: boolean): Promise<void> {
  * app owns before the process exits.
  */
 export function installUpdate(): void {
-  if (state.status !== 'ready' || installing) return
-  const { version } = state
-  log.info('updates', 'installing', { version })
+  if (!staged || installing) return
+  log.info('updates', 'installing', {
+    version: staged,
+    downloading: work?.status === 'downloading' ? work.version : null,
+  })
   installing = true
   beginQuit()
   installTimer = setTimeout(() => {
-    log.error('updates', 'install_stalled', { version })
+    log.error('updates', 'install_stalled', { version: staged })
     abandonInstall()
   }, INSTALL_TIMEOUT_MS)
   void destroyAllWindows().then(() => {
@@ -287,26 +343,33 @@ function feedUrl(): string {
   return override && ['dev', 'test'].includes(buildVariant()) ? override : FEED
 }
 
-/** Serves Squirrel the one answer it needs, on a port of the system's choosing. */
-function serveFeed(update: AvailableUpdate): Promise<string> {
-  closeFeed()
-  const body = JSON.stringify({ url: update.url, name: update.version })
+/**
+ * Points Squirrel at a server answering with `update`, starting the server
+ * the first time. The server and its URL stay up for the life of the app
+ * because Electron builds a new Squirrel updater object on every `setFeedURL`,
+ * and a new one deletes every update directory at its first check, the staged
+ * update's included. Only the updater that staged an update keeps it.
+ */
+async function offer(update: AvailableUpdate): Promise<void> {
+  offered = update
+  if (feedServer) return
   const server = createServer((_request, response) => {
+    if (!offered) {
+      response.writeHead(204)
+      response.end()
+      return
+    }
     response.writeHead(200, { 'Content-Type': 'application/json' })
-    response.end(body)
+    response.end(JSON.stringify({ url: offered.url, name: offered.version }))
   })
-  feedServer = server
-  return new Promise((resolve, reject) => {
+  const url = await new Promise<string>((resolve, reject) => {
     server.once('error', reject)
     server.listen(0, '127.0.0.1', () => {
       resolve(`http://127.0.0.1:${(server.address() as AddressInfo).port}/`)
     })
   })
-}
-
-function closeFeed(): void {
-  feedServer?.close()
-  feedServer = null
+  feedServer = server
+  autoUpdater.setFeedURL({ url })
 }
 
 /** Once per version: a check every four hours would otherwise repeat it. */
@@ -333,12 +396,8 @@ async function report(message: string, detail: string): Promise<void> {
   await dialog.showMessageBox({ message, detail })
 }
 
-function settle(next: UpdateState): void {
-  settled = next
-  set(next)
-}
-
-function set(next: UpdateState): void {
-  state = next
+/** A staged update keeps Restart on offer while a newer one downloads. */
+function show(): void {
+  state = staged ? { status: 'ready', version: staged } : (work ?? { status: 'idle' })
   changed(state)
 }
