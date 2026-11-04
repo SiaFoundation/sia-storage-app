@@ -6,6 +6,7 @@
  * a longer form of the same status.
  */
 
+import './zodConfig'
 import { AppProvider } from '@siastorage/core/app'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
