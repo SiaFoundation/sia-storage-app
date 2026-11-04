@@ -12,6 +12,7 @@ import { Daemon } from './daemon'
 import { log } from './log'
 import { showMoreMenu } from './menu'
 import type { PlatformIntegration } from './platform'
+import { revealFile } from './reveal'
 import { call } from './rpc'
 import { takeShareRequest } from './share'
 import { isMockNetworkPage } from './testMode'
@@ -79,6 +80,15 @@ export function registerBridge(platform: PlatformIntegration, signOut: () => voi
   ipcMain.handle('open:mount', async () => {
     const path = platform.mountPath()
     if (path) await openPath(path)
+  })
+  ipcMain.handle('open:reveal', async (_event, fileId: unknown) => {
+    const mount = platform.mountPath()
+    if (!mount || typeof fileId !== 'string') return
+    // The page fires this and moves on, so a daemon that is down or restarting
+    // is logged here rather than left as a rejection nobody handles.
+    await revealFile(mount, fileId).catch((error: Error) =>
+      log.error('shell', 'reveal_failed', { fileId, error }),
+    )
   })
   ipcMain.handle('menu:more', () => {
     showMoreMenu(signOut)

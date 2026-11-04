@@ -7,6 +7,7 @@ export type {
   FileUpdate,
   ThumbSize,
   UpdatedAtWrite,
+  RecentFile,
   RestoredFile,
   TrashEntry,
 } from './files'

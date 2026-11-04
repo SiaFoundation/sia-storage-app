@@ -1,6 +1,6 @@
 import { cache, serialize } from 'swr/_internal'
 import type { AppService } from '../app/service'
-import { primeListRowCaches } from './library'
+import { primeListRowCaches, reloadList } from './library'
 import { swrFillableCacheBy } from './swr'
 
 // Cache key parity tests: the keys read here must match the ones the
@@ -79,5 +79,54 @@ describe('primeListRowCaches', () => {
     primeListRowCaches(app, [row('f1', 0, 1)], newer)
     primeListRowCaches(app, [row('f1', 0, 0)], older)
     expect(read(fsFileUri, 'f1')).toBe('/predicted/f1.bin')
+  })
+})
+
+describe('reloadList', () => {
+  // Each reload waits until the test releases it, so changes can arrive while one is running.
+  function slowReloads() {
+    const releases: Array<() => void> = []
+    const reload = jest.fn(() => new Promise<void>((resolve) => releases.push(resolve)))
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+    return { reload, releases, settle }
+  }
+
+  it('runs one reload at a time, and changes during it get exactly one more', async () => {
+    const app = {} as AppService
+    const { reload, releases, settle } = slowReloads()
+
+    reloadList(app, 'recent/30', 1, reload)
+    reloadList(app, 'recent/30', 2, reload)
+    reloadList(app, 'recent/30', 3, reload)
+    reloadList(app, 'recent/30', 4, reload)
+    expect(reload).toHaveBeenCalledTimes(1)
+
+    releases[0]()
+    await settle()
+    expect(reload).toHaveBeenCalledTimes(2)
+
+    releases[1]()
+    await settle()
+    expect(reload).toHaveBeenCalledTimes(2)
+  })
+
+  it('ignores a change no newer than the reload already running', async () => {
+    const app = {} as AppService
+    const { reload, releases, settle } = slowReloads()
+
+    reloadList(app, 'recent/30', 5, reload)
+    reloadList(app, 'recent/30', 5, reload)
+    releases[0]()
+    await settle()
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps a failed reload from stopping the next one', async () => {
+    const app = {} as AppService
+    const reload = jest.fn(() => Promise.reject(new Error('read failed')))
+    reloadList(app, 'recent/30', 1, reload)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    reloadList(app, 'recent/30', 2, reload)
+    expect(reload).toHaveBeenCalledTimes(2)
   })
 })

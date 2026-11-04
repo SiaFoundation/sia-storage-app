@@ -12,24 +12,12 @@ import { useApp } from '@siastorage/core/app'
 import { itemCount, restoredText, trashEntryDetail } from '@siastorage/core/lib/trashText'
 import { TRASH_PAGE, useTrashCount, useTrashEntries } from '@siastorage/core/stores'
 import type { RestoredFile, TrashEntry } from '@siastorage/core/types'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { PLAIN_BUTTON, SMALL_BUTTON } from './buttons'
 import { ROW, Section } from './Group'
 import { Folder, Trash } from './icons'
 import { useConfirm } from './useConfirm'
-
-/**
- * The time, moved on every minute. A window left open would otherwise keep
- * the countdown it drew when the list last changed.
- */
-function useNow(): number {
-  const [now, setNow] = useState(Date.now)
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 60_000)
-    return () => clearInterval(timer)
-  }, [])
-  return now
-}
+import { useNow } from './useNow'
 
 function EntryRow({
   entry,

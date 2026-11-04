@@ -371,6 +371,26 @@ bun sim device ui mac
 `device ui mac` lists both windows' elements and any open native menu or
 dialog.
 
+### The popover's activity tab
+
+- When: the tray popover's Activity tab, listing the newest files and whether
+  each is uploaded, Show in Finder, and the one-click share link with its options.
+- Code: files `apps/desktop/src/renderer/src/Activity.tsx`,
+  `apps/desktop/src/renderer/src/activityModel.ts`,
+  `apps/desktop/src/main/reveal.ts`, `apps/desktop/src/main/finderPath.ts`;
+  methods `files.recent`
+- Tests: scenarios `desktop/popover-activity`
+- Desktop, the tab and a link made from it:
+
+```sh
+bun sim device tray mac
+bun sim device tap mac --text Activity --window popover
+bun sim device read mac --id activity-file --window popover
+bun sim device read mac --id activity-status --window popover
+bun sim device tap mac --label "Copy a share link for report.txt" --window popover
+bun sim device read mac --id activity-share --window popover
+```
+
 ### Signing in on the Mac
 
 - When: the desktop app with no account: asking the indexer for a connection,

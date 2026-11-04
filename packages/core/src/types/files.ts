@@ -129,6 +129,29 @@ export type TrashEntry = {
   purgeAt: number
 }
 
+/**
+ * A file in the list of those most recently added, with what has happened to
+ * its bytes. The upload in flight, if any, is not here: it lives in the
+ * uploader's memory and changes many times a second, so a caller reads it
+ * from `uploads.getState` and lays it over this.
+ */
+export type RecentFile = {
+  id: string
+  name: string
+  type: string
+  size: number
+  /** When this device first had the file, ms since the epoch. */
+  addedAt: number
+  /** The folder it is in, or null for the top of the library. */
+  folder: string | null
+  /** An object for it exists on the current indexer. */
+  uploaded: boolean
+  /** Its bytes are in this device's managed storage. */
+  local: boolean
+  /** Set when the file can no longer be uploaded or downloaded. */
+  lost: boolean
+}
+
 /** A file brought back from the trash, under the name it came back with. */
 export type RestoredFile = {
   /** The newest restored version. */

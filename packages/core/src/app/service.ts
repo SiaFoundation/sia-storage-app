@@ -43,6 +43,7 @@ import type {
   FileRecordRow,
   FileUpdate,
   ThumbSize,
+  RecentFile,
   RestoredFile,
   TrashEntry,
   UpdatedAtWrite,
@@ -343,6 +344,11 @@ export interface AppService {
     trashEntries(opts?: { limit?: number; offset?: number }): Promise<TrashEntry[]>
     /** How many entries the trash holds. */
     trashCount(): Promise<number>
+    /**
+     * The `limit` files added to this device most recently, newest first, with
+     * uploaded meaning an object on `indexerURL`.
+     */
+    recent(indexerURL: string, limit: number): Promise<RecentFile[]>
     /**
      * Takes these entries out of the trash with every version they hold.
      * One whose name a live file has taken since comes back renamed, as
