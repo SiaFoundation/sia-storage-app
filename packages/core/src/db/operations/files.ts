@@ -1758,3 +1758,49 @@ export async function finalizeImportFile(
     return { outcome: 'added' }
   })
 }
+
+/** One row of `queryRecentFiles`. The flags are SQLite booleans, 0 or 1. */
+export type RecentFileRow = {
+  id: string
+  name: string
+  type: string
+  size: number
+  addedAt: number
+  directoryPath: string | null
+  uploaded: number
+  local: number
+  lostReason: string | null
+}
+
+/**
+ * The newest files added to this library, the current version of each,
+ * newest first. `addedAt` is when the row reached this device, so a file
+ * synced down from another device counts as added when it arrived.
+ *
+ * Uploaded means an object on `indexerURL`. An object left on an earlier
+ * indexer is not a copy the current account can read.
+ */
+export async function queryRecentFiles(
+  db: DatabaseAdapter,
+  indexerURL: string,
+  limit: number,
+): Promise<RecentFileRow[]> {
+  // SQLite reads a negative LIMIT as no limit, so a bad count would read the
+  // whole library rather than fail.
+  if (!Number.isSafeInteger(limit) || limit < 0) {
+    throw new Error(`The recent files limit must be a whole number, 0 or more, not ${limit}`)
+  }
+  return db.getAllAsync<RecentFileRow>(
+    `SELECT f.id, f.name, f.type, f.size, f.addedAt, f.lostReason,
+            d.path AS directoryPath,
+            EXISTS (SELECT 1 FROM objects o WHERE o.fileId = f.id AND o.indexerURL = ?) AS uploaded,
+            EXISTS (SELECT 1 FROM fs WHERE fs.fileId = f.id) AS local
+     FROM files f INDEXED BY idx_files_current_addedAt
+     LEFT JOIN directories d ON d.id = f.directoryId
+     WHERE ${buildRecordFilter('f')}
+     ORDER BY f.addedAt DESC, f.id DESC
+     LIMIT ?`,
+    indexerURL,
+    limit,
+  )
+}

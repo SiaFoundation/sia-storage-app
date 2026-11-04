@@ -56,6 +56,8 @@ const api = {
   appInfo: () => ipcRenderer.invoke('app:info'),
 
   openMount: () => ipcRenderer.invoke('open:mount'),
+  /** Selects a library file in its Finder window, by id. */
+  revealFile: (fileId: string) => ipcRenderer.invoke('open:reveal', fileId),
   /** Opens the menu holding the actions the footer has no room for. */
   showMoreMenu: () => ipcRenderer.invoke('menu:more'),
   quit: () => ipcRenderer.invoke('app:quit'),

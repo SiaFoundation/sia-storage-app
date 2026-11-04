@@ -20,6 +20,7 @@ import {
   recalculateCurrentForGroups,
   queryFileStats,
   queryLostFiles,
+  queryRecentFiles,
   queryUnuploadedFileBytes,
   readFile,
   readFileWithObjects,
@@ -986,5 +987,66 @@ describe('queryFileByObjectId', () => {
   it('returns null when object not found', async () => {
     const row = await queryFileByObjectId(db(), 'nonexistent', 'https://indexer.example.com')
     expect(row).toBeNull()
+  })
+})
+
+describe('queryRecentFiles', () => {
+  it('lists current files newest-added first, leaving out trashed, deleted and older versions', async () => {
+    await insertFile(db(), makeFileRecord('old', { addedAt: 1000 }))
+    await insertFile(db(), makeFileRecord('new', { addedAt: 3000 }))
+    await insertFile(db(), makeFileRecord('trashed', { addedAt: 4000, trashedAt: 4500 }))
+    await insertFile(db(), makeFileRecord('deleted', { addedAt: 5000, deletedAt: 5500 }))
+    await insertFile(db(), makeFileRecord('v1', { name: 'doc.txt', addedAt: 6000, updatedAt: 1 }))
+    await insertFile(db(), makeFileRecord('v2', { name: 'doc.txt', addedAt: 2000, updatedAt: 2 }))
+    await insertFile(db(), makeFileRecord('thumb', { kind: 'thumb', addedAt: 7000 }))
+
+    const rows = await queryRecentFiles(db(), INDEXER_URL, 10)
+    expect(rows.map((r) => r.id)).toEqual(['new', 'v2', 'old'])
+  })
+
+  it('stops at the limit', async () => {
+    for (let i = 0; i < 5; i++) await insertFile(db(), makeFileRecord(`f${i}`, { addedAt: i }))
+    const rows = await queryRecentFiles(db(), INDEXER_URL, 2)
+    expect(rows.map((r) => r.id)).toEqual(['f4', 'f3'])
+  })
+
+  it('refuses a limit that is negative or not a whole number', async () => {
+    await expect(queryRecentFiles(db(), INDEXER_URL, -1)).rejects.toThrow('limit')
+    await expect(queryRecentFiles(db(), INDEXER_URL, 2.5)).rejects.toThrow('limit')
+  })
+
+  it('takes a limit past the 32-bit range as given', async () => {
+    for (let i = 0; i < 3; i++) await insertFile(db(), makeFileRecord(`f${i}`, { addedAt: i }))
+    const rows = await queryRecentFiles(db(), INDEXER_URL, 2 ** 31)
+    expect(rows).toHaveLength(3)
+  })
+
+  it('counts a file as uploaded only for an object on the indexer asked about', async () => {
+    await insertFile(db(), makeFileRecord('here', { addedAt: 2 }))
+    await insertFile(db(), makeFileRecord('elsewhere', { addedAt: 1 }))
+    await insertObject(db(), makeLocalObject('here'))
+    await insertObject(
+      db(),
+      makeLocalObject('elsewhere', { indexerURL: 'https://other.example.com' }),
+    )
+
+    const rows = await queryRecentFiles(db(), INDEXER_URL, 10)
+    expect(rows.map((r) => [r.id, r.uploaded])).toEqual([
+      ['here', 1],
+      ['elsewhere', 0],
+    ])
+  })
+
+  it('gives the folder path and whether the bytes are on this device', async () => {
+    const dir = await insertDirectory(db(), 'Photos')
+    await insertFile(db(), makeFileRecord('filed', { addedAt: 2 }), { directoryId: dir.id })
+    await insertFile(db(), makeFileRecord('unfiled', { addedAt: 1 }))
+    await upsertFsMeta(db(), { fileId: 'filed', size: 100, addedAt: 1, usedAt: 1 })
+
+    const rows = await queryRecentFiles(db(), INDEXER_URL, 10)
+    expect(rows.map((r) => [r.id, r.directoryPath, r.local])).toEqual([
+      ['filed', 'Photos', 1],
+      ['unfiled', null, 0],
+    ])
   })
 })

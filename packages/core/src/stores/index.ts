@@ -7,7 +7,7 @@ export {
   useDirectoryForFile,
 } from './directories'
 export { type DownloadCounts, useDownloadCounts, useDownloadEntry } from './downloads'
-export { useFileCountAll, useFileDetails, useFileStatsAll } from './files'
+export { useFileCountAll, useFileDetails, useFileStatsAll, useRecentFiles } from './files'
 export { useHost, useHosts } from './hosts'
 export {
   useCurrentInitStep,

@@ -1,5 +1,6 @@
 import useSWR from 'swr'
 import { useApp } from '../app/context'
+import { reloadList, useOnLibraryListChange } from './library'
 
 /** Fetches the full details for a single file by its ID. */
 export function useFileDetails(id: string) {
@@ -35,4 +36,23 @@ export function useFileStatsAll() {
       includeThumbnails: false,
     }),
   )
+}
+
+/**
+ * The files added most recently, newest first. Reloaded on every library
+ * change, not only when the library cache is cleared, because some writes
+ * bump only the library version: `files.update`, such as the uploader marking
+ * an empty file lost, and a folder rename or move.
+ */
+export function useRecentFiles(limit: number) {
+  const app = useApp()
+  const swr = useSWR(
+    app.caches.library.key('recent', String(limit)),
+    async () => app.files.recent(await app.settings.getIndexerURL(), limit),
+    { keepPreviousData: true },
+  )
+  useOnLibraryListChange((version) =>
+    reloadList(app, `recent/${limit}`, version, () => swr.mutate()),
+  )
+  return swr
 }

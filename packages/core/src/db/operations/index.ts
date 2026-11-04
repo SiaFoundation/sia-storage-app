@@ -125,6 +125,7 @@ export {
   queryLocalOnlyFiles,
   queryLostFileCount,
   queryLostFiles,
+  queryRecentFiles,
   queryLostFileStats,
   queryUnuploadedFileCount,
   queryUnuploadedFileBytes,

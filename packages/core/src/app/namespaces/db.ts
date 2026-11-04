@@ -641,6 +641,20 @@ export function buildDbNamespaces(
         }))
       },
       trashCount: () => ops.queryTrashEntryCount(db),
+      recent: async (indexerURL, limit) => {
+        const rows = await ops.queryRecentFiles(db, indexerURL, limit)
+        return rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          type: r.type,
+          size: r.size,
+          addedAt: r.addedAt,
+          folder: r.directoryPath,
+          uploaded: r.uploaded === 1,
+          local: r.local === 1,
+          lost: !!r.lostReason,
+        }))
+      },
       restoreTrashEntries: async (entryIds) => {
         const restored = await ops.restoreTrashEntries(db, entryIds)
         if (restored.length > 0) invalidateLibraryAndFolders()

@@ -78,7 +78,12 @@ export function useOnLibraryListChange(callback: (version: number) => void) {
 type ListReload = { version: number; again: boolean }
 const listReloads = new WeakMap<AppService, Map<string, ListReload>>()
 
-function reloadList(app: AppService, key: string, version: number, reload: () => Promise<unknown>) {
+export function reloadList(
+  app: AppService,
+  key: string,
+  version: number,
+  reload: () => Promise<unknown>,
+) {
   const reloads = listReloads.get(app) ?? new Map<string, ListReload>()
   listReloads.set(app, reloads)
   const running = reloads.get(key)

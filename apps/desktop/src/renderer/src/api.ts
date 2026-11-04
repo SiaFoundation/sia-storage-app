@@ -49,6 +49,8 @@ export type SiaApi = {
   copyText(text: string): Promise<void>
   appInfo(): Promise<AppInfo>
   openMount(): Promise<void>
+  /** Selects a library file in its Finder window, or opens its folder if Finder has not listed it yet. */
+  revealFile(fileId: string): Promise<void>
   showMoreMenu(): Promise<void>
   quit(): Promise<void>
   updateState(): Promise<UpdateState>

@@ -160,3 +160,18 @@ export const Trash = ({ className }: Props) => (
     <path d="M4 4.2l.7 8.6a1.4 1.4 0 0 0 1.4 1.3h3.8a1.4 1.4 0 0 0 1.4-1.3l.7-8.6" />
   </svg>
 )
+
+/** A magnifying glass, for showing a file where Finder keeps it. */
+export const Magnifier = ({ className }: Props) => (
+  <svg {...box} className={className} aria-hidden="true">
+    <circle cx="7" cy="7" r="4.6" />
+    <path d="m10.4 10.4 3.6 3.6" />
+  </svg>
+)
+
+/** A small downward chevron, for a control that opens more choices. */
+export const ChevronDown = ({ className }: Props) => (
+  <svg {...box} className={className} aria-hidden="true">
+    <path d="m4.6 6.4 3.4 3.4 3.4-3.4" />
+  </svg>
+)
