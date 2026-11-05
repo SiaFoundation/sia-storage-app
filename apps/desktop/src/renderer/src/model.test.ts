@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import type { UploadEntry } from '@siastorage/core/app'
+import { NO_UPLOADS, type Uploads } from '@siastorage/core/lib/uploadActivity'
 import {
   activity,
   activityDetail,
@@ -15,13 +15,10 @@ import {
   indicator,
   metadataLabel,
   mountLabel,
-  NO_UPLOADS,
   setupFailed,
   setupFinished,
   setupSteps,
   type Status,
-  summarizeUploads,
-  type Uploads,
   uploadsRow,
   working,
 } from './model'
@@ -53,15 +50,6 @@ function status(over: Partial<Status> = {}): Status {
 }
 
 const uploads = (over: Partial<Uploads>): Uploads => ({ ...NO_UPLOADS, ...over })
-
-const entry = (over: Partial<UploadEntry>): UploadEntry => ({
-  id: 'f',
-  kind: 'file',
-  size: 100,
-  progress: 0,
-  status: 'uploading',
-  ...over,
-})
 
 describe('what the status line says', () => {
   it('says the library is up to date when nothing is happening', () => {
@@ -111,6 +99,25 @@ describe('what the status line says', () => {
 
     expect(activity(s)).toBe('Waiting to upload 4 files')
     expect(activityProgress(s)).toBeNull()
+  })
+
+  it('says files are waiting when the library has files with no copy on the network that the uploader has not picked up', () => {
+    const s = status({ filesNotUploaded: 3 })
+
+    expect(activity(s)).toBe('Waiting to upload 3 files')
+    expect(indicator(s)).toBe('accent')
+  })
+
+  it("names the files being sent ahead of those waiting, and counts the library's waiting files over the queued ones", () => {
+    const s = status({
+      filesNotUploaded: 5,
+      uploads: uploads({ active: 2, activeFiles: 2, progress: 0.5 }),
+    })
+
+    expect(activity(s)).toBe('Uploading 2 files')
+    expect(
+      activity(status({ filesNotUploaded: 5, uploads: uploads({ queued: 1, queuedFiles: 1 }) })),
+    ).toBe('Waiting to upload 5 files')
   })
 
   it('calls a sync-down a metadata sync, not a download', () => {
@@ -287,39 +294,6 @@ describe('a sync-up whose retries pass the total', () => {
 
   it('never fills the bar past full', () => {
     expect(activityProgress(retrying)).toBe(1)
-  })
-})
-
-describe('the uploads the daemon holds, summed', () => {
-  it('counts files and thumbnails in flight but only files by name', () => {
-    const summary = summarizeUploads([
-      entry({ id: 'a', size: 300, progress: 1 }),
-      entry({ id: 'b', size: 100, progress: 0, status: 'packing' }),
-      entry({ id: 't', kind: 'thumb', size: 100, progress: 0, status: 'packed' }),
-    ])
-
-    expect(summary.active).toBe(3)
-    expect(summary.activeFiles).toBe(2)
-    expect(summary.activeFileBytes).toBe(400)
-    expect(summary.progress).toBe(0.6)
-  })
-
-  it('keeps queued entries apart from the ones in flight', () => {
-    const summary = summarizeUploads([
-      entry({ id: 'a', status: 'queued' }),
-      entry({ id: 't', kind: 'thumb', status: 'queued' }),
-    ])
-
-    expect(summary).toEqual({ ...NO_UPLOADS, queued: 2, queuedFiles: 1 })
-  })
-
-  it('leaves out uploads that finished or failed', () => {
-    const summary = summarizeUploads([
-      entry({ id: 'a', status: 'done', progress: 1 }),
-      entry({ id: 'b', status: 'error' }),
-    ])
-
-    expect(summary).toEqual(NO_UPLOADS)
   })
 })
 

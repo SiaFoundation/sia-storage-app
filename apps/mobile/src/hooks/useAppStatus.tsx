@@ -63,8 +63,14 @@ export function useAppStatus(): AppStatus {
   }
 
   if (uploadsProgress.show) {
-    const { packerCount, packerFileCount, packerFileBytes, pendingFileCount, percentDecimal } =
-      uploadsProgress
+    const {
+      packerCount,
+      packerFileCount,
+      packerFileBytes,
+      importingFileCount,
+      waitingFileCount,
+      percentDecimal,
+    } = uploadsProgress
     if (packerCount > 0) {
       const isUploading = percentDecimal > 0
       const verb = isUploading ? 'Uploading' : 'Encrypting'
@@ -91,12 +97,12 @@ export function useAppStatus(): AppStatus {
       }
     }
     // Pending branch: same treatment — number excludes thumbnails, but the
-    // state stays visible while only thumbnails are pending.
-    const plural = pendingFileCount === 1 ? 'file' : 'files'
-    const message =
-      pendingFileCount > 0
-        ? `Importing ${pendingFileCount.toLocaleString()} ${plural}`
-        : 'Importing'
+    // state stays visible while only thumbnails are pending. A file an import
+    // has finished copying is in the library and only waits to upload.
+    const count = importingFileCount > 0 ? importingFileCount : waitingFileCount
+    const verb = importingFileCount > 0 ? 'Importing' : 'Waiting to upload'
+    const plural = count === 1 ? 'file' : 'files'
+    const message = count > 0 ? `${verb} ${count.toLocaleString()} ${plural}` : verb
     return {
       visible: true,
       icon: <CloudUploadIcon size={18} color={palette.blue[400]} />,

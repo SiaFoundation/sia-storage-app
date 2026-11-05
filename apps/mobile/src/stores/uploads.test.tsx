@@ -51,6 +51,23 @@ describe('useUploadProgress', () => {
     expect(result.current.packerFileCount).toBe(1)
   })
 
+  test('counts a queued file as waiting to upload, apart from the ones in flight', async () => {
+    app().uploads.register({
+      id: 'sent',
+      size: 1000,
+      kind: 'file',
+      status: 'uploading',
+      progress: 0,
+    })
+    app().uploads.register({ id: 'next', size: 1000, kind: 'file', status: 'queued', progress: 0 })
+
+    const { result } = await renderHook(() => useUploadProgress(), { wrapper })
+
+    await waitFor(() => expect(result.current.packerFileCount).toBe(1))
+    expect(result.current.waitingFileCount).toBe(1)
+    expect(result.current.importingFileCount).toBe(0)
+  })
+
   test('counts an upload with no kind as a real file', async () => {
     app().uploads.register({ id: 'legacy', size: 1000, status: 'uploading', progress: 0 })
 
