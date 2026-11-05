@@ -6,12 +6,14 @@ import { app } from '../stores/appService'
 import {
   cancelFsEvictionScanner,
   clearBackedUpFsFiles,
+  evictDuringImport,
   runFsEvictionScanner,
+  stopFsEvictionScanner,
 } from './fsEvictionScanner'
 
 jest.mock('@siastorage/core/config', () => {
   const actual = jest.requireActual('@siastorage/core/config')
-  return { ...actual, FS_EVICTION_FREQUENCY: 60_000 }
+  return { ...actual, FS_EVICTION_FREQUENCY: 60_000, FS_EVICTION_IMPORT_FREQUENCY: 10_000 }
 })
 
 // Passed to each scan rather than mocked as the core's defaults: jest.setup
@@ -112,6 +114,41 @@ describe('fsEvictionScanner', () => {
     expect(Number(await app().storage.getItem('fsEvictionLastRun'))).toBe(now)
   })
 
+  it('an import gets a pass a short gap after the last one, inside the hourly gate', async () => {
+    await createRemoteFile({ id: 'imported', size: 200, usedAt: 0 })
+    await app().storage.setItem('fsEvictionLastRun', String(now - 5_000))
+
+    expect(await evictDuringImport({ underStoragePressure: true })).toBeUndefined()
+
+    await app().storage.setItem('fsEvictionLastRun', String(now - 20_000))
+    expect(await runFsEvictionScanner()).toBeUndefined()
+    const result = await evictDuringImport({ underStoragePressure: true })
+    expect(result?.evictedFileIds).toEqual(['imported'])
+  })
+
+  it('an import under storage pressure clears uploaded copies below the cap and keeps ones used recently', async () => {
+    await createRemoteFile({ id: 'imported', size: 200, usedAt: 0 })
+    await createRemoteFile({ id: 'opened-today', size: 200, usedAt: now - 1_000 })
+    await createLocalOnlyFile({ id: 'not-uploaded', size: 200, usedAt: 0 })
+
+    const result = await evictDuringImport({ underStoragePressure: true })
+
+    expect(result?.evictedFileIds).toEqual(['imported'])
+    expect(await app().fs.readMeta('opened-today')).not.toBeNull()
+    expect(await app().fs.readMeta('not-uploaded')).not.toBeNull()
+  })
+
+  it('an import with room to spare leaves a cache below its cap alone', async () => {
+    // Settings outlive resetDb, so the cap an earlier test set would apply here.
+    await app().settings.setCacheMaxBytes(1_000)
+    await createRemoteFile({ id: 'imported', size: 200, usedAt: 0 })
+
+    const result = await evictDuringImport({ underStoragePressure: false })
+
+    expect(result?.evictedFileIds).toEqual([])
+    expect(await app().fs.readMeta('imported')).not.toBeNull()
+  })
+
   it('does not advance lastRun when aborted mid-scan', async () => {
     await createRemoteFile({
       id: 'file-abort',
@@ -196,6 +233,53 @@ describe('fsEvictionScanner', () => {
 
     expect(cleared!.evictedFileIds).toContain('file-1')
     expect(await app().fs.readMeta('file-1')).toBeNull()
+  })
+
+  it('stopping waits for a running pass to end before it resolves', async () => {
+    await createRemoteFile({ id: 'file-1', size: 200, usedAt: now - daysInMs(30) })
+    let settled = false
+    const inFlight = runFsEvictionScanner({ force: true, config: { maxBytes: 0 } }).then(() => {
+      settled = true
+    })
+
+    await stopFsEvictionScanner()
+
+    expect(settled).toBe(true)
+    await inFlight
+  })
+
+  it('a pass still reading its last run when eviction stops never starts', async () => {
+    await createRemoteFile({ id: 'file-1', size: 200, usedAt: now - daysInMs(30) })
+    let resolveLastRun!: (value: number) => void
+    const lastRun = jest.spyOn(app().settings, 'getFsEvictionLastRun').mockReturnValueOnce(
+      new Promise<number>((resolve) => {
+        resolveLastRun = resolve
+      }),
+    )
+    try {
+      const pending = runFsEvictionScanner({ config: { maxBytes: 0 } })
+      await stopFsEvictionScanner()
+      resolveLastRun(0)
+
+      expect(await pending).toBeUndefined()
+      expect(await app().fs.readMeta('file-1')).toBeDefined()
+    } finally {
+      lastRun.mockRestore()
+    }
+  })
+
+  it('an import pass stops when the import worker is aborted', async () => {
+    await createRemoteFile({ id: 'file-1', size: 200, usedAt: now - daysInMs(30) })
+    const controller = new AbortController()
+    controller.abort()
+
+    const result = await evictDuringImport({
+      underStoragePressure: true,
+      signal: controller.signal,
+    })
+
+    expect(result).toBeUndefined()
+    expect(await app().fs.readMeta('file-1')).toBeDefined()
   })
 
   it('a caller that already aborted neither evicts nor stops a running scan', async () => {

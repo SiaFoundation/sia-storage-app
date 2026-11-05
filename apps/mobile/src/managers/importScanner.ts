@@ -15,6 +15,7 @@ import { SourceRefs } from '../lib/sourceRefs'
 import { app } from '../stores/appService'
 import { publishImportPacing } from '../stores/importPacing'
 import { isBgTaskActive } from './bgTaskContext'
+import { evictDuringImport } from './fsEvictionScanner'
 import { triggerThumbnailScanner } from './thumbnailScanner'
 
 const IMPORT_SCANNER_INTERVAL = 3_000 // 3 seconds
@@ -208,6 +209,21 @@ export async function runImportScanner(signal?: AbortSignal): Promise<ImportScan
   }
 }
 
+/**
+ * The eviction pass a scan tick asks for, or null when no import is running.
+ * A tick that copied files or held files back for space or backlog is part
+ * of a running import. Only space pressure that eviction can relieve, the
+ * headroom gate or the critical floor, asks for the pass that clears every
+ * uploaded copy.
+ */
+export function importEvictionFor(
+  result: Pick<ImportScannerResult, 'finalized' | 'deferred' | 'pressure'>,
+): { underStoragePressure: boolean } | null {
+  if (result.finalized === 0 && result.deferred === 0) return null
+  const cause = result.pressure.cause
+  return { underStoragePressure: cause === 'headroom' || cause === 'critical-floor' }
+}
+
 async function run(signal: AbortSignal): Promise<number | undefined> {
   // BGAppRefreshTask still enforces iOS's 80%/60s CPU monitor; hashing
   // here can trip cpu_resource_fatal. See bgTaskContext.ts.
@@ -227,6 +243,12 @@ async function run(signal: AbortSignal): Promise<number | undefined> {
     pendingLocalBytes: result.pressure.pendingLocalBytes,
     deferred: result.deferred,
   })
+  const eviction = importEvictionFor(result)
+  if (eviction) {
+    evictDuringImport({ ...eviction, signal }).catch((error) => {
+      logger.warn('importScanner', 'eviction_failed', { error: error as Error })
+    })
+  }
   // Drain mode: if this tick finalized files, more work is likely pending
   // behind IMPORT_MAX_PER_TICK, so re-run immediately. Ticks that only
   // skipped or backed off fall back to the regular interval so we don't spin.
