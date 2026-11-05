@@ -7,15 +7,14 @@ import XCTest
 private func makeItem(
     id: String = "f1", parentId: String? = nil, name: String = "a.txt", kind: String = "file",
     size: Int64 = 12, contentVersion: String = "sha256:abc", metadataVersion: String = "m1",
-    uploaded: Bool = true, uploading: Bool = false, downloaded: Bool = true,
-    downloading: Bool = false, mimeType: String = ""
+    uploaded: Bool = true, uploading: Bool = false, mimeType: String = ""
 ) throws -> ProviderItem {
     let json = """
         {"id":"\(id)","parentId":\(parentId.map { "\"\($0)\"" } ?? "null"),"name":"\(name)",
          "kind":"\(kind)","size":\(size),"createdAt":1700000000000,"modifiedAt":1700000001000,
          "contentVersion":"\(contentVersion)","metadataVersion":"\(metadataVersion)",
-         "uploaded":\(uploaded),"uploading":\(uploading),"downloaded":\(downloaded),
-         "downloading":\(downloading),"progress":0,"mimeType":"\(mimeType)"}
+         "uploaded":\(uploaded),"uploading":\(uploading),"downloaded":true,
+         "downloading":false,"progress":0,"mimeType":"\(mimeType)"}
         """
     return try JSONDecoder().decode(ProviderItem.self, from: Data(json.utf8))
 }
@@ -133,20 +132,21 @@ final class ItemShapeTests: XCTestCase {
         XCTAssertNotEqual(SiaItem(try makeItem(name: "a.txt")).contentType, .folder)
     }
 
-    func testBadgeFlagsFollowTheItem() throws {
-        let item = SiaItem(try makeItem(uploaded: false, downloading: true))
+    // Read through the protocol, the way the system reads them. A flag that
+    // never reached Objective-C reads as nil here while the Swift property
+    // still returns the right value.
+    func testUploadFlagsFollowTheItem() throws {
+        let item: NSFileProviderItem = SiaItem(try makeItem(uploaded: false, uploading: true))
 
-        XCTAssertEqual(item.isUploaded, NSNumber(value: false))
-        XCTAssertEqual(item.isDownloading, NSNumber(value: true))
+        XCTAssertEqual(item.isUploaded, false)
+        XCTAssertEqual(item.isUploading, true)
     }
 
     func testAFolderNeverCarriesABadge() {
-        let root = SiaItem.root
+        let root: NSFileProviderItem = SiaItem.root
 
-        XCTAssertEqual(root.isUploaded, NSNumber(value: true))
-        XCTAssertEqual(root.isDownloaded, NSNumber(value: true))
-        XCTAssertEqual(root.isUploading, NSNumber(value: false))
-        XCTAssertEqual(root.isDownloading, NSNumber(value: false))
+        XCTAssertEqual(root.isUploaded, true)
+        XCTAssertEqual(root.isUploading, false)
     }
 }
 

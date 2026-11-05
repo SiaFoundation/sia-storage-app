@@ -107,17 +107,11 @@ public final class SiaItem: NSObject, NSFileProviderItem {
         return [.allowsReading, .allowsWriting, .allowsRenaming, .allowsReparenting, .allowsDeleting]
     }
 
-    fileprivate var transfer: ProviderItem? { item }
-}
-
-// The four flags Finder composes its cloud badge from. They sit in an extension
-// because declaring them on the class body makes the compiler read them as
-// near-misses for the protocol's optional requirements; the Objective-C runtime
-// resolves them by selector either way. A folder reports fully present, so it
-// never carries a badge.
-extension SiaItem {
-    public var isUploaded: NSNumber? { NSNumber(value: transfer?.uploaded ?? true) }
-    public var isUploading: NSNumber? { NSNumber(value: transfer?.uploading ?? false) }
-    public var isDownloaded: NSNumber? { NSNumber(value: transfer?.downloaded ?? true) }
-    public var isDownloading: NSNumber? { NSNumber(value: transfer?.downloading ?? false) }
+    // Finder's cloud badge, and whether the system may evict Finder's copy, come
+    // from these two. Declared as NSNumber? they still compile but never reach
+    // Objective-C, and the system then treats every file as uploaded. Folders
+    // never carry a badge: the daemon sends each one as uploaded, and the root,
+    // which has no row, falls back to uploaded here.
+    public var isUploaded: Bool { item?.uploaded ?? true }
+    public var isUploading: Bool { item?.uploading ?? false }
 }
