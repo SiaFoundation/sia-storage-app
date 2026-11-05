@@ -15,6 +15,10 @@ import {
   STORAGE_FULL_POLL_INTERVAL,
   UPLOAD_DATA_SHARDS,
   UPLOAD_PARITY_SHARDS,
+  UPLOAD_NETWORK_RETRY_BASE_DELAY,
+  UPLOAD_NETWORK_RETRY_MAX_DELAY,
+  UPLOAD_RETRY_BASE_DELAY,
+  UPLOAD_RETRY_MAX_DELAY,
   UPLOAD_YIELD_POLL_MS,
 } from '../config'
 import { encodeFileMetadata } from '../encoding/fileMetadata'
@@ -183,6 +187,23 @@ export class UploadManager {
   private loopGeneration = 0
   /** Files discovered by pollDB() — processed after explicit queue. */
   private polledFiles: FileEntry[] = []
+  /**
+   * Files whose last upload attempt failed: how many attempts in a row have
+   * failed, and when the file may be tried again. A file whose pin or batch
+   * send failed also keeps its entry here, and the poll queues it again
+   * itself once its delay passes. Kept in memory and cleared by shutdown(),
+   * so a relaunch or Cancel uploads tries every file again at once.
+   */
+  private retries = new Map<
+    string,
+    { failures: number; retryAt: number; entry?: FileEntry; queued?: boolean }
+  >()
+  /**
+   * Whether the indexer stopped answering while a file waited to retry a
+   * network failure, as a failed account check or a poll skipped for want of
+   * a connection shows. See checkNetworkBack().
+   */
+  private networkDown = false
   /** Whether the async loop is running; set false by shutdown() to exit. */
   private active = false
   /** Whether the loop is parked waiting for DB to become available. */
@@ -254,6 +275,10 @@ export class UploadManager {
   enqueue(files: FileEntry[]): number {
     const fresh = this.notActive(files)
     if (fresh.length === 0) return 0
+    // The explicit queue never waits on `retries`, so a file asked for
+    // directly goes now. Dropping its count restarts the delay at the base if
+    // this attempt fails too.
+    for (const f of fresh) this.retries.delete(f.fileId)
     this.app.uploads.registerMany(
       fresh.map((f) => ({ id: f.fileId, size: f.size, kind: f.file.kind })),
     )
@@ -363,7 +388,7 @@ export class UploadManager {
       })
 
       for (const entry of batch.files) {
-        this.failEntry(entry.fileId, e, message)
+        this.failEntry(entry, e, message, 'network')
       }
     } finally {
       this.uploadingBatch = null
@@ -425,6 +450,7 @@ export class UploadManager {
     }
     this.explicitQueue = []
     this.polledFiles = []
+    this.retries.clear()
     this.packer = null
     this.batch = null
     this.wake()
@@ -435,6 +461,9 @@ export class UploadManager {
     // again, so shutdown waits for it. Everything else is cleared before the
     // wait, so a file enqueued during it stays queued for the next loop.
     await this.flushing?.catch(() => {})
+    // A finalize or pin that failed during the wait scheduled a retry after
+    // `retries` was cleared, and a restart tries every file at once.
+    for (const id of uploading) this.retries.delete(id)
     // A file whose pin failed during the wait can have been enqueued again,
     // and removing its registration would let the next poll queue it twice.
     const requeued = new Set(this.explicitQueue.map((entry) => entry.fileId))
@@ -515,13 +544,126 @@ export class UploadManager {
    * Real failure → setError (shown on the status pill). DB suspension →
    * remove the entry so pollDB can re-register it on resume (getActiveIds
    * would otherwise exclude it).
+   *
+   * A real failure also delays the file's next attempt, doubling with each
+   * failure in a row. The poll takes a failed file again as soon as it
+   * fails, so without the delay a file that keeps failing is packed and
+   * sent over and over with no pause. A failed add waits longest, since an
+   * add fails on a file whose bytes cannot be read. An add also uploads
+   * each slab it fills, and the SDK's errors do not tell a failed slab
+   * upload from an unreadable file, so a large file that meets a network
+   * error mid-add waits on that longer schedule too. A failed pin or batch
+   * send fails on the network and waits at most a couple of minutes, which
+   * keeps short the window in which another device's newer version can sync
+   * down first. A file that fails on the network is also queued again from
+   * here rather than found by the poll's query, which takes current versions
+   * only: an edit made here while offline becomes an older version once
+   * another device's newer one syncs down, and the query would never upload
+   * it. The schedule is in memory, so a restart tries every file at once,
+   * and the poll makes every file due when the connection comes back.
    */
-  private failEntry(fileId: string, error: unknown, message: string): void {
+  private failEntry(
+    entry: FileEntry,
+    error: unknown,
+    message: string,
+    retry: 'add' | 'network' = 'add',
+  ): void {
+    const { fileId } = entry
     if (isSuspendedDbError(error)) {
       this.app.uploads.remove(fileId)
     } else {
       this.app.uploads.setError(fileId, message)
+      const [base, max] =
+        retry === 'add'
+          ? [UPLOAD_RETRY_BASE_DELAY, UPLOAD_RETRY_MAX_DELAY]
+          : [UPLOAD_NETWORK_RETRY_BASE_DELAY, UPLOAD_NETWORK_RETRY_MAX_DELAY]
+      const previous = this.retries.get(fileId)
+      const failures = (previous?.failures ?? 0) + 1
+      const delay = Math.min(max, base * 2 ** (failures - 1))
+      // Once a file has failed on the network it keeps its entry, so a later
+      // failure of another kind does not leave it to a poll that may no
+      // longer take it.
+      this.retries.set(fileId, {
+        failures,
+        retryAt: Date.now() + delay,
+        entry: retry === 'network' || previous?.entry ? entry : undefined,
+      })
+      logger.info('uploadManager', 'file_retry_scheduled', {
+        fileId,
+        failures,
+        delayMs: delay,
+        retry,
+      })
     }
+  }
+
+  /** Whether a file waits out the delay after a failed pin or batch send. */
+  private waitingOnNetwork(): boolean {
+    const now = Date.now()
+    return [...this.retries.values()].some((r) => r.entry && !r.queued && r.retryAt > now)
+  }
+
+  /**
+   * While a file waits to retry a network failure, asks the indexer for the
+   * account on each poll. A failed answer marks the network down, and the
+   * first answer after one makes every waiting file due, so a device back
+   * online tries them at once instead of at the end of their delays. No
+   * platform clears isConnected when the network drops, so this check is how
+   * the uploader sees an outage end. A pin that keeps failing while the
+   * indexer still answers resets nothing and keeps its delay.
+   */
+  private async checkNetworkBack(): Promise<void> {
+    if (!this.networkDown && !this.waitingOnNetwork()) return
+    try {
+      await this.app.account()
+    } catch {
+      this.networkDown = true
+      return
+    }
+    if (!this.networkDown) return
+    this.networkDown = false
+    logger.info('uploadManager', 'network_back', { waiting: this.retries.size })
+    for (const r of this.retries.values()) {
+      r.failures = 0
+      r.retryAt = 0
+    }
+  }
+
+  /** Files still waiting out the delay after a failed upload, which the poll leaves alone. */
+  private waitingToRetry(): string[] {
+    const now = Date.now()
+    return [...this.retries].filter(([, r]) => r.retryAt > now).map(([id]) => id)
+  }
+
+  /**
+   * Queues again each file whose pin or batch send failed and whose delay has
+   * passed, when the poll's query did not take it, which happens once it is
+   * no longer the current version. A file the query took goes through the
+   * poll's own checks, such as the one that gives up on an empty file, and
+   * an empty file is never queued from here, since it can never upload. A
+   * file trashed or deleted meanwhile has left the uploads store and is let
+   * go.
+   */
+  private requeueNetworkFailures(polled: Set<string>): void {
+    const now = Date.now()
+    const due: FileEntry[] = []
+    for (const [fileId, r] of this.retries) {
+      if (!r.entry || r.queued || r.retryAt > now) continue
+      if (!this.app.uploads.getEntry(fileId)) {
+        this.retries.delete(fileId)
+        continue
+      }
+      if (r.entry.size === 0) r.entry = undefined
+      else if (!polled.has(fileId)) due.push(r.entry)
+      r.queued = true
+    }
+    if (due.length === 0) return
+    const fresh = this.notActive(due)
+    if (fresh.length === 0) return
+    this.app.uploads.registerMany(
+      fresh.map((e) => ({ id: e.fileId, size: e.size, kind: e.file.kind })),
+    )
+    this.polledFiles.push(...fresh)
   }
 
   /**
@@ -617,6 +759,7 @@ export class UploadManager {
     this.uploadingPacker = null
     this.explicitQueue = []
     this.polledFiles = []
+    this.retries.clear()
     this.app = null!
     this.internal = null!
     this._flushHistory = []
@@ -878,7 +1021,7 @@ export class UploadManager {
         fileId: entry.fileId,
         error: e as Error,
       })
-      this.failEntry(entry.fileId, e, message)
+      this.failEntry(entry, e, message)
       // Keep this.packer / this.batch alive — the SDK leaves the packer
       // usable after add() errors, so subsequent entries continue in the
       // same batch instead of orphaning already-successful adds.
@@ -1019,7 +1162,7 @@ export class UploadManager {
         })
         // The SDK leaves the packer usable after an add fails, so the
         // batch carries on with the adds that succeeded.
-        this.failEntry(entry.fileId, failure.error, getErrorMessage(failure.error))
+        this.failEntry(entry, failure.error, getErrorMessage(failure.error))
         continue
       }
       const addMs = Date.now() - t1
@@ -1098,8 +1241,10 @@ export class UploadManager {
   private async pollDB(generation: number): Promise<number> {
     if (!this.app.connection.getState().isConnected) {
       logger.debug('uploadManager', 'poll_skipped', { reason: 'not_connected' })
+      if (this.waitingOnNetwork()) this.networkDown = true
       return 0
     }
+    await this.checkNetworkBack()
 
     const autoScan = await this.app.settings.getAutoScanUploads()
     if (!autoScan) {
@@ -1108,7 +1253,7 @@ export class UploadManager {
     }
 
     try {
-      const activeIds = this.app.uploads.getActiveIds()
+      const activeIds = [...this.app.uploads.getActiveIds(), ...this.waitingToRetry()]
       const indexerURL = await this.app.settings.getIndexerURL()
       // Back up current versions only. Omitting includeOldVersions excludes
       // superseded (current=0) files and orphan thumbnails (whose original is no
@@ -1181,6 +1326,7 @@ export class UploadManager {
           noUri: candidateFiles.length - newEntries.length,
         })
       }
+      this.requeueNetworkFailures(new Set(candidateFiles.map((f) => f.id)))
 
       return this.explicitQueue.length + this.polledFiles.length
     } catch (e) {
@@ -1354,7 +1500,8 @@ export class UploadManager {
               fileId: entry.fileId,
               index: i,
             })
-            this.app.uploads.setError(entry.fileId, 'No pinned object returned')
+            const message = 'No pinned object returned'
+            this.failEntry(entry, new Error(message), message, 'network')
             return { type: 'missing', fileId: entry.fileId }
           }
 
@@ -1396,7 +1543,7 @@ export class UploadManager {
               fileId: entry.fileId,
               error: e as Error,
             })
-            this.failEntry(entry.fileId, e, message)
+            this.failEntry(entry, e, message, 'network')
             return { type: 'error', fileId: entry.fileId }
           }
         }),
@@ -1423,6 +1570,7 @@ export class UploadManager {
     const successfulFileIds = results
       .filter((r) => r.type !== 'error' && r.type !== 'missing')
       .map((r) => r.fileId)
+    for (const id of successfulFileIds) this.retries.delete(id)
     if (successfulFileIds.length > 0) {
       // Persist the SDK size so the local row matches what we uploaded. The upload is not an
       // edit, so the version clock stays put. The object was already flagged when it was
