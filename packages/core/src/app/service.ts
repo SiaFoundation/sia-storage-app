@@ -1079,6 +1079,8 @@ export interface AppService {
     setBatchUploading(ids: string[], batchId: string): void
     /** Returns IDs of uploads that are actively being processed. */
     getActiveIds(): string[]
+    /** Records whether the account had storage left at the uploader's last check. */
+    setStorageFull(full: boolean): void
   }
   /** What an OS storage-provider shell reads: files and folders as flat items. */
   provider: {

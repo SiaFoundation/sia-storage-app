@@ -12,6 +12,8 @@ const idle: Progress = {
   pendingCount: 0,
   importingFileCount: 0,
   waitingFileCount: 0,
+  failedFileCount: 0,
+  storageFull: false,
   percentDecimal: 0,
 }
 let mockProgress: Progress = idle
@@ -42,11 +44,13 @@ jest.mock('../stores/uploads', () => ({
   useUploadProgress: () => mockProgress,
 }))
 
-async function message(over: Partial<Progress>): Promise<string> {
+async function status(over: Partial<Progress>) {
   mockProgress = { ...idle, show: true, ...over }
   const { result } = await renderHook(() => useAppStatus())
-  return result.current.message
+  return result.current
 }
+
+const message = async (over: Partial<Progress>) => (await status(over)).message
 
 describe('useAppStatus', () => {
   it('says files are importing while an import still copies them in', async () => {
@@ -62,7 +66,36 @@ describe('useAppStatus', () => {
     expect(await message({ pendingCount: 1, waitingFileCount: 1 })).toBe('Waiting to upload 1 file')
   })
 
+  it('says storage is full, with the files held, ahead of uploading and importing', async () => {
+    const full = await status({
+      pendingCount: 3,
+      waitingFileCount: 2,
+      importingFileCount: 1,
+      packerCount: 1,
+      packerFileCount: 1,
+      storageFull: true,
+    })
+    expect(full.message).toBe('Storage full')
+    expect(full.hint).toBe('3 files waiting')
+  })
+
+  it('says storage is full when the only file held is in a batch packed before the account filled', async () => {
+    expect(await message({ packerCount: 1, packerFileCount: 1, storageFull: true })).toBe(
+      'Storage full',
+    )
+  })
+
+  it('names files that could not upload while they still wait, and not after', async () => {
+    expect(await message({ pendingCount: 1, waitingFileCount: 1, failedFileCount: 1 })).toBe(
+      '1 file could not upload',
+    )
+    expect(await message({ pendingCount: 1, failedFileCount: 1 })).toBe('Waiting to upload')
+  })
+
   it('drops the count when only thumbnails wait', async () => {
     expect(await message({ pendingCount: 1 })).toBe('Waiting to upload')
+    const full = await status({ pendingCount: 1, storageFull: true })
+    expect(full.message).toBe('Storage full')
+    expect(full.hint).toBeUndefined()
   })
 })

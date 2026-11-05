@@ -27,7 +27,11 @@ function createHeldPollApp() {
     connection: { getState: () => ({ isConnected: true }) },
     account: jest.fn().mockResolvedValue({ remainingStorage: 1_000_000n }),
     // Every file the loop is handed counts as still queued.
-    uploads: { getEntry: (id: string) => ({ id, status: 'queued' }) },
+    uploads: {
+      getEntry: (id: string) => ({ id, status: 'queued' }),
+      getState: () => ({ uploads: {}, storageFull: false }),
+      setStorageFull: () => {},
+    },
   } as unknown as AppService
   const releasePoll = (autoScan: boolean) => releases.shift()!(autoScan)
   return { app, getAutoScanUploads, releasePoll }

@@ -310,6 +310,20 @@ describe('mock network', () => {
     expect(new Uint8Array(got)).toEqual(bytes.slice(50, 50 + SECTOR_SIZE))
   })
 
+  test('the account reads full once its storage limit is at or under what is pinned', async () => {
+    expect((await phone.account()).remainingStorage).toBeGreaterThan(0n)
+    await upload(phone, 'a.bin', new Uint8Array(1024).fill(1))
+    const { pinnedData } = await phone.account()
+
+    await control.setConditions({ storageBytes: Number(pinnedData) })
+    expect((await phone.account()).remainingStorage).toBe(0n)
+
+    await control.setConditions({ storageBytes: 1 })
+    const account = await phone.account()
+    expect(account.maxPinnedData).toBe(1n)
+    expect(account.remainingStorage).toBe(0n)
+  })
+
   test('two downloads at once share the download rate', async () => {
     const size = 1024 * 1024
     const a = await upload(phone, 'a.bin', new Uint8Array(size).fill(1))

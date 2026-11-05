@@ -154,10 +154,12 @@ function useShell(watch: boolean): Shell {
  * and a promise across the bridge, so it is handed to SWR to await rather than
  * destructured here.
  */
-function useUploads(): Uploads {
+function useUploads(): { uploads: Uploads; storageFull: boolean } {
   const app = useApp()
   const { data } = useSWR(app.caches.uploads.key('active'), () => app.uploads.getState())
-  return data ? summarizeUploads(Object.values(data.uploads)) : NO_UPLOADS
+  return data
+    ? { uploads: summarizeUploads(Object.values(data.uploads)), storageFull: data.storageFull }
+    : { uploads: NO_UPLOADS, storageFull: false }
 }
 
 /**
@@ -206,7 +208,7 @@ export function useStatus({ watch = false }: { watch?: boolean } = {}): Status {
   const indexer = useIndexerURL()
   const connection = useConnectionState()
   const sync = useSyncState()
-  const uploads = useUploads()
+  const { uploads, storageFull } = useUploads()
   const filesNotUploaded = useFilesNotUploaded()
   const shell = useShell(watch)
 
@@ -216,6 +218,7 @@ export function useStatus({ watch = false }: { watch?: boolean } = {}): Status {
     folderCount,
     libraryBytes: stats.data?.totalBytes ?? 0,
     uploads,
+    storageFull,
     syncingDown: sync.data?.isSyncingDown ?? false,
     syncDownProgress: sync.data?.syncDownProgress ?? 0,
     syncingUp: sync.data?.isSyncingUp ?? false,

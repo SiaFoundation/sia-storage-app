@@ -66,6 +66,7 @@ export function createNetworkHandler(store: NetworkStore, relay: Relay): Network
     latencyMs: 0,
     uploadBytesPerSec: 0,
     downloadBytesPerSec: 0,
+    storageBytes: 0,
   }
   // When the download link is next free. Each piece of every download takes
   // the link for its share of a second at the download rate, so downloads
@@ -305,7 +306,7 @@ export function createNetworkHandler(store: NetworkStore, relay: Relay): Network
         const account: WireAccount = {
           pinnedData: String(bytes),
           pinnedSize: String(bytes),
-          maxPinnedData: String(1024 ** 4),
+          maxPinnedData: String(conditions.storageBytes || 1024 ** 4),
         }
         return Response.json(account)
       })
