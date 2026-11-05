@@ -306,7 +306,7 @@ describe('FS Cache Eviction', () => {
     const readBefore = Date.now() - ONE_HOUR + 60_000
     await app.app.fs.upsertMeta({ ...meta, usedAt: readBefore })
 
-    await app.getFsFileUri({ id: file.id, type: file.type })
+    await app.getFsFileUri({ id: file.id, type: file.type }, { recordUse: true })
 
     expect((await app.app.fs.readMeta(file.id))!.usedAt).toBeGreaterThan(readBefore)
   })
@@ -541,11 +541,11 @@ describe('FS Cache Eviction', () => {
     const fileFactories = generateTestFiles(1, { startId: 1, sizeBytes: 100 })
     const [file] = await app.addFiles(fileFactories)
 
-    await app.getFsFileUri({ id: file.id, type: file.type })
+    await app.getFsFileUri({ id: file.id, type: file.type }, { recordUse: true })
     const meta1 = await app.app.fs.readMeta(file.id)
 
     // Second call within throttle window should not update usedAt
-    await app.getFsFileUri({ id: file.id, type: file.type })
+    await app.getFsFileUri({ id: file.id, type: file.type }, { recordUse: true })
     const meta2 = await app.app.fs.readMeta(file.id)
     expect(meta2!.usedAt).toBe(meta1!.usedAt)
   })

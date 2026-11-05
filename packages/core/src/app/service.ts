@@ -593,12 +593,17 @@ export interface AppService {
      * none on any indexer for a superseded version.
      */
     calcNotBackedUpSize(indexerURL: string): Promise<number>
-    /** Returns files eligible for eviction after `after`, ordered by least recently used. */
+    /**
+     * Returns files eligible for eviction after `after`, ordered by least
+     * recently used. With `thumbnails`, a file of one of `types` waits for its
+     * thumbnails until its copy was added before `addedBefore`.
+     */
     evictionCandidates(
       indexerURL: string,
       thresholdUsedAt: number,
       after: EvictionCursor | null,
       limit: number,
+      thumbnails?: { types: readonly string[]; addedBefore: number },
     ): Promise<EvictionRow[]>
     /** Returns cached superseded file versions (current=0) uploaded to any indexer, after `after`. */
     nonCurrentCachedFiles(
@@ -618,8 +623,15 @@ export interface AppService {
     liveFileTypes(fileIds: string[]): Promise<Map<string, string>>
     /** Which of `fileIds` still have an in-flight import_files row (owns bytes on disk). */
     inFlightImportFileIds(fileIds: string[]): Promise<Set<string>>
-    /** Returns the local file URI if the file exists on disk, or null. */
-    getFileUri(file: { id: string; type: string }): Promise<string | null>
+    /**
+     * Returns the local file URI if the file exists on disk, or null. Counts as
+     * a use for cache eviction only with `recordUse: true`, which reads the
+     * user asks for pass, such as opening or sharing a file.
+     */
+    getFileUri(
+      file: { id: string; type: string },
+      opts?: { recordUse?: boolean },
+    ): Promise<string | null>
     /** Returns the predicted local file URI for an id+type pair, with
      *  no disk check or side effects. Callers that already know the file
      *  is on disk (e.g., the library fetcher priming the fs URI cache)

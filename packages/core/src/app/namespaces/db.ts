@@ -202,8 +202,8 @@ export function buildDbNamespaces(
     updateMetaUsedAt: (fileId, usedAt) => ops.updateFsMetaUsedAt(db, fileId, usedAt ?? Date.now()),
     calcTotalSize: () => ops.queryFsMetaTotalSize(db),
     calcNotBackedUpSize: (indexerURL) => ops.queryFsMetaNotBackedUpSize(db, indexerURL),
-    evictionCandidates: (indexerURL, thresholdUsedAt, after, limit) =>
-      ops.queryEvictionCandidates(db, indexerURL, thresholdUsedAt, after, limit),
+    evictionCandidates: (indexerURL, thresholdUsedAt, after, limit, thumbnails) =>
+      ops.queryEvictionCandidates(db, indexerURL, thresholdUsedAt, after, limit, thumbnails),
     nonCurrentCachedFiles: (thresholdUsedAt, after, limit) =>
       ops.queryNonCurrentCachedFiles(db, thresholdUsedAt, after, limit),
     trashedCachedFiles: (indexerURL, after, limit) =>
@@ -211,8 +211,11 @@ export function buildDbNamespaces(
     findOrphanedFileIds: (fileIds) => ops.queryOrphanedFileIds(db, fileIds),
     liveFileTypes: (fileIds) => ops.queryLiveFileTypes(db, fileIds),
     inFlightImportFileIds: (fileIds) => ops.queryInFlightImportFileIds(db, fileIds),
-    getFileUri: (file) =>
-      getFsFileUri(db, file, fsIO, { usedAtUpdateInterval: adapters?.usedAtUpdateIntervalMs }),
+    getFileUri: (file, opts) =>
+      getFsFileUri(db, file, fsIO, {
+        usedAtUpdateInterval: adapters?.usedAtUpdateIntervalMs,
+        recordUse: opts?.recordUse,
+      }),
     uri: (file) => fsIO.uri(file.id, file.type),
     sizeOnDisk: async (file) => {
       const size = await fsIO.size(file.id, file.type)

@@ -233,7 +233,10 @@ export interface TestApp {
 
   removeFsFile(fileId: string, type: string): Promise<void>
   listFsFiles(): Promise<string[]>
-  getFsFileUri(file: { id: string; type: string }): Promise<string | null>
+  getFsFileUri(
+    file: { id: string; type: string },
+    opts?: { recordUse?: boolean },
+  ): Promise<string | null>
 
   setConnected(connected: boolean): void
   areServicesRunning(): boolean
@@ -743,7 +746,7 @@ export function createTestApp(
       return appService.fs.listFiles()
     },
 
-    getFsFileUri: (file) => appService.fs.getFileUri(file),
+    getFsFileUri: (file, opts) => appService.fs.getFileUri(file, opts),
 
     setConnected(c) {
       connected = c

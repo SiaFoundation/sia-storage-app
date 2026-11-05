@@ -53,10 +53,10 @@ async function downloadAndProcessFile(
     await downloadFromShareURL(id, shareUrl)
     logger.debug('FileImport', 'download_complete')
 
-    const tempFsFileUri = await app().fs.getFileUri({
-      id,
-      type: 'application/octet-stream',
-    })
+    const tempFsFileUri = await app().fs.getFileUri(
+      { id, type: 'application/octet-stream' },
+      { recordUse: true },
+    )
     if (!tempFsFileUri) {
       throw new Error('File not found in cache after download')
     }
