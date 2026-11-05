@@ -3,11 +3,12 @@ import type { UploadsState } from '../stores'
 
 /** Builds the uploads namespace: register, update, and clear in-progress uploads. */
 export function buildUploadsNamespace(caches: AppCaches): AppService['uploads'] {
-  let state: UploadsState = { uploads: {} }
+  let state: Omit<UploadsState, 'storageFull'> = { uploads: {} }
+  let storageFull = false
   const coalesced = caches.uploads.coalesced(1000)
 
   const namespace: AppService['uploads'] = {
-    getState: () => ({ ...state }),
+    getState: () => ({ ...state, storageFull }),
     getEntry: (id) => state.uploads[id],
     register: (entry) => {
       state = { uploads: { ...state.uploads, [entry.id]: entry } }
@@ -42,6 +43,12 @@ export function buildUploadsNamespace(caches: AppCaches): AppService['uploads'] 
     },
     clear: () => {
       state = { uploads: {} }
+      storageFull = false
+      caches.uploads.invalidateAll()
+    },
+    setStorageFull: (full) => {
+      if (full === storageFull) return
+      storageFull = full
       caches.uploads.invalidateAll()
     },
     registerMany: (entries) => {

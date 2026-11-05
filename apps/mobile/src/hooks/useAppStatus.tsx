@@ -62,6 +62,46 @@ export function useAppStatus(): AppStatus {
     }
   }
 
+  // A batch packed before the account filled stays unsent until there is room,
+  // so it is held as much as a file still waiting. Thumbnails count as held
+  // work, though the number shown counts files only.
+  if (
+    uploadsProgress.show &&
+    uploadsProgress.storageFull &&
+    (uploadsProgress.pendingCount > 0 || uploadsProgress.packerCount > 0)
+  ) {
+    const count = uploadsProgress.waitingFileCount + uploadsProgress.packerFileCount
+    return {
+      visible: true,
+      icon: <TriangleAlertIcon size={18} color={palette.yellow[400]} />,
+      message: 'Storage full',
+      hint:
+        count > 0
+          ? `${count.toLocaleString()} ${count === 1 ? 'file' : 'files'} waiting`
+          : undefined,
+      animate: false,
+      level: 'warning',
+    }
+  }
+
+  if (
+    uploadsProgress.show &&
+    uploadsProgress.packerCount === 0 &&
+    uploadsProgress.failedFileCount > 0 &&
+    // A failed entry can outlive its file's need to upload.
+    uploadsProgress.waitingFileCount > 0
+  ) {
+    const count = uploadsProgress.failedFileCount
+    return {
+      visible: true,
+      icon: <TriangleAlertIcon size={18} color={palette.yellow[400]} />,
+      message: `${count.toLocaleString()} ${count === 1 ? 'file' : 'files'} could not upload`,
+      hint: 'Retrying',
+      animate: false,
+      level: 'warning',
+    }
+  }
+
   if (uploadsProgress.show) {
     const {
       packerCount,

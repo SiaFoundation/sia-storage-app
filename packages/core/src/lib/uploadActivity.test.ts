@@ -33,13 +33,17 @@ describe('the uploads the daemon holds, summed', () => {
     expect(summary).toEqual({ ...NO_UPLOADS, queued: 2, queuedFiles: 1 })
   })
 
-  it('leaves out uploads that finished or failed', () => {
+  it('leaves out uploads that finished', () => {
+    expect(summarizeUploads([entry({ id: 'a', status: 'done', progress: 1 })])).toEqual(NO_UPLOADS)
+  })
+
+  it('counts failed files apart from the ones in flight, and leaves out failed thumbnails', () => {
     const summary = summarizeUploads([
-      entry({ id: 'a', status: 'done', progress: 1 }),
-      entry({ id: 'b', status: 'error' }),
+      entry({ id: 'a', status: 'error' }),
+      entry({ id: 't', kind: 'thumb', status: 'error' }),
     ])
 
-    expect(summary).toEqual(NO_UPLOADS)
+    expect(summary).toEqual({ ...NO_UPLOADS, failedFiles: 1 })
   })
 })
 

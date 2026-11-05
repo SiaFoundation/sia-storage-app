@@ -21,6 +21,12 @@ export type Uploads = {
   /** Entries registered and not yet picked up, thumbnails included. */
   queued: number
   queuedFiles: number
+  /**
+   * Files whose last attempt failed. The entry stays failed until the
+   * uploader takes the file again, after a delay, or the file no longer
+   * needs to upload.
+   */
+  failedFiles: number
   /** 0..1 across every active entry, weighted by size. */
   progress: number
 }
@@ -31,6 +37,7 @@ export const NO_UPLOADS: Uploads = {
   activeFileBytes: 0,
   queued: 0,
   queuedFiles: 0,
+  failedFiles: 0,
   progress: 0,
 }
 
@@ -43,6 +50,8 @@ export function summarizeUploads(entries: UploadEntry[]): Uploads {
     if (entry.status === 'queued') {
       summary.queued += 1
       if (isFile) summary.queuedFiles += 1
+    } else if (entry.status === 'error') {
+      if (isFile) summary.failedFiles += 1
     } else if (
       entry.status === 'packing' ||
       entry.status === 'packed' ||

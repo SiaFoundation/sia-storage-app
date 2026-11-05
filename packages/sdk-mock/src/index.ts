@@ -69,6 +69,8 @@ export interface MockIndexerStorage {
    * if it rejects.
    */
   beforeAdd: ((path: string) => Promise<void>) | null
+  /** What `account()` reports as the account's storage left. */
+  remainingStorage: bigint
 }
 
 export function createEmptyIndexerStorage(): MockIndexerStorage {
@@ -80,6 +82,7 @@ export function createEmptyIndexerStorage(): MockIndexerStorage {
     sharingKeys: new Map(),
     failingAdds: 0,
     beforeAdd: null,
+    remainingStorage: 1000000000n,
   }
 }
 
@@ -507,7 +510,7 @@ export class MockSdk implements SdkAdapter {
     return {
       accountKey: '0'.repeat(64),
       maxPinnedData: 1000000000n,
-      remainingStorage: 1000000000n,
+      remainingStorage: this.storage.remainingStorage,
       pinnedData: 0n,
       pinnedSize: 0n,
       app: {
@@ -619,6 +622,7 @@ export class MockSdk implements SdkAdapter {
     this.storage.sharingKeys.clear()
     this.storage.failingAdds = 0
     this.storage.beforeAdd = null
+    this.storage.remainingStorage = 1000000000n
     objectIdCounter = 0
   }
 

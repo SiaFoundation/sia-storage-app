@@ -136,6 +136,12 @@ export type Conditions = {
    * half. 0 is unlimited.
    */
   downloadBytesPerSec: number
+  /**
+   * The account's storage limit in bytes, which `account()` reports with the
+   * bytes pinned so far. 0 is the default of 1 TiB. Uploads past it are not
+   * refused, since the apps hold their uploads once the account reads full.
+   */
+  storageBytes: number
 }
 
 /** A fault that fails the next `count` matching calls with `status`. */
