@@ -20,7 +20,7 @@ import { resetViewSettings } from '../stores/viewSettings'
 import { initBackgroundTasks } from './backgroundTasks'
 import { initDbOptimize } from './dbOptimize'
 import { recordForcedReset, resolveForcedReset } from './forcedReset'
-import { runFsEvictionScanner } from './fsEvictionScanner'
+import { runFsEvictionScanner, stopFsEvictionScanner } from './fsEvictionScanner'
 import { initAutoKeepAwake } from './autoKeepAwake'
 import { initImportScanner } from './importScanner'
 import { initLogRotation } from './logRotation'
@@ -250,6 +250,7 @@ async function runResetFlow({ label, keepAuth }: { label: string; keepAuth: bool
   // Stop service intervals and wait for in-flight workers to finish before
   // tearing down the SDK and DB.
   await shutdownAllServiceIntervals()
+  await stopFsEvictionScanner()
 
   const success = await runSteps([
     {
