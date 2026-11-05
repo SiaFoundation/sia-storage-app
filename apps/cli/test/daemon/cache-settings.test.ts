@@ -31,9 +31,9 @@ afterEach(() => {
 })
 
 describe('cache settings over the daemon socket', () => {
-  it('defaults to the mobile cap and age', async () => {
+  it('defaults to a 4 GB cap and a one-hour minimum age', async () => {
     expect(await call('ds:settings:getCacheMaxBytes')).toBe(4_000_000_000)
-    expect(await call('ds:settings:getCacheMinAge')).toBe(86_400_000)
+    expect(await call('ds:settings:getCacheMinAge')).toBe(3_600_000)
   })
 
   it('stores a cap, and off reads back as no cap', async () => {

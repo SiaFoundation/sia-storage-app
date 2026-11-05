@@ -56,6 +56,8 @@ export interface AppServiceAdapters {
   thumbnailRetryBackoffMs?: number
   /** Reads how much memory the device can spare. Left out, transfers get a fixed budget. */
   readMemory?: MemoryReader
+  /** How often a read moves a file's usedAt, at most. Left out, once an hour. */
+  usedAtUpdateIntervalMs?: number
 }
 
 /** The result of creating an AppService: the public service, internal APIs, and upload manager. */
@@ -204,6 +206,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       thumbnail: adapters.thumbnail,
       detectMimeType: adapters.detectMimeType,
       localCopyLock,
+      usedAtUpdateIntervalMs: adapters.usedAtUpdateIntervalMs,
     })
   const withTransaction: AppServiceInternal['withTransaction'] = async (fn) => {
     const invalidations: Array<() => void> = []

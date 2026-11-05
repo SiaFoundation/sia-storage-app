@@ -3,7 +3,10 @@ import type { DatabaseAdapter } from '../adapters/db'
 import { deleteFsMeta, readFsMeta, updateFsMetaUsedAt, upsertFsMeta } from '../db/operations/fs'
 import type { ContentHash } from '../lib/contentHash'
 
-const USED_AT_UPDATE_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
+// How often a read moves a file's usedAt, at most, unless the caller passes
+// its own interval. Mobile's eviction hold is a day, so an hour loses nothing
+// there and saves a write per thumbnail the library grid shows.
+const USED_AT_UPDATE_INTERVAL_MS = 60 * 60 * 1000
 
 /**
  * What a claim-scoped copy produced, by how it ran. `stream` read arbitrary
