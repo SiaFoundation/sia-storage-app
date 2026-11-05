@@ -98,3 +98,18 @@ export function Row({
     </div>
   )
 }
+
+/**
+ * A labelled part of the value in the row above it, drawn smaller and with no
+ * divider, so it reads as a breakdown of that row.
+ */
+export function SubRow({ label, value, id }: { label: string; value: string; id: string }) {
+  return (
+    <div className="-mt-1 flex gap-2 pr-row-x pb-row-y pl-[35px] text-[11px] text-secondary">
+      <span className="flex-auto">{label}</span>
+      <span data-testid={id} className="pr-row-x tabular-nums">
+        {value}
+      </span>
+    </div>
+  )
+}

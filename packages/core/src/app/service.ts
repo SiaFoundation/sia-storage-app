@@ -587,6 +587,12 @@ export interface AppService {
     updateMetaUsedAt(fileId: string, usedAt?: number): Promise<void>
     /** Returns the total size in bytes of all tracked local files. */
     calcTotalSize(): Promise<number>
+    /**
+     * Bytes of the local file copies eviction keeps because none has a backup
+     * it accepts: no object on `indexerURL` for a current or trashed file, and
+     * none on any indexer for a superseded version.
+     */
+    calcNotBackedUpSize(indexerURL: string): Promise<number>
     /** Returns files eligible for eviction after `after`, ordered by least recently used. */
     evictionCandidates(
       indexerURL: string,
