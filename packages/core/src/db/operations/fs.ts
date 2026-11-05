@@ -228,6 +228,33 @@ export async function queryOrphanedFileIds(
   return new Set(rows.map((r) => r.fileId))
 }
 
+/**
+ * Bytes of the cached file copies no eviction pass can remove for want of a
+ * backup it accepts, whatever their age: a current or trashed file with no
+ * object on `indexerURL`, and a superseded version with no object on any
+ * indexer. These are the passes' own object conditions, inverted. Thumbnails
+ * are left out.
+ */
+export async function queryFsMetaNotBackedUpSize(
+  db: DatabaseAdapter,
+  indexerURL: string,
+): Promise<number> {
+  const result = await db.getFirstAsync<{ total: number }>(
+    `SELECT COALESCE(SUM(fs.size), 0) AS total FROM fs
+     JOIN files f ON f.id = fs.fileId
+     WHERE f.kind = 'file' AND f.deletedAt IS NULL
+       AND CASE
+         WHEN f.current = 0 AND f.trashedAt IS NULL
+           THEN NOT EXISTS (SELECT 1 FROM objects o WHERE o.fileId = fs.fileId)
+         ELSE NOT EXISTS (
+           SELECT 1 FROM objects o WHERE o.fileId = fs.fileId AND o.indexerURL = ?
+         )
+       END`,
+    indexerURL,
+  )
+  return result?.total ?? 0
+}
+
 export async function queryFsMetaTotalSize(db: DatabaseAdapter): Promise<number> {
   const result = await db.getFirstAsync<{ total: number }>(
     'SELECT COALESCE(SUM(size), 0) AS total FROM fs',

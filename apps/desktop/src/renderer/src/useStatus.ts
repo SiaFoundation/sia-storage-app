@@ -163,26 +163,38 @@ function useUploads(): { uploads: Uploads; storageFull: boolean } {
 }
 
 /**
- * Files on this Mac with no copy on the indexer yet. The uploader's own list
- * drops a file the moment it finishes, so "4 of 5" has to come from the
- * library, which keeps counting the one still to go.
+ * Files on this Mac with no copy on the indexer yet, and their size. The
+ * uploader's own list drops a file the moment it finishes, so "4 of 5" has to
+ * come from the library, which keeps counting the one still to go.
  */
-function useFilesNotUploaded(): number {
+function useNotUploaded() {
   const app = useApp()
-  const { data } = useSWR(app.caches.library.key('notUploaded'), async () => {
+  return useSWR(app.caches.library.key('notUploaded'), async () => {
     const indexerURL = await app.settings.getIndexerURL()
-    return app.files.queryCount({
+    return app.files.queryStats({
       order: 'ASC',
       pinned: { indexerURL, isPinned: false },
       fileExistsLocally: true,
     })
-  })
-  return data ?? 0
+  }).data
 }
 
 /**
- * Bytes in the daemon's cache and the cap it is held to. Nothing invalidates a
- * key when a download lands, so the size also refreshes on a timer.
+ * Size of the local copies eviction keeps because they have no backup it
+ * accepts. A trashed file or an older version that never uploaded counts,
+ * though neither is waiting to upload.
+ */
+function useNotBackedUpBytes() {
+  const app = useApp()
+  return useSWR(app.caches.library.key('notBackedUp'), async () =>
+    app.fs.calcNotBackedUpSize(await app.settings.getIndexerURL()),
+  ).data
+}
+
+/**
+ * Bytes in the daemon's cache, the cap it is held to, and the size of the
+ * copies in it not backed up yet. Nothing invalidates a key when
+ * a download lands, so the size also refreshes on a timer.
  */
 export function useLocalCache(): LocalCache {
   const app = useApp()
@@ -192,7 +204,12 @@ export function useLocalCache(): LocalCache {
   const maxBytes = useSWR(app.caches.settings.key('cacheMaxBytes'), () =>
     app.settings.getCacheMaxBytes(),
   )
-  return { bytes: bytes.data ?? null, maxBytes: maxBytes.data }
+  const notBackedUp = useNotBackedUpBytes()
+  return {
+    bytes: bytes.data ?? null,
+    maxBytes: maxBytes.data,
+    notUploadedBytes: notBackedUp ?? null,
+  }
 }
 
 function useFolderCount(): number {
@@ -209,7 +226,7 @@ export function useStatus({ watch = false }: { watch?: boolean } = {}): Status {
   const connection = useConnectionState()
   const sync = useSyncState()
   const { uploads, storageFull } = useUploads()
-  const filesNotUploaded = useFilesNotUploaded()
+  const filesNotUploaded = useNotUploaded()?.count ?? 0
   const shell = useShell(watch)
 
   return {

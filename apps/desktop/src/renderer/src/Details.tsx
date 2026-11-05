@@ -11,7 +11,7 @@ import { useApp } from '@siastorage/core/app'
 import { useShareLinks, useTrashCount, useUploadSpeed } from '@siastorage/core/stores'
 import { useState } from 'react'
 import { Footer } from './Footer'
-import { DoneMark, ROW, Row, Section } from './Group'
+import { DoneMark, ROW, Row, Section, SubRow } from './Group'
 import {
   ArrowCircle,
   CheckCircle,
@@ -32,6 +32,7 @@ import {
   formatBytes,
   indexerLabel,
   librarySizeLabel,
+  localCacheBreakdown,
   localCacheLabel,
   metadataLabel,
   mountLabel,
@@ -110,6 +111,9 @@ export function Details({
             id="on-this-mac"
             value={localCacheLabel(localCache)}
           />
+          {localCacheBreakdown(localCache).map((line) => (
+            <SubRow key={line.id} id={line.id} label={line.label} value={line.value} />
+          ))}
           <ClearLocalFiles bytes={localCache.bytes} onDone={setClearNotice} />
           <button
             type="button"

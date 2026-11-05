@@ -1,6 +1,7 @@
 import { insertFile } from './files'
 import {
   queryEvictionCandidates,
+  queryFsMetaNotBackedUpSize,
   queryFsMetaTotalSize,
   queryNonCurrentCachedFiles,
   queryInFlightImportFileIds,
@@ -441,6 +442,36 @@ describe('eviction queries and the current indexer', () => {
     expect((await queryTrashedCachedFiles(db(), PREVIOUS, null, 10)).map((r) => r.fileId)).toEqual([
       't1',
     ])
+  })
+})
+
+describe('queryFsMetaNotBackedUpSize', () => {
+  const PREVIOUS = 'https://previous.example.com'
+
+  it('counts the copies the eviction passes keep for want of a backup', async () => {
+    // Current, uploaded only to the previous indexer: kept.
+    await insertFile(db(), makeFile('c1'))
+    await upsertFsMeta(db(), { fileId: 'c1', size: 100, addedAt: 1000, usedAt: 1000 })
+    await insertObject(db(), makeObject('c1', PREVIOUS))
+    // Current and uploaded here: removable.
+    await insertFile(db(), makeFile('c2'))
+    await upsertFsMeta(db(), { fileId: 'c2', size: 200, addedAt: 1000, usedAt: 1000 })
+    await insertObject(db(), makeObject('c2'))
+    // Trashed and never uploaded: kept.
+    await insertFile(db(), makeFile('t1'))
+    await upsertFsMeta(db(), { fileId: 't1', size: 400, addedAt: 1000, usedAt: 1000 })
+    await trashFilesAndThumbnails(db(), ['t1'])
+    // Superseded, uploaded only to the previous indexer: removable.
+    await insertFile(db(), makeFile('v1', { name: 'doc.jpg', updatedAt: 1000 }))
+    await insertFile(db(), makeFile('v2', { name: 'doc.jpg', updatedAt: 2000 }))
+    await upsertFsMeta(db(), { fileId: 'v1', size: 800, addedAt: 1000, usedAt: 1000 })
+    await insertObject(db(), makeObject('v1', PREVIOUS))
+    // Superseded and never uploaded: kept.
+    await insertFile(db(), makeFile('w1', { name: 'note.jpg', updatedAt: 1000 }))
+    await insertFile(db(), makeFile('w2', { name: 'note.jpg', updatedAt: 2000 }))
+    await upsertFsMeta(db(), { fileId: 'w1', size: 1600, addedAt: 1000, usedAt: 1000 })
+
+    expect(await queryFsMetaNotBackedUpSize(db(), INDEXER)).toBe(100 + 400 + 1600)
   })
 })
 
