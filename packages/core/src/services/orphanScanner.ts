@@ -3,10 +3,12 @@ import type { AppService } from '../app/service'
 import { extFromMime, getMimeTypeFromExtension, typeOfStoredPath } from '../lib/fileTypes'
 import { yieldToEventLoop } from '../lib/yieldToEventLoop'
 
-const BATCH_SIZE = 50
+const BATCH_SIZE = 500
 
 export type OrphanScannerResult = {
   removed: number
+  /** Bytes of every file the scan removed. */
+  bytesFreed: number
   /** Files moved back to the extension their `files` row's type implies. */
   repaired: number
 }
@@ -52,6 +54,9 @@ function extOf(path: string): string {
  * moved back into place with their fs row rebuilt, and when a copy already
  * sits at the right path the stale one is deleted.
  *
+ * `spareWrittenWithin` keeps files whose fs row was added that recently, for
+ * a scan that runs on its own while other services write files.
+ *
  * Suspension signal policy: accepts AbortSignal. DB + disk write loop —
  * removes orphaned files and metadata in batches. Checks the signal at
  * the batch boundary and per-row so a mid-scan abort releases promptly
@@ -61,12 +66,16 @@ export async function runOrphanScanner(
   app: AppService,
   onProgress?: (removed: number, total: number) => void,
   signal?: AbortSignal,
+  opts?: { spareWrittenWithin?: number },
 ): Promise<OrphanScannerResult | undefined> {
   const files = await app.fs.listFiles()
   if (files.length === 0) return undefined
+  const writtenSince =
+    opts?.spareWrittenWithin === undefined ? undefined : Date.now() - opts.spareWrittenWithin
 
   let removed = 0
   let repaired = 0
+  let bytesFreed = 0
   // Lets a drifted file tell whether the slot it belongs in is already taken.
   const present = new Set(files.map(basename))
 
@@ -78,7 +87,16 @@ export async function runOrphanScanner(
       .map((name) => ({ name, fileId: extractFileIdFromName(name) }))
       .filter((e): e is { name: string; fileId: string } => e.fileId !== null)
 
-    const orphanedIds = await app.fs.findOrphanedFileIds(entries.map((e) => e.fileId))
+    // Read before the lookup below. A writer records the fs row before it
+    // drops its id from this set, so a listed id missing here either has a
+    // fresh fs row the lookup spares or is not being written at all. New
+    // files get fresh ids, so their bytes cannot be listed before the write
+    // starts.
+    const beingWritten = new Set(app.fs.filesBeingWritten())
+    const orphanedIds = await app.fs.findOrphanedFileIds(
+      entries.map((e) => e.fileId),
+      writtenSince === undefined ? undefined : { writtenSince },
+    )
     // A claim temp is judged by in-flight import rows alone: its base id may
     // belong to a finalized file (a copy that lost its claim before a retry
     // succeeded), and the files row would otherwise protect the leftover temp
@@ -100,7 +118,7 @@ export async function runOrphanScanner(
         try {
           // Past the mtime gate (`list()` withholds recent temps). Delete by
           // literal path: `<id>.<token>.tmp` can't be rebuilt from id + type.
-          await app.fs.removeFileByPath(entry.name)
+          bytesFreed += await app.fs.removeFileByPath(entry.name)
           removed++
         } catch (error) {
           logger.error('orphanScanner', 'delete_failed', {
@@ -111,13 +129,20 @@ export async function runOrphanScanner(
         continue
       }
 
+      if (beingWritten.has(entry.fileId)) {
+        keptIds.add(entry.fileId)
+        continue
+      }
+
       const liveType = liveTypes.get(entry.fileId)
       if (liveType === undefined) {
         if (!orphanedIds.has(entry.fileId)) continue
         try {
           const type = getMimeTypeFromExtension(entry.name) ?? 'application/octet-stream'
+          const size = await app.fs.sizeOnDisk({ id: entry.fileId, type }).catch(() => null)
           await app.fs.removeFile({ id: entry.fileId, type })
           removed++
+          bytesFreed += size ?? 0
         } catch (error) {
           logger.error('orphanScanner', 'delete_failed', {
             fileId: entry.fileId,
@@ -146,7 +171,7 @@ export async function runOrphanScanner(
         // The row already resolves to real bytes, so these are a leftover
         // second copy.
         try {
-          await app.fs.removeFileByPath(entry.name)
+          bytesFreed += await app.fs.removeFileByPath(entry.name)
           present.delete(basename(entry.name))
           removed++
         } catch (error) {
@@ -200,8 +225,9 @@ export async function runOrphanScanner(
   logger.info('orphanScanner', 'summary', {
     removed,
     repaired,
+    bytesFreed,
     total: files.length,
     aborted: signal?.aborted ?? false,
   })
-  return { removed, repaired }
+  return { removed, repaired, bytesFreed }
 }

@@ -1,4 +1,5 @@
 import { IMPORT_STALE_CLAIM_MS } from '@siastorage/core/config'
+import { readDirectoryAsync } from 'expo-file-system/legacy'
 import RNFS from 'react-native-fs'
 import { copyToPath } from 'import-sources'
 import { createFsIOAdapter } from './fsIO'
@@ -15,8 +16,12 @@ jest.mock('react-native-fs', () => ({
   moveFile: jest.fn(),
   writeFile: jest.fn(),
   mkdir: jest.fn(),
-  readDir: jest.fn(),
   hash: jest.fn(),
+}))
+
+jest.mock('expo-file-system/legacy', () => ({
+  getFreeDiskStorageAsync: jest.fn(),
+  readDirectoryAsync: jest.fn(),
 }))
 
 const statMock = jest.mocked(RNFS.stat)
@@ -25,7 +30,7 @@ const unlinkMock = jest.mocked(RNFS.unlink)
 const copyFileMock = jest.mocked(RNFS.copyFile)
 const moveFileMock = jest.mocked(RNFS.moveFile)
 const hashMock = jest.mocked(RNFS.hash)
-const readDirMock = jest.mocked(RNFS.readDir)
+const readDirectoryMock = jest.mocked(readDirectoryAsync)
 
 function mockStatResult(size: number): RNFS.StatResult {
   return {
@@ -202,17 +207,18 @@ describe('fsIO adapter list() claim-temp mtime gate', () => {
   const NOW = 1_700_000_000_000
   let nowSpy: jest.SpyInstance
 
-  function readDirEntry(path: string, mtimeMs: number): RNFS.ReadDirItem {
-    return {
-      ctime: undefined,
-      mtime: new Date(mtimeMs),
-      name: path.split('/').pop() ?? path,
-      path,
-      size: 1,
-      isFile: () => true,
-      isDirectory: () => false,
-    }
+  /** Lists `names` with each `.tmp` name modified at the given time. */
+  function listing(entries: [name: string, mtimeMs?: number][]) {
+    readDirectoryMock.mockResolvedValue(entries.map(([name]) => name))
+    statMock.mockImplementation(async (path: string) => {
+      const entry = entries.find(([name]) => path.endsWith(`/${name}`))
+      if (!entry) throw new Error(`ENOENT ${path}`)
+      // The library resolves a Date here, against its own type.
+      return { ...mockStatResult(1), mtime: new Date(entry[1] ?? 0) as unknown as number }
+    })
   }
+
+  const names = (paths: string[]) => paths.map((p) => p.split('/').pop())
 
   beforeEach(() => {
     jest.resetAllMocks()
@@ -230,32 +236,59 @@ describe('fsIO adapter list() claim-temp mtime gate', () => {
   // IMPORT_STALE_CLAIM_MS) is surfaced for reclamation.
   it('withholds a recent claim-temp but surfaces a stale one', async () => {
     const now = Date.now()
-    readDirMock.mockResolvedValue([
-      // finalized file, always surfaced (not a .tmp)
-      readDirEntry('/store/files/finalized.jpg', 0),
-      // live in-progress copy: mtime = now, withheld
-      readDirEntry('/store/files/live.recenttok.tmp', now),
-      // abandoned orphan copy: mtime older than the stale window, surfaced
-      readDirEntry('/store/files/orphan.staletok.tmp', now - IMPORT_STALE_CLAIM_MS - 1000),
+    listing([
+      ['finalized.jpg'],
+      ['live.recenttok.tmp', now],
+      ['orphan.staletok.tmp', now - IMPORT_STALE_CLAIM_MS - 1000],
     ])
 
-    const result = await adapter.list()
-    expect(result).toContain('/store/files/finalized.jpg')
-    expect(result).toContain('/store/files/orphan.staletok.tmp') // stale, swept
-    expect(result).not.toContain('/store/files/live.recenttok.tmp') // recent, protected
+    const result = names(await adapter.list())
+    expect(result).toContain('finalized.jpg')
+    expect(result).toContain('orphan.staletok.tmp')
+    expect(result).not.toContain('live.recenttok.tmp')
   })
 
   // A temp exactly at the boundary (now - mtime === IMPORT_STALE_CLAIM_MS) is
   // surfaced (the gate is `>=`), and one a hair under is withheld.
   it('treats the stale boundary inclusively', async () => {
     const now = Date.now()
-    readDirMock.mockResolvedValue([
-      readDirEntry('/store/files/edge.tmp', now - IMPORT_STALE_CLAIM_MS),
-      readDirEntry('/store/files/just-under.tmp', now - IMPORT_STALE_CLAIM_MS + 1),
+    listing([
+      ['edge.tmp', now - IMPORT_STALE_CLAIM_MS],
+      ['just-under.tmp', now - IMPORT_STALE_CLAIM_MS + 1],
     ])
+    const result = names(await adapter.list())
+    expect(result).toContain('edge.tmp')
+    expect(result).not.toContain('just-under.tmp')
+  })
+
+  it('stats only the claim temps and returns paths in the files folder', async () => {
+    listing([['a.jpg'], ['b.webp'], ['old.tok.tmp', 0]])
+
     const result = await adapter.list()
-    expect(result).toContain('/store/files/edge.tmp')
-    expect(result).not.toContain('/store/files/just-under.tmp')
+
+    expect(names(result)).toEqual(['a.jpg', 'b.webp', 'old.tok.tmp'])
+    expect(result.every((p) => p.includes('/files/'))).toBe(true)
+    expect(statMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('fsIO adapter removeByPath()', () => {
+  const adapter = createFsIOAdapter()
+
+  beforeEach(() => {
+    jest.resetAllMocks()
+  })
+
+  it('returns the size of the file it removed', async () => {
+    statMock.mockResolvedValue(mockStatResult(512))
+    expect(await adapter.removeByPath?.('/store/files/a.tok.tmp')).toBe(512)
+    expect(unlinkMock).toHaveBeenCalledWith('/store/files/a.tok.tmp')
+  })
+
+  it('returns 0 and removes nothing when the file is already gone', async () => {
+    statMock.mockRejectedValue(new Error('ENOENT'))
+    expect(await adapter.removeByPath?.('/store/files/gone.tmp')).toBe(0)
+    expect(unlinkMock).not.toHaveBeenCalled()
   })
 })
 

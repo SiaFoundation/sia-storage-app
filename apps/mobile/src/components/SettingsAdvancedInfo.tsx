@@ -25,11 +25,12 @@ export function SettingsAdvancedInfo({ onImport }: Props) {
           style: 'destructive',
           onPress: async () => {
             try {
-              const before = await app().fs.calcTotalSize()
-              await runFsOrphanScanner({ force: true })
-              await clearBackedUpFsFiles()
-              const after = await app().fs.calcTotalSize()
-              const freed = Math.max(0, before - after)
+              // Summed from both passes rather than read off the fs table
+              // before and after, which misses the bytes of every orphan the
+              // scan removes that had no fs row.
+              const orphans = await runFsOrphanScanner({ force: true })
+              const evicted = await clearBackedUpFsFiles()
+              const freed = (orphans?.bytesFreed ?? 0) + (evicted?.bytesFreed ?? 0)
               Alert.alert('Local files cleared', `Freed ${humanSize(freed) ?? '0 B'}.`)
             } catch (e: unknown) {
               Alert.alert('Error', String(e))

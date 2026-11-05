@@ -152,6 +152,19 @@ export function buildDbNamespaces(
     invalidateLibrary()
   }
 
+  // Bytes land in the files folder before their fs row, and the orphan scan
+  // deletes listed bytes that have neither an fs row nor a files row. It
+  // skips these ids so it cannot catch a new thumbnail in that gap.
+  const beingWritten = new Set<string>()
+  async function whileWriting<T>(fileId: string, write: () => Promise<T>): Promise<T> {
+    beingWritten.add(fileId)
+    try {
+      return await write()
+    } finally {
+      beingWritten.delete(fileId)
+    }
+  }
+
   // adoptFile through the fs adapter, then record fsMeta. Overloaded to mirror
   // the adapter: hashed by default, size-only with { hash: false }.
   async function adoptFileWithMeta(
@@ -168,13 +181,15 @@ export function buildDbNamespaces(
     sourceUri: string,
     opts?: { hash: false },
   ): Promise<AdoptFileHashed | AdoptFilePlain> {
-    if (!fsIO.adoptFile) throw new Error('adoptFile not implemented')
-    const result = opts
-      ? await fsIO.adoptFile(file, sourceUri, opts)
-      : await fsIO.adoptFile(file, sourceUri)
-    const now = Date.now()
-    await ops.upsertFsMeta(db, { fileId: file.id, size: result.size, addedAt: now, usedAt: now })
-    return result
+    return whileWriting(file.id, async () => {
+      if (!fsIO.adoptFile) throw new Error('adoptFile not implemented')
+      const result = opts
+        ? await fsIO.adoptFile(file, sourceUri, opts)
+        : await fsIO.adoptFile(file, sourceUri)
+      const now = Date.now()
+      await ops.upsertFsMeta(db, { fileId: file.id, size: result.size, addedAt: now, usedAt: now })
+      return result
+    })
   }
 
   const fsNamespace: AppService['fs'] = {
@@ -190,7 +205,7 @@ export function buildDbNamespaces(
       ops.queryNonCurrentCachedFiles(db, thresholdUsedAt, after, limit),
     trashedCachedFiles: (indexerURL, after, limit) =>
       ops.queryTrashedCachedFiles(db, indexerURL, after, limit),
-    findOrphanedFileIds: (fileIds) => ops.queryOrphanedFileIds(db, fileIds),
+    findOrphanedFileIds: (fileIds, opts) => ops.queryOrphanedFileIds(db, fileIds, opts),
     liveFileTypes: (fileIds) => ops.queryLiveFileTypes(db, fileIds),
     inFlightImportFileIds: (fileIds) => ops.queryInFlightImportFileIds(db, fileIds),
     getFileUri: (file, opts) => getFsFileUri(db, file, fsIO, opts),
@@ -204,15 +219,13 @@ export function buildDbNamespaces(
       return size.value
     },
     removeFile,
-    removeFileByPath: async (path) => {
-      if (!fsIO.removeByPath) return
-      await fsIO.removeByPath(path)
-    },
-    copyFile: async (file, sourceUri, opts) => {
-      const result = await fsIO.copy(file, sourceUri)
-      await recordCopiedMeta(file, result.size, opts?.usedAt)
-      return result
-    },
+    removeFileByPath: async (path) => (fsIO.removeByPath ? fsIO.removeByPath(path) : 0),
+    copyFile: async (file, sourceUri, opts) =>
+      whileWriting(file.id, async () => {
+        const result = await fsIO.copy(file, sourceUri)
+        await recordCopiedMeta(file, result.size, opts?.usedAt)
+        return result
+      }),
     importCopy: async (file, sourceUri, opts) => {
       const result = await fsIO.importCopy(file, sourceUri, {
         claimToken: opts.claimToken,
@@ -224,20 +237,23 @@ export function buildDbNamespaces(
       return result
     },
     writeFileData: async (file, data) => {
-      if (!fsIO.writeFile) throw new Error('writeFile not implemented')
-      const result = await fsIO.writeFile(file, data)
-      const hash = adapters?.crypto ? toContentHash(await adapters.crypto.sha256(data)) : ''
-      await ops.upsertFsMeta(db, {
-        fileId: file.id,
-        size: result.size,
-        addedAt: Date.now(),
-        usedAt: Date.now(),
+      return whileWriting(file.id, async () => {
+        if (!fsIO.writeFile) throw new Error('writeFile not implemented')
+        const result = await fsIO.writeFile(file, data)
+        const hash = adapters?.crypto ? toContentHash(await adapters.crypto.sha256(data)) : ''
+        await ops.upsertFsMeta(db, {
+          fileId: file.id,
+          size: result.size,
+          addedAt: Date.now(),
+          usedAt: Date.now(),
+        })
+        return { uri: result.uri, size: result.size, hash }
       })
-      return { uri: result.uri, size: result.size, hash }
     },
     adoptFile: adoptFileWithMeta,
     renameToType: (file, newType) => fsIO.renameToType(file, newType),
     listFiles: () => fsIO.list(),
+    filesBeingWritten: () => beingWritten,
     ensureStorageDirectory: () => fsIO.ensureDirectory(),
     getDeviceSpace: async () => {
       // Without a platform capability, report ample space so the
