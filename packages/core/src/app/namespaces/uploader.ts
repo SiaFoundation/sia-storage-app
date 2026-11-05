@@ -32,7 +32,19 @@ export function buildUploaderNamespace(
         }
         entries.push({ fileId: file.id, fileUri, file, size: file.size })
       }
-      const queued = manager.enqueue(entries)
+      // Trashing takes a file out of the uploads store, which does nothing
+      // for one this call has not queued yet, so a file trashed or deleted
+      // while the loop above read local copies is dropped here, with no
+      // await before enqueue.
+      const rows = await ops.queryFilesByIds(
+        db,
+        entries.map((e) => e.fileId),
+      )
+      const live = entries.filter((e) => {
+        const row = rows.get(e.fileId)
+        return row !== undefined && row.trashedAt === null && row.deletedAt === null
+      })
+      const queued = manager.enqueue(live)
       return { queued, skipped: skipped + entries.length - queued }
     },
     async enqueueWithUri(entries) {
