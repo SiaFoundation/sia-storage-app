@@ -1,9 +1,8 @@
 import { logger } from '@siastorage/logger'
 import type { DatabaseAdapter } from '../adapters/db'
+import { USED_AT_UPDATE_INTERVAL } from '../config'
 import { deleteFsMeta, readFsMeta, updateFsMetaUsedAt, upsertFsMeta } from '../db/operations/fs'
 import type { ContentHash } from '../lib/contentHash'
-
-const USED_AT_UPDATE_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
 
 /**
  * What a claim-scoped copy produced, by how it ran. `stream` read arbitrary
@@ -151,7 +150,7 @@ export async function getFsFileUri(
       usedAt: now,
     })
   } else {
-    const interval = opts?.usedAtUpdateInterval ?? USED_AT_UPDATE_INTERVAL_MS
+    const interval = opts?.usedAtUpdateInterval ?? USED_AT_UPDATE_INTERVAL
     const timeSinceLastUse = now - existingMeta.usedAt
     if (timeSinceLastUse > interval) {
       await updateFsMetaUsedAt(db, file.id, now)

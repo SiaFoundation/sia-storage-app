@@ -1,7 +1,11 @@
 import { FS_EVICTION_FREQUENCY } from '@siastorage/core/config'
 import { SingleInit } from '@siastorage/core/lib/singleflight'
 import type { CacheEvictionConfig, CacheEvictionResult } from '@siastorage/core/services'
-import { EVICT_ALL_BACKED_UP, runCacheEviction } from '@siastorage/core/services'
+import {
+  configuredCacheEviction,
+  EVICT_ALL_BACKED_UP,
+  runCacheEviction,
+} from '@siastorage/core/services'
 import { logger } from '@siastorage/logger'
 import { app } from '../stores/appService'
 import { isBgTaskActive } from './bgTaskContext'
@@ -49,7 +53,10 @@ export async function runFsEvictionScanner(
     const onExternalAbort = () => activeController?.abort()
     opts.signal?.addEventListener('abort', onExternalAbort)
     try {
-      const result = await runCacheEviction(app(), opts.config, activeController.signal)
+      // A scheduled pass holds files for the minimum age in settings, as the
+      // daemon's does.
+      const config = opts.config ?? (await configuredCacheEviction(app()))
+      const result = await runCacheEviction(app(), config, activeController.signal)
       // Don't advance lastRun on abort — the scan didn't complete, so the
       // throttle gate should let the next attempt through instead of skipping it.
       if (activeController.signal.aborted) {

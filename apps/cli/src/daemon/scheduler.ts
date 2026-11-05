@@ -1,6 +1,6 @@
 import {
   DB_OPTIMIZE_INTERVAL,
-  FS_EVICTION_FREQUENCY,
+  FS_EVICTION_FREQUENCY_DAEMON,
   PROVIDER_THUMBNAIL_RETRY_INTERVAL,
   PRUNE_SLABS_INTERVAL,
   SHARE_LINKS_INTERVAL,
@@ -86,11 +86,11 @@ export function initializeScheduler(app: CliApp): { scheduler: ServiceScheduler 
       worker: whenConnected(() => runPruneSlabs(app.service, app.internal)),
     },
     {
-      // The configured cap and age, which default to the ones mobile uses. When
-      // the Finder folder also holds a file, its copy and ours share disk
-      // blocks, so removing ours frees space only once Finder drops its copy.
+      // The configured cap and age. When the Finder folder also holds a file,
+      // its copy and ours share disk blocks, so removing ours frees space only
+      // once Finder drops its copy.
       name: 'cacheEviction',
-      interval: FS_EVICTION_FREQUENCY,
+      interval: FS_EVICTION_FREQUENCY_DAEMON,
       worker: async (signal: AbortSignal) => {
         await app.internal.evictCache(signal)
       },

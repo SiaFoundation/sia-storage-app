@@ -282,6 +282,35 @@ describe('FS Cache Eviction', () => {
     }, 60_000)
   })
 
+  it('the default minimum age holds a file used in the last hour and evicts one used before that', async () => {
+    const [recent, older] = await app.addFiles(generateTestFiles(2, { startId: 1, sizeBytes: 100 }))
+    for (const file of [recent, older]) {
+      await app.waitForCondition(
+        async () => (await app.readLocalObjectsForFile(file.id)).length > 0,
+        30_000,
+      )
+    }
+    const olderMeta = (await app.app.fs.readMeta(older.id))!
+    await app.app.fs.upsertMeta({ ...olderMeta, usedAt: Date.now() - ONE_HOUR - 60_000 })
+    await app.app.settings.setCacheMaxBytes(0)
+
+    const result = await app.app.cache.evict()
+
+    expect(result?.evictedFileIds).toEqual([older.id])
+    expect(await app.app.fs.readMeta(recent.id)).not.toBeNull()
+  })
+
+  it('a read within the hour moves usedAt', async () => {
+    const [file] = await app.addFiles(generateTestFiles(1, { startId: 1, sizeBytes: 100 }))
+    const meta = (await app.app.fs.readMeta(file.id))!
+    const readBefore = Date.now() - ONE_HOUR + 60_000
+    await app.app.fs.upsertMeta({ ...meta, usedAt: readBefore })
+
+    await app.getFsFileUri({ id: file.id, type: file.type })
+
+    expect((await app.app.fs.readMeta(file.id))!.usedAt).toBeGreaterThan(readBefore)
+  })
+
   it('LRU does not evict files younger than minAge', async () => {
     await app.addFiles(generateTestFiles(2, { startId: 1, sizeBytes: 2000 }))
     await app.waitForNoActiveUploads()

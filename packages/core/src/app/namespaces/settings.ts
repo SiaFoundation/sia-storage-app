@@ -23,6 +23,7 @@ export function buildSettingsNamespace(
   storage: StorageAdapter,
   caches: AppCaches,
   onIndexerURLChanged: () => Promise<void> = async () => {},
+  cacheMinAgeMs: number = FS_EVICTABLE_MIN_AGE,
 ): AppService['settings'] {
   async function getBool(key: string, defaultValue: boolean): Promise<boolean> {
     const raw = await storage.getItem(key)
@@ -103,7 +104,7 @@ export function buildSettingsNamespace(
       await storage.setItem('cacheMaxBytes', v === null ? CACHE_NO_LIMIT : String(Math.floor(v)))
       caches.settings.invalidate('cacheMaxBytes')
     },
-    getCacheMinAge: () => getNum('cacheMinAge', FS_EVICTABLE_MIN_AGE),
+    getCacheMinAge: () => getNum('cacheMinAge', cacheMinAgeMs),
     setCacheMinAge: async (v) => {
       if (!Number.isFinite(v) || v < 0) {
         throw new Error(`Cache minimum age must be milliseconds of 0 or more, got ${v}`)

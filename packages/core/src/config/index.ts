@@ -178,10 +178,24 @@ export const PROVIDER_THUMBNAIL_RETRY_INTERVAL = secondsInMs(30)
 export const FS_MAX_BYTES = 4_000_000_000 // 4 GB
 // File system orphaned file cleanup frequency.
 export const FS_ORPHAN_FREQUENCY = daysInMs(1) // 1 day
-// File system file eviction frequency.
+// How often the phone runs its eviction pass.
 export const FS_EVICTION_FREQUENCY = minutesInMs(60) // 60 minutes
-// Age threshold for evicting cached files via the LRU cap pass.
-export const FS_EVICTABLE_MIN_AGE = daysInMs(1) // 1 day
+// How often the CLI and desktop daemon runs its eviction pass. A pass under
+// the cap with no trashed or superseded copies to remove reads one sum and
+// runs the two pre-pass queries, so running it often costs little, and a
+// cache over the cap after a large upload comes back down within this long
+// of `FS_EVICTABLE_MIN_AGE` ending.
+export const FS_EVICTION_FREQUENCY_DAEMON = minutesInMs(15)
+// The LRU pass's age threshold until `cacheMinAge` is set. On the Mac a file
+// Finder has saved or opened is read from Finder's own copy, so the daemon's
+// copy is read again only by `sia download` or after Finder drops its copy,
+// and a hold of a day kept the cache far over its cap for a day after a large
+// upload.
+export const FS_EVICTABLE_MIN_AGE = minutesInMs(60) // 1 hour
+// How often a read moves a file's usedAt, at most. Well under
+// `FS_EVICTABLE_MIN_AGE`, so a file read again within its hour is held from
+// that read rather than evicted minutes after it.
+export const USED_AT_UPDATE_INTERVAL = minutesInMs(5)
 // Age threshold for evicting superseded file versions.
 export const FS_EVICTABLE_MIN_AGE_NON_CURRENT = minutesInMs(60) // 1 hour
 // Sync up metadata interval.

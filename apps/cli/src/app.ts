@@ -4,7 +4,7 @@ import type { DatabaseAdapter, SdkAdapter, SdkAuthAdapters } from '@siastorage/c
 // oxlint-disable-next-line no-restricted-imports -- CLI daemon needs internal API to set SDK
 import type { AppService, AppServiceInternal } from '@siastorage/core/app'
 import { createAppService } from '@siastorage/core/app'
-import { APP_META } from '@siastorage/core/config'
+import { APP_META, FS_EVICTABLE_MIN_AGE, USED_AT_UPDATE_INTERVAL } from '@siastorage/core/config'
 import { runMigrations } from '@siastorage/core/db'
 import { coreMigrations, sortMigrations } from '@siastorage/core/db/migrations'
 import { recordForcedReset } from '@siastorage/core/lib/forcedReset'
@@ -152,6 +152,8 @@ export async function createCliAppService(
     thumbnail,
     detectMimeType,
     handoffDir: opts?.handoffDir,
+    usedAtUpdateIntervalMs: USED_AT_UPDATE_INTERVAL,
+    cacheMinAgeMs: FS_EVICTABLE_MIN_AGE,
   })
 
   // In test mode the test SDK, MockSdk or the mock network's client, attaches

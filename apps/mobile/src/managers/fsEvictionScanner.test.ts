@@ -35,6 +35,20 @@ describe('fsEvictionScanner', () => {
     await resetDb()
   })
 
+  it('a scheduled pass removes a backed-up file once it has gone an hour unused, or the minimum age set in settings', async () => {
+    await app().settings.setCacheMaxBytes(0)
+    await createRemoteFile({ id: 'old', size: 200, usedAt: now - 61 * 60_000 })
+    await createRemoteFile({ id: 'recent', size: 200, usedAt: now - 59 * 60_000 })
+
+    expect((await runFsEvictionScanner())?.evictedFileIds).toEqual(['old'])
+    expect(await app().fs.readMeta('recent')).not.toBeNull()
+
+    await app().settings.setCacheMinAge(2 * 60 * 60_000)
+    await createRemoteFile({ id: 'within-two-hours', size: 200, usedAt: now - 90 * 60_000 })
+    expect((await runFsEvictionScanner({ force: true }))?.evictedFileIds).toEqual([])
+    expect(await app().fs.readMeta('within-two-hours')).not.toBeNull()
+  })
+
   it('does not evict current versions when total size is below limit', async () => {
     await createRemoteFile({
       id: 'file-1',
