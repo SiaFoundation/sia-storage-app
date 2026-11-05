@@ -2,6 +2,19 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.15.1-rc.1 (2026-11-05)
+
+### Fixes
+
+- A deleted folder no longer stays behind empty or comes back on your other devices. It goes to the trash as one item, and restoring it, or a file trashed from it earlier, puts the files back in the folders they came from, creating them again if needed. Trashing the last file in a folder removes the folder too, except in the Finder folder on the Mac, which keeps it until you delete it.
+- Cache eviction and Clear local files finish when some files cannot be deleted, instead of retrying the same files until they are stopped. `fs.evictionCandidates`, `fs.nonCurrentCachedFiles` and `fs.trashedCachedFiles` take a cursor and return each row's `usedAt`.
+- A file's local copy is no longer removed to save space, and Finder no longer treats it as backed up, until the file is on the indexer you use now, so switching indexers cannot leave a file with no copy the new indexer can get.
+- While uploads or sync keep changing the library, the grid's loading spinner clears once the next page arrives, where it could stay stuck until the app restarted. `useFileList` returns `isLoadingMore` and `useLoadMore` takes it in place of `data` and `isValidating`, and list reloads and `invalidateAll()` refreshes each run one at a time, with one more after for changes made meanwhile.
+- The library grid, its counts and the photo viewer load faster in large libraries, for every sort order. `buildLibraryQueryParts` returns `indexedBy` clauses for reads over the whole library, and the name sort no longer moves files without a `nameSortKey` to the end.
+- Share Link lists the files being shared, and the files on a link once it is made, by folder and then by name, in the same order on every device.
+- Putting a file in the trash, on its own or by deleting its folder, takes it off your share links, and restoring it no longer shares it again.
+- The photo viewer lets you swipe once its list of photos loads after a failed try, where it stayed on the opened photo until the app restarted.
+
 ## 1.15.1-rc.0 (2026-11-04)
 
 ### Fixes
