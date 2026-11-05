@@ -56,6 +56,10 @@ export interface AppServiceAdapters {
   thumbnailRetryBackoffMs?: number
   /** Reads how much memory the device can spare. Left out, transfers get a fixed budget. */
   readMemory?: MemoryReader
+  /** How often a read moves a file's usedAt, at most. Left out, `USED_AT_UPDATE_INTERVAL`. */
+  usedAtUpdateIntervalMs?: number
+  /** The cache's minimum age until `cacheMinAge` is set. Left out, `FS_EVICTABLE_MIN_AGE`. */
+  cacheMinAgeMs?: number
 }
 
 /** The result of creating an AppService: the public service, internal APIs, and upload manager. */
@@ -184,10 +188,15 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     localCopyLock,
   )
 
-  const settingsNamespace = buildSettingsNamespace(adapters.storage, caches, async () => {
-    await restampAllFiles(adapters.db)
-    caches.libraryVersion.invalidate()
-  })
+  const settingsNamespace = buildSettingsNamespace(
+    adapters.storage,
+    caches,
+    async () => {
+      await restampAllFiles(adapters.db)
+      caches.libraryVersion.invalidate()
+    },
+    adapters.cacheMinAgeMs,
+  )
   const authNamespace = buildAuthNamespace(adapters.secrets, adapters.crypto, adapters.sdkAuth)
 
   const sharesNamespace = buildSharesNamespace(
@@ -204,6 +213,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       thumbnail: adapters.thumbnail,
       detectMimeType: adapters.detectMimeType,
       localCopyLock,
+      usedAtUpdateIntervalMs: adapters.usedAtUpdateIntervalMs,
     })
   const withTransaction: AppServiceInternal['withTransaction'] = async (fn) => {
     const invalidations: Array<() => void> = []

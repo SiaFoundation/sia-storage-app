@@ -5,6 +5,7 @@ import {
   type AppServiceResult,
   createAppService,
 } from '@siastorage/core/app'
+import { FS_EVICTABLE_MIN_AGE, USED_AT_UPDATE_INTERVAL } from '@siastorage/core/config'
 import type { UploadManager } from '@siastorage/core/services/uploader'
 import { readMemory } from 'memory-info'
 import { type MobileSdkAuth, MobileSdkAuthAdapter } from '../adapters/auth'
@@ -54,6 +55,8 @@ function ensureApp(): AppServiceResult {
     thumbnail: createMobileThumbnailAdapter(),
     detectMimeType,
     readMemory,
+    usedAtUpdateIntervalMs: USED_AT_UPDATE_INTERVAL,
+    cacheMinAgeMs: FS_EVICTABLE_MIN_AGE,
   })
   _app = result.service
   _internal = result.internal
