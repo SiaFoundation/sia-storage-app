@@ -617,8 +617,11 @@ export interface AppService {
       after: EvictionCursor | null,
       limit: number,
     ): Promise<EvictionRow[]>
-    /** Returns the subset of fileIds that are orphaned (no fs row or soft-deleted). */
-    findOrphanedFileIds(fileIds: string[]): Promise<Set<string>>
+    /**
+     * Returns the subset of fileIds that are orphaned (no fs row or soft-deleted),
+     * sparing any whose fs row was added at or after `writtenSince`.
+     */
+    findOrphanedFileIds(fileIds: string[], opts?: { writtenSince?: number }): Promise<Set<string>>
     /** Stored type of each live file among `fileIds`; absent when tombstoned or gone. */
     liveFileTypes(fileIds: string[]): Promise<Map<string, string>>
     /** Which of `fileIds` still have an in-flight import_files row (owns bytes on disk). */
@@ -649,8 +652,11 @@ export interface AppService {
       file: { id: string; type: string },
       opts?: { skipIfLocked?: boolean },
     ): Promise<boolean>
-    /** Removes a local file by its literal path (orphan-scanner temp sweep). */
-    removeFileByPath(path: string): Promise<void>
+    /**
+     * Removes a local file by its literal path (orphan-scanner temp sweep) and
+     * returns the bytes removed, 0 when nothing was there.
+     */
+    removeFileByPath(path: string): Promise<number>
     /** Copies a file from the source URI into managed storage; returns the
      * stored uri and size. */
     copyFile(
@@ -703,6 +709,11 @@ export interface AppService {
     detectMimeType(path: string, name?: string): Promise<string | null>
     /** Lists all filenames in the managed storage directory. */
     listFiles(): Promise<string[]>
+    /**
+     * Ids whose bytes `writeFileData`, `adoptFile` or `copyFile` is putting in
+     * the files folder now, before their fs row is recorded.
+     */
+    filesBeingWritten(): ReadonlySet<string>
     /** Creates the managed storage directory if it does not exist. */
     ensureStorageDirectory(): Promise<void>
     /**

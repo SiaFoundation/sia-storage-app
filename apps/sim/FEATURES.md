@@ -231,6 +231,7 @@ bun sim device expect phone --label Menu
   eviction pass now, and `cache.clear` removes every backed-up copy, as Clear
   Local Files does; tables `fs`
 - Tests: scenarios `mobile/clear-local-files-keeps-unuploaded`,
+  `mobile/stray-copy-removed-on-resume`,
   `sync/converge-and-download`, `mobile/tapped-download-arrives`,
   `sync/small-downloads-beside-large`, `finder/cache-limit-evicts`,
   `finder/cache-limit-keeps-unuploaded`, `finder/cache-limit-concurrent-opens`,

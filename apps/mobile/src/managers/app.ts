@@ -24,6 +24,7 @@ import { initBackgroundTasks } from './backgroundTasks'
 import { initDbOptimize } from './dbOptimize'
 import { recordForcedReset, resolveForcedReset } from './forcedReset'
 import { runFsEvictionScanner, stopFsEvictionScanner } from './fsEvictionScanner'
+import { scheduleFsOrphanScanner, stopFsOrphanScanner } from './fsOrphanScanner'
 import { initAutoKeepAwake } from './autoKeepAwake'
 import { initImportScanner } from './importScanner'
 import { initLogRotation } from './logRotation'
@@ -144,6 +145,7 @@ export async function initApp(): Promise<void> {
         initUploadForegroundService()
         initThumbnailScanner()
         void maybePruneSlabs()
+        scheduleFsOrphanScanner()
       },
     })
   }
@@ -281,6 +283,7 @@ async function runResetFlow({ label, keepAuth }: { label: string; keepAuth: bool
   // tearing down the SDK and DB.
   await shutdownAllServiceIntervals()
   await stopFsEvictionScanner()
+  await stopFsOrphanScanner()
 
   const success = await runSteps([
     {

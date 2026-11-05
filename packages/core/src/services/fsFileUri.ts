@@ -45,9 +45,10 @@ export type FsIOAdapter = FsFileUriAdapter & {
   /**
    * Delete a file by its literal path (as returned by `list()`). Used by the
    * orphan scanner to sweep claim-scoped temp files `<id>.<token>.tmp`, whose
-   * path can't be reconstructed from id + mime type.
+   * path can't be reconstructed from id + mime type. Returns the bytes
+   * removed, 0 when nothing was there.
    */
-  removeByPath?(path: string): Promise<void>
+  removeByPath?(path: string): Promise<number>
   /** Plain byte copy into the file's slot. */
   copy(
     file: { id: string; type: string },

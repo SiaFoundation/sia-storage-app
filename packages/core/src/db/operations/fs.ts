@@ -69,8 +69,12 @@ export async function queryLiveFileTypes(
 ): Promise<Map<string, string>> {
   if (fileIds.length === 0) return new Map()
   const rows = await db.getAllAsync<{ id: string; type: string }>(
+    // CROSS JOIN makes SQLite read the ids first and look each one up by
+    // primary key. With a plain JOIN it starts from the deletedAt index
+    // instead, walking every live file and scanning the ids for each, so each
+    // batch of the orphan scan costs time in proportion to the whole library.
     `SELECT files.id AS id, files.type AS type FROM json_each(?)
-     JOIN files ON files.id = value
+     CROSS JOIN files ON files.id = json_each.value
      WHERE files.deletedAt IS NULL`,
     JSON.stringify(fileIds),
   )
@@ -230,9 +234,16 @@ export async function queryInFlightImportFileIds(
   return new Set(rows.map((r) => r.id))
 }
 
+/**
+ * `writtenSince` spares any id whose fs row was added at or after it. A writer
+ * that records a new file's bytes before its files row, as the thumbnail
+ * generator does, leaves an fs row and no files row for a moment, and a scan
+ * landing in that moment would delete a file about to exist.
+ */
 export async function queryOrphanedFileIds(
   db: DatabaseAdapter,
   fileIds: string[],
+  opts?: { writtenSince?: number },
 ): Promise<Set<string>> {
   if (fileIds.length === 0) return new Set()
   // Bytes for a pending or active import sit on disk with no files row, including
@@ -245,6 +256,8 @@ export async function queryOrphanedFileIds(
      WHERE NOT EXISTS (
        SELECT 1 FROM import_files
        WHERE import_files.id = value AND import_files.state IN ('pending','active')
+     ) AND NOT EXISTS (
+       SELECT 1 FROM fs WHERE fs.fileId = value AND fs.addedAt >= ?
      ) AND (
        NOT EXISTS (
          SELECT 1 FROM fs WHERE fs.fileId = value
@@ -253,6 +266,7 @@ export async function queryOrphanedFileIds(
        )
      )`,
     JSON.stringify(fileIds),
+    opts?.writtenSince ?? Number.MAX_SAFE_INTEGER,
   )
   return new Set(rows.map((r) => r.fileId))
 }

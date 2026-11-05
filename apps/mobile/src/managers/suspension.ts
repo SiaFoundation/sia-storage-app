@@ -27,7 +27,7 @@ import {
 import { app } from '../stores/appService'
 import { resumeLogger } from '../stores/logs'
 import { cancelFsEvictionScanner, runFsEvictionScanner } from './fsEvictionScanner'
-import { cancelFsOrphanScanner } from './fsOrphanScanner'
+import { cancelFsOrphanScanner, scheduleFsOrphanScanner } from './fsOrphanScanner'
 import { addLifecycleListener, getLifecycle } from './lifecycle'
 import { maybePruneSlabs } from './pruneSlabs'
 import { isArchiveWalkActive, pauseArchiveSync, resumeArchiveSync } from './syncPhotosArchive'
@@ -98,6 +98,11 @@ const manager = createSuspensionManager(
         cancelFsOrphanScanner()
         pauseArchiveSync()
       },
+      // Fires on every return to the foreground. onAfterResume fires only
+      // after a suspension, which an Android app switch never causes. The
+      // scan is daily, so most returns skip it, and a scan a suspension cut
+      // off is scheduled again here.
+      onForegroundActive: () => scheduleFsOrphanScanner(),
       onAfterResume: () => {
         resumeLogger()
         void resumeArchiveSync()
