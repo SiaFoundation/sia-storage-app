@@ -9,6 +9,7 @@ import { Platform } from 'react-native'
 import ReactNativeBlobUtil from 'react-native-blob-util'
 import Share from 'react-native-share'
 import { useFileStatus } from '../lib/file'
+import { recordFileUse } from '../stores/fs'
 import { useToast } from '../lib/toastContext'
 
 export function useShareAction({ fileId }: { fileId: string }) {
@@ -22,6 +23,7 @@ export function useShareAction({ fileId }: { fileId: string }) {
     if (!status.data?.fileUri) return
 
     try {
+      await recordFileUse(file)
       await Share.open({
         url: status.data.fileUri,
         type: file.type,
@@ -60,6 +62,7 @@ export function useShareAction({ fileId }: { fileId: string }) {
       // bytes into its content URI off the JS thread (expo-file-system's
       // own copy() is sync JSI and would block on large files).
       target = directory.createFile(file.name ?? `${file.id}${extFromMime(file.type)}`, file.type)
+      await recordFileUse(file)
       await ReactNativeBlobUtil.media.write(target.uri, status.data.fileUri)
       toast.show('File saved')
     } catch (e) {

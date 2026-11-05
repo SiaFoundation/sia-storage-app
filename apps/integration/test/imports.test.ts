@@ -2,7 +2,8 @@ import { createHash } from 'crypto'
 import * as nodeFs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import { IMPORT_MAX_ATTEMPTS } from '@siastorage/core/config'
+import sharp from 'sharp'
+import { FS_EVICTION_THUMBNAIL_WAIT, IMPORT_MAX_ATTEMPTS } from '@siastorage/core/config'
 import type { ImportFileRow, ImportRow, ImportSource } from '@siastorage/core/db/operations'
 import {
   type CalculateContentHash,
@@ -11,6 +12,8 @@ import {
   type ResolveSource,
   type ResolveSourceResult,
 } from '@siastorage/core/services/importScanner'
+import { EVICT_ALL_BACKED_UP, runCacheEviction } from '@siastorage/core/services'
+import { ThumbSizes } from '@siastorage/core/types'
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
 import { createTestApp, type TestApp } from './app'
 import { toContentHash } from '@siastorage/core/lib/contentHash'
@@ -658,5 +661,106 @@ describe('Imports lifecycle (integration)', () => {
 
     const stored = nodeFs.readdirSync(app.tempDir).filter((f) => f.startsWith(fileId))
     expect(stored).toEqual([`${fileId}.jpg`])
+  }, 30_000)
+
+  it('an imported copy is evictable once the uploader has read and uploaded it', async () => {
+    const fileId = nextId('if')
+    const importId = nextId('imp')
+    sources.set(fileId, { status: 'resolved', uri: writeSource('library photo bytes') })
+    await app.app.imports.create(importRow({ id: importId, source: 'library-scan' }), [
+      // A type with no thumbnails, so eviction has nothing to wait for.
+      importFileRow({ id: fileId, importId, name: 'notes.txt' }),
+    ])
+    await drainScanner()
+
+    // The uploader runs on the harness scheduler and opens the imported copy
+    // to read it.
+    app.resume()
+    await app.waitForCondition(
+      async () => (await app.readLocalObjectsForFile(fileId)).length > 0,
+      20_000,
+    )
+    app.pause()
+
+    // Default minimum age: only a copy whose use time is still the importer's
+    // 0 is old enough to go.
+    const result = await runCacheEviction(app.app, { maxBytes: 0 })
+
+    expect(result?.evictedFileIds).toContain(fileId)
+    expect(await app.app.fs.readMeta(fileId)).toBeNull()
+  }, 30_000)
+
+  it('an imported photo is evictable once it is uploaded and both thumbnails are made from it', async () => {
+    const fileId = nextId('if')
+    const importId = nextId('imp')
+    const photo = await sharp({
+      create: { width: 600, height: 400, channels: 3, background: { r: 40, g: 120, b: 200 } },
+    })
+      .jpeg()
+      .toBuffer()
+    sources.set(fileId, { status: 'resolved', uri: writeSource(photo) })
+    await app.app.imports.create(importRow({ id: importId, source: 'library-scan' }), [
+      importFileRow({ id: fileId, importId, name: 'IMG_0006.JPG' }),
+    ])
+    await drainScanner()
+
+    // The uploader and the thumbnail generator both open the imported copy.
+    app.resume()
+    await app.waitForCondition(async () => {
+      const uploaded = (await app.readLocalObjectsForFile(fileId)).length > 0
+      const thumbs = await app.app.thumbnails.getForFile(fileId)
+      return uploaded && thumbs.length === ThumbSizes.length
+    }, 20_000)
+    app.pause()
+
+    expect((await app.app.fs.readMeta(fileId))?.usedAt).toBe(0)
+    const result = await runCacheEviction(app.app, { maxBytes: 0 })
+    expect(result?.evictedFileIds).toContain(fileId)
+  }, 30_000)
+
+  it('clearing local files removes an uploaded photo whose thumbnails are not made yet', async () => {
+    const fileId = nextId('if')
+    const importId = nextId('imp')
+    sources.set(fileId, { status: 'resolved', uri: writeSource('not really a photo either') })
+    await app.app.imports.create(importRow({ id: importId, source: 'library-scan' }), [
+      importFileRow({ id: fileId, importId, name: 'IMG_0005.JPG' }),
+    ])
+    await drainScanner()
+    app.resume()
+    await app.waitForCondition(
+      async () => (await app.readLocalObjectsForFile(fileId)).length > 0,
+      20_000,
+    )
+    app.pause()
+
+    const cleared = await runCacheEviction(app.app, EVICT_ALL_BACKED_UP)
+
+    expect(cleared?.evictedFileIds).toContain(fileId)
+  }, 30_000)
+
+  it('an uploaded photo stays until its thumbnails are made, for up to a day', async () => {
+    const fileId = nextId('if')
+    const importId = nextId('imp')
+    // Not a real JPEG, so its thumbnails are never made.
+    sources.set(fileId, { status: 'resolved', uri: writeSource('not really a photo') })
+    await app.app.imports.create(importRow({ id: importId, source: 'library-scan' }), [
+      importFileRow({ id: fileId, importId, name: 'IMG_0004.JPG' }),
+    ])
+    await drainScanner()
+    app.resume()
+    await app.waitForCondition(
+      async () => (await app.readLocalObjectsForFile(fileId)).length > 0,
+      20_000,
+    )
+    app.pause()
+
+    const kept = await runCacheEviction(app.app, { maxBytes: 0 })
+    expect(kept?.evictedFileIds ?? []).not.toContain(fileId)
+
+    // A copy added more than a day ago no longer waits.
+    const meta = await app.app.fs.readMeta(fileId)
+    await app.app.fs.upsertMeta({ ...meta!, addedAt: Date.now() - FS_EVICTION_THUMBNAIL_WAIT - 1 })
+    const evicted = await runCacheEviction(app.app, { maxBytes: 0 })
+    expect(evicted?.evictedFileIds).toContain(fileId)
   }, 30_000)
 })

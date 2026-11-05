@@ -1,7 +1,7 @@
 import { useDownloadEntry } from '@siastorage/core/stores'
 import type { FileRecord } from '@siastorage/core/types'
 import { CloudDownloadIcon, FileIcon } from 'lucide-react-native'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { assertNever, useFileStatus } from '../../lib/file'
 import { useDownload } from '../../managers/downloader'
@@ -9,6 +9,7 @@ import { app } from '../../stores/appService'
 import { useIsOnline } from '../../hooks/useIsOnline'
 import { useIsConnected } from '../../stores/sdk'
 import { colors } from '../../styles/colors'
+import { recordFileUse } from '../../stores/fs'
 import { AudioPlayer } from '../MediaConsumers/AudioPlayer'
 import { ImageViewer } from '../MediaConsumers/ImageViewer'
 import { JSONViewer } from '../MediaConsumers/JSONViewer'
@@ -28,6 +29,11 @@ type FileViewerProps = {
   onImageZoomChange?: (isZoomed: boolean) => void
   onSwipeLeft?: () => void
   onSwipeRight?: () => void
+  /**
+   * Whether showing the file counts as a use of its local copy. The carousel
+   * mounts the pages beside the one on screen and passes false for those.
+   */
+  recordUse?: boolean
 }
 
 export function FileViewer({
@@ -39,9 +45,16 @@ export function FileViewer({
   onImageZoomChange,
   onSwipeLeft,
   onSwipeRight,
+  recordUse = true,
 }: FileViewerProps) {
   const { type, name } = file
   const status = useFileStatus(file, { isShared, resolvePhotosLookup: true })
+  // Opening a file is a use of its local copy. The lookup above is shared with
+  // the library tile and does not count.
+  const localUri = status.data?.fileUri
+  useEffect(() => {
+    if (recordUse && localUri) void recordFileUse({ id: file.id, type: file.type })
+  }, [file.id, file.type, localUri, recordUse])
   const phase = status.data?.phase
   const photosLookup = status.data?.photosLookup
   const photosDisplayUri = status.data?.photosDisplayUri ?? null

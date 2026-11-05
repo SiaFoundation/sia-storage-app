@@ -730,10 +730,9 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       }
       const bytes = await deps.localCopyLock.run(fileId, async () => {
         if ((await fsIO.size(file.id, file.type)).value !== file.size) return null
-        // Through the service, which is what records the read against the
-        // cache's eviction clock. A size check alone leaves a file opened
-        // from Finder every day looking untouched.
-        await service.fs.getFileUri(target)
+        // Records the read against the cache's eviction clock. A size check
+        // alone leaves a file opened from Finder every day looking untouched.
+        await service.fs.getFileUri(target, { recordUse: true })
         return requireExport()(target, dest)
       })
       if (bytes !== null) return bytes

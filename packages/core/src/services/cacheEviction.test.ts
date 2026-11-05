@@ -27,6 +27,7 @@ function fakeApp(opts: {
     row.usedAt > cursor.usedAt ||
     (row.usedAt === cursor.usedAt && row.fileId > cursor.fileId)
   const app = {
+    thumbnails: { allowedTypes: [] },
     fs: {
       calcTotalSize: async () => opts.rows.reduce((sum, r) => sum + r.size, 0),
       trashedCachedFiles: async () => [],

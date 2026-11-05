@@ -196,6 +196,8 @@ export const FS_EVICTABLE_MIN_AGE = minutesInMs(60) // 1 hour
 // `FS_EVICTABLE_MIN_AGE`, so a file read again within its hour is held from
 // that read rather than evicted minutes after it.
 export const USED_AT_UPDATE_INTERVAL = minutesInMs(5)
+// How long eviction keeps an uploaded copy whose thumbnails are not made yet, from when the copy was added.
+export const FS_EVICTION_THUMBNAIL_WAIT = daysInMs(1) // 1 day
 // Age threshold for evicting superseded file versions.
 export const FS_EVICTABLE_MIN_AGE_NON_CURRENT = minutesInMs(60) // 1 hour
 // Sync up metadata interval.

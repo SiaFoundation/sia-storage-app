@@ -1,7 +1,12 @@
 import { logger } from '@siastorage/logger'
 import type { AppService } from '../app/service'
 import type { EvictionCursor, EvictionRow } from '../db/operations'
-import { FS_EVICTABLE_MIN_AGE, FS_EVICTABLE_MIN_AGE_NON_CURRENT, FS_MAX_BYTES } from '../config'
+import {
+  FS_EVICTABLE_MIN_AGE,
+  FS_EVICTABLE_MIN_AGE_NON_CURRENT,
+  FS_EVICTION_THUMBNAIL_WAIT,
+  FS_MAX_BYTES,
+} from '../config'
 
 export type CacheEvictionConfig = {
   maxBytes?: number
@@ -9,6 +14,12 @@ export type CacheEvictionConfig = {
   minAge?: number
   /** Age gate for the non-current pre-pass. Defaults to `FS_EVICTABLE_MIN_AGE_NON_CURRENT`. */
   minAgeNonCurrent?: number
+  /**
+   * How long the LRU pass keeps a copy whose thumbnails are not made yet,
+   * from when the copy was added. Defaults to `FS_EVICTION_THUMBNAIL_WAIT`,
+   * and 0 does not wait.
+   */
+  thumbnailWait?: number
   batchSize?: number
 }
 
@@ -19,13 +30,15 @@ export type CacheEvictionConfig = {
  * The scheduled scan exists to hold the cache under `FS_MAX_BYTES`, so it skips
  * the LRU pass entirely while under that and spares anything used recently. A
  * user asking to clear local files is asking for neither gate: with no cap and
- * no age threshold, every backed-up file is a candidate. Local-only files are
- * still kept, because that guard lives in the queries rather than here.
+ * no age threshold, every backed-up file is a candidate, including one whose
+ * thumbnails are not made yet. Local-only files are still kept, because that
+ * guard lives in the queries rather than here.
  */
 export const EVICT_ALL_BACKED_UP: CacheEvictionConfig = {
   maxBytes: 0,
   minAge: 0,
   minAgeNonCurrent: 0,
+  thumbnailWait: 0,
 }
 
 export type CacheEvictionResult = {
@@ -130,7 +143,9 @@ export function evictionRunner(
  * Evicts cached files in three passes:
  *   1. Trashed pre-pass: uploaded files the user has trashed, no age gate.
  *   2. Non-current pre-pass: superseded versions past `minAgeNonCurrent`.
- *   3. LRU loop: oldest uploaded files past `minAge`, only while over `maxBytes`.
+ *   3. LRU loop: oldest uploaded files past `minAge`, only while over `maxBytes`,
+ *      skipping a file whose thumbnails are not made yet for up to
+ *      `thumbnailWait` after its copy was added.
  * A current or trashed file is evicted only while it has an object on the
  * current indexer, read per batch and again before each removal. A superseded
  * version needs an object on any indexer, since the uploader never sends one.
@@ -147,6 +162,7 @@ export async function runCacheEviction(
   const maxBytes = config?.maxBytes ?? FS_MAX_BYTES
   const minAge = config?.minAge ?? FS_EVICTABLE_MIN_AGE
   const minAgeNonCurrent = config?.minAgeNonCurrent ?? FS_EVICTABLE_MIN_AGE_NON_CURRENT
+  const thumbnailWait = config?.thumbnailWait ?? FS_EVICTION_THUMBNAIL_WAIT
   const batchSize = config?.batchSize ?? 100
 
   const totalSize = await app.fs.calcTotalSize()
@@ -233,6 +249,9 @@ export async function runCacheEviction(
       thresholdUsedAt,
       afterCandidates,
       batchSize,
+      thumbnailWait > 0
+        ? { types: app.thumbnails.allowedTypes, addedBefore: Date.now() - thumbnailWait }
+        : undefined,
     )
     if (candidates.length === 0) break
     afterCandidates = cursorAfter(candidates)

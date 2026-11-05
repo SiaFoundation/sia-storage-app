@@ -232,6 +232,7 @@ export function FileCarousel({
       return (
         <FileCarouselPage
           file={file}
+          isCurrent={index === currentIndex}
           textTopInset={insets.top + CAROUSEL_HEADER_HEIGHT}
           onTap={toggleControlsVisibility}
           onImageZoomChange={handleImageZoomChange}
@@ -241,6 +242,7 @@ export function FileCarousel({
       )
     },
     [
+      currentIndex,
       insets.top,
       toggleControlsVisibility,
       getFileAtIndex,

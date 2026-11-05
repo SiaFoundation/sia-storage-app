@@ -6,6 +6,8 @@ import { FileViewer } from '../FileViewer'
 
 type Props = {
   file: FileRecord
+  /** The page on screen, as opposed to a neighbour mounted ahead of a swipe. */
+  isCurrent: boolean
   textTopInset: number
   onTap?: () => void
   onImageZoomChange?: (isZoomed: boolean) => void
@@ -19,6 +21,7 @@ type Props = {
  */
 function FileCarouselPageComponent({
   file,
+  isCurrent,
   textTopInset,
   onTap,
   onImageZoomChange,
@@ -32,6 +35,7 @@ function FileCarouselPageComponent({
     <Pressable style={styles.container} onPress={onTap}>
       <FileViewer
         file={file}
+        recordUse={isCurrent}
         textTopInset={textTopInset}
         onImageZoomChange={onImageZoomChange}
         onSwipeLeft={onSwipeLeft}

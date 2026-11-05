@@ -40,8 +40,32 @@ export async function adoptFileToFs(file: FsFileInfo, sourceUri: string): Promis
   return uri
 }
 
+/**
+ * A file's local copy, looked up without counting as a use of it. Library
+ * tiles, thumbnails and file details read this as they render, and counting
+ * those reads would keep every copy scrolled past safe from eviction. Every
+ * caller of a file shares one cached lookup, so the screens where the user
+ * opens, shares or saves a file record the use with [recordFileUse].
+ */
+export function lookupFsFileUri(file: FsFileInfo): Promise<string | null> {
+  return app().fs.getFileUri(file)
+}
+
 export function useFsFileUri(file?: FsFileInfo) {
   return useSWR(file ? app().caches.fsFileUri.key(file.id) : null, () => {
-    return file ? app().fs.getFileUri(file) : null
+    return file ? lookupFsFileUri(file) : null
   })
+}
+
+/**
+ * Counts a read the user asked for, such as opening or sharing, as a use of the
+ * file's local copy. Share and save call it before they read the bytes, so a
+ * failure is logged and swallowed rather than failing the share.
+ */
+export async function recordFileUse(file: FsFileInfo): Promise<void> {
+  try {
+    await app().fs.getFileUri(file, { recordUse: true })
+  } catch (error) {
+    logger.warn('fs', 'record_use_failed', { fileId: file.id, error: error as Error })
+  }
 }
