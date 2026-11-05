@@ -6,65 +6,13 @@
  * precedence testable without a bridge, a window or a running daemon.
  */
 
-import type { SyncState, UploadEntry } from '@siastorage/core/app'
+import type { SyncState } from '@siastorage/core/app'
+import { filesWaitingToUpload, type Uploads } from '@siastorage/core/lib/uploadActivity'
 
 export type DomainState = 'absent' | 'starting' | 'mounted' | 'error' | 'unsupported'
 
 /** `unknown` until the first read of the daemon's sync state has returned. */
 export type SyncGate = SyncState['syncGateStatus'] | 'unknown'
-
-/**
- * The uploads the daemon has in hand. A thumbnail uploads as an object of its
- * own, so it keeps an upload in flight and moves its progress, but the counts
- * a person reads are of files.
- */
-export type Uploads = {
-  /** Entries being packed or sent, thumbnails included. */
-  active: number
-  activeFiles: number
-  activeFileBytes: number
-  /** Entries registered and not yet picked up, thumbnails included. */
-  queued: number
-  queuedFiles: number
-  /** 0..1 across every active entry, weighted by size. */
-  progress: number
-}
-
-export const NO_UPLOADS: Uploads = {
-  active: 0,
-  activeFiles: 0,
-  activeFileBytes: 0,
-  queued: 0,
-  queuedFiles: 0,
-  progress: 0,
-}
-
-export function summarizeUploads(entries: UploadEntry[]): Uploads {
-  const summary = { ...NO_UPLOADS }
-  let bytes = 0
-  let sent = 0
-  for (const entry of entries) {
-    const isFile = entry.kind !== 'thumb'
-    if (entry.status === 'queued') {
-      summary.queued += 1
-      if (isFile) summary.queuedFiles += 1
-    } else if (
-      entry.status === 'packing' ||
-      entry.status === 'packed' ||
-      entry.status === 'uploading'
-    ) {
-      summary.active += 1
-      bytes += entry.size
-      sent += entry.progress * entry.size
-      if (isFile) {
-        summary.activeFiles += 1
-        summary.activeFileBytes += entry.size
-      }
-    }
-  }
-  summary.progress = bytes > 0 ? sent / bytes : 0
-  return summary
-}
 
 export type Status = {
   /** Files only. A thumbnail is a row in the same table and is not counted. */
@@ -192,6 +140,8 @@ function syncingDown(s: Status): boolean {
   return s.syncingDown || s.syncGate === 'pending' || s.syncGate === 'active'
 }
 
+const waiting = (s: Status): number => filesWaitingToUpload(s.uploads, s.filesNotUploaded)
+
 function condition(s: Status): Condition {
   if (!s.shellKnown) return 'checking'
   if (!s.daemonReachable) return 'daemon-down'
@@ -201,7 +151,7 @@ function condition(s: Status): Condition {
   // not here: a build that cannot mount has nothing wrong with it.
   if (s.domain === 'absent') return 'mount-absent'
   if (s.uploads.active > 0) return 'uploading'
-  if (s.uploads.queued > 0) return 'queued'
+  if (s.uploads.queued > 0 || waiting(s) > 0) return 'queued'
   if (syncingDown(s)) return 'syncing-down'
   if (s.syncingUp) return 'syncing-up'
   if (s.domain === 'starting') return 'mounting'
@@ -254,7 +204,7 @@ export function activity(s: Status): string {
     case 'uploading':
       return inFlight(s)
     case 'queued':
-      return withFiles('Waiting to upload', s.uploads.queuedFiles)
+      return withFiles('Waiting to upload', waiting(s))
     case 'syncing-down':
       return 'Syncing encrypted metadata'
     case 'syncing-up':
@@ -374,12 +324,12 @@ export const working = (s: Status): boolean =>
  * uploaded, which is also what an empty library is.
  */
 export function uploadsRow(s: Status): { done: boolean; label: string } {
-  // Read at different moments, so the count waiting can briefly pass the total.
-  const waiting = Math.min(s.filesNotUploaded, s.fileCount)
-  if (waiting === 0) return { done: true, label: 'All files uploaded' }
+  // Read at different moments, so the count not uploaded can briefly pass the total.
+  const notUploaded = Math.min(s.filesNotUploaded, s.fileCount)
+  if (notUploaded === 0) return { done: true, label: 'All files uploaded' }
   return {
     done: false,
-    label: `${(s.fileCount - waiting).toLocaleString()} of ${s.fileCount.toLocaleString()}`,
+    label: `${(s.fileCount - notUploaded).toLocaleString()} of ${s.fileCount.toLocaleString()}`,
   }
 }
 
