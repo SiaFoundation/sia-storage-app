@@ -524,6 +524,19 @@ export class UploadManager {
     }
   }
 
+  /**
+   * Whether a queued file was trashed or deleted before it was packed.
+   * Trashing and deleting take a file out of the uploads store, and every
+   * file the loop takes was registered there when it was queued, so a
+   * missing entry means the file is no longer wanted. Skipping it keeps a
+   * trashed file from taking a place in the batch and an upload.
+   */
+  private dropped(entry: FileEntry): boolean {
+    if (this.app.uploads.getEntry(entry.fileId)) return false
+    logger.info('uploadManager', 'file_dropped', { fileId: entry.fileId })
+    return true
+  }
+
   get currentBatch(): {
     batchId: string
     files: { fileId: string; name: string; size: number }[]
@@ -815,6 +828,9 @@ export class UploadManager {
         this.packerSlabs = slabs
       }
 
+      // Checked after the flushes and the packer open above, any of which can
+      // wait on the network long enough for the file to be trashed.
+      if (this.dropped(entry)) return
       this.app.uploads.setStatus(entry.fileId, 'packing')
       logger.debug('uploadManager', 'file_packing', {
         fileId: entry.fileId,
@@ -889,6 +905,8 @@ export class UploadManager {
     while (i < entries.length && this.isCurrent(generation) && !this._suspended) {
       await this.yieldToUserDownloads(generation)
       if (!this.isCurrent(generation) || this._suspended) break
+      while (i < entries.length && this.dropped(entries[i])) i++
+      if (i === entries.length) break
       // computeWindowEnd needs a packer+batch — when neither exists or
       // when the next file would trigger a pre-flush, fall back to
       // processEntry which handles packer creation and pre-flush checks.
@@ -959,6 +977,7 @@ export class UploadManager {
       // Stop launching new packer.addPath() calls on shutdown or suspension.
       if (!this.isCurrent(generation) || this._suspended) break
       const entry = entries[j]
+      if (this.dropped(entry)) continue
       this.app.uploads.setStatus(entry.fileId, 'packing')
       logger.debug('uploadManager', 'file_packing', {
         fileId: entry.fileId,
@@ -1132,6 +1151,17 @@ export class UploadManager {
         newEntries.push({ fileId: file.id, fileUri, file, size: file.size })
       }
 
+      // Trashing a file takes it out of the uploads store, which does nothing
+      // for a candidate this poll has not registered yet. A file trashed or
+      // deleted while the loop above read local copies is dropped here, so
+      // it is not packed and sent.
+      const gone = new Set(
+        (await this.app.files.getByIds(newEntries.map((e) => e.fileId)))
+          .filter((f) => f.trashedAt !== null || f.deletedAt !== null)
+          .map((f) => f.id),
+      )
+      const stillWanted = newEntries.filter((e) => !gone.has(e.fileId))
+
       // A shutdown during the query, such as Cancel uploads, cleared the
       // uploads store. Registering now would show these files as queued with
       // no loop left to take them, and the next loop's poll finds them again.
@@ -1139,7 +1169,7 @@ export class UploadManager {
       // activeIds was read before the query, and enqueue() can take a file
       // while the query runs. Checked again here, with no await before the
       // register, so a file is never in both queues.
-      const fresh = this.notActive(newEntries)
+      const fresh = this.notActive(stillWanted)
       if (fresh.length > 0) {
         this.app.uploads.registerMany(
           fresh.map((e) => ({ id: e.fileId, size: e.size, kind: e.file.kind })),
@@ -1329,13 +1359,17 @@ export class UploadManager {
           }
 
           try {
-            const metadata = await this.app.files.getMetadata(entry.fileId)
-            if (!metadata) {
+            // A file trashed after its bytes were packed is not pinned. A
+            // restore makes it local-only again, and the poll uploads it then.
+            const read = await this.app.files.getMetadataForSync(entry.fileId)
+            if (!read || read.deletedAt !== null || read.metadata.trashedAt !== null) {
               logger.warn('uploadManager', 'file_deleted_during_upload', {
                 fileId: entry.fileId,
+                trashed: read?.metadata.trashedAt != null,
               })
               return { type: 'deleted', fileId: entry.fileId }
             }
+            const metadata = read.metadata
             // Prefer the SDK's calculated size as the source of truth, in case
             // it differs from the recorded file-system size.
             const sdkSize = Number(pinnedObject.size())
@@ -1418,7 +1452,11 @@ export class UploadManager {
       if (SAVE_REMOVAL_DELAY_MS > 0) {
         await new Promise((resolve) => setTimeout(resolve, SAVE_REMOVAL_DELAY_MS))
       }
-      this.app.uploads.removeMany(successfulFileIds)
+      // Only the entries this batch still owns. A file trashed mid-batch and
+      // then restored and queued again has a fresh entry, which stays.
+      this.app.uploads.removeMany(
+        successfulFileIds.filter((id) => this.app.uploads.getEntry(id)?.batchId === batch.batchId),
+      )
     }
 
     return successfulFileIds

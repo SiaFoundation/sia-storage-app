@@ -663,7 +663,7 @@ describe('deleteDirectoryAndTrashFiles', () => {
     await moveFileToDirectory(db(), 'f2', vacation.id)
     await moveFileToDirectory(db(), 'f3', deep.id)
 
-    const trashedCount = await deleteDirectoryAndTrashFiles(db(), dir.id)
+    const { length: trashedCount } = await deleteDirectoryAndTrashFiles(db(), dir.id)
     expect(trashedCount).toBe(3)
 
     const dirs = await queryAllDirectoriesWithCounts(db())
@@ -686,7 +686,7 @@ describe('deleteDirectoryAndTrashFiles', () => {
 
     await db().runAsync('UPDATE files SET trashedAt = ? WHERE id = ?', Date.now(), 'f2')
 
-    const trashedCount = await deleteDirectoryAndTrashFiles(db(), dir.id)
+    const { length: trashedCount } = await deleteDirectoryAndTrashFiles(db(), dir.id)
     expect(trashedCount).toBe(1)
   })
 
@@ -714,7 +714,7 @@ describe('deleteDirectoryAndTrashFiles', () => {
 
   it('returns 0 for empty directory', async () => {
     const dir = await insertDirectory(db(), 'Empty')
-    const trashedCount = await deleteDirectoryAndTrashFiles(db(), dir.id)
+    const { length: trashedCount } = await deleteDirectoryAndTrashFiles(db(), dir.id)
     expect(trashedCount).toBe(0)
   })
 })
