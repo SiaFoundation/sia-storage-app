@@ -44,6 +44,14 @@ export function registerNetCommands({ program, current }: CommandContext): void 
       print(await control().setConditions({ downloadBytesPerSec: parseSize(size) })),
     )
   net
+    .command('storage <size>')
+    .description(
+      "The account's storage limit, e.g. 50m. At or under what is stored, it reads full. 0 is 1 TiB",
+    )
+    .action(async (size: string) =>
+      print(await control().setConditions({ storageBytes: parseSize(size) })),
+    )
+  net
     .command('fail')
     .description('Fail the next matching SDK calls')
     .addArgument(new Argument('<op>', 'The SDK call to fail').choices(SDK_OPS))

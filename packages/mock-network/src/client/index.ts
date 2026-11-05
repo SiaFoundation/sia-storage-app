@@ -293,7 +293,11 @@ export function createRemoteSdk(options: RemoteSdkOptions): SdkAdapter {
       return {
         accountKey: '0'.repeat(64),
         maxPinnedData: BigInt(a.maxPinnedData),
-        remainingStorage: BigInt(a.maxPinnedData) - BigInt(a.pinnedData),
+        // Pins past a lowered limit are not refused, so the difference can go below zero.
+        remainingStorage:
+          BigInt(a.maxPinnedData) > BigInt(a.pinnedData)
+            ? BigInt(a.maxPinnedData) - BigInt(a.pinnedData)
+            : 0n,
         pinnedData: BigInt(a.pinnedData),
         pinnedSize: BigInt(a.pinnedSize),
         app: { id: 'mock-app', description: 'Mock network' },

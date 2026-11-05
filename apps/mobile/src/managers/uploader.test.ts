@@ -238,6 +238,16 @@ describe('UploadManager', () => {
   })
 
   describe('processEntry', () => {
+    // These files have no local copy, and each poll drops the failed entry of
+    // a file it would not take, so polling stays off while a test reads one.
+    beforeEach(async () => {
+      await app().settings.setAutoScanUploads(false)
+    })
+
+    afterEach(async () => {
+      await app().settings.setAutoScanUploads(true)
+    })
+
     it('creates packer on first file', async () => {
       manager.initialize(app(), internal(), defaultAdapters())
 
@@ -326,6 +336,16 @@ describe('UploadManager', () => {
   })
 
   describe('flush', () => {
+    // These files have no local copy, and each poll drops the failed entry of
+    // a file it would not take, so polling stays off while a test reads one.
+    beforeEach(async () => {
+      await app().settings.setAutoScanUploads(false)
+    })
+
+    afterEach(async () => {
+      await app().settings.setAutoScanUploads(true)
+    })
+
     it('calls finalize on packer', async () => {
       manager.initialize(app(), internal(), defaultAdapters())
 
@@ -1671,6 +1691,16 @@ describe('UploadManager', () => {
   })
 
   describe('error recovery', () => {
+    // These files have no local copy, and each poll drops the failed entry of
+    // a file it would not take, so polling stays off while a test reads one.
+    beforeEach(async () => {
+      await app().settings.setAutoScanUploads(false)
+    })
+
+    afterEach(async () => {
+      await app().settings.setAutoScanUploads(true)
+    })
+
     it('loop continues processing after finalize error', async () => {
       mockPacker.finalize
         .mockRejectedValueOnce(new Error('Network error'))

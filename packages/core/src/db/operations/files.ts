@@ -452,6 +452,8 @@ export type FileQueryOpts = {
   }
   fileExistsLocally?: boolean
   excludeIds?: string[]
+  /** Only rows with these ids. */
+  ids?: string[]
   /** Include kind='thumb' rows. Default: only kind='file'. */
   includeThumbnails?: boolean
   /** Include superseded versions (current=0). Default: current version only. */
@@ -479,6 +481,7 @@ function buildFileRecordsQuery(
     orderBy,
     fileExistsLocally,
     excludeIds,
+    ids,
     includeThumbnails,
     includeOldVersions,
     includeTrashed,
@@ -519,6 +522,11 @@ function buildFileRecordsQuery(
         `NOT EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = ${tableAlias}.id)`,
       )
     }
+  }
+
+  if (ids) {
+    whereClauses.push(`${tableAlias}.id IN (${ids.map(() => '?').join(', ')})`)
+    params.push(...ids)
   }
 
   if (excludeIds && excludeIds.length > 0) {

@@ -48,6 +48,12 @@ export type UploadEntry = {
 /** Aggregate state of all active and recent uploads. */
 export type UploadsState = {
   uploads: Record<string, UploadEntry>
+  /**
+   * The indexer's last answer on whether the account has no storage left. A
+   * check that could not reach the indexer leaves it as it was. While it is
+   * set, the uploader takes no new files, and a batch already sending goes on.
+   */
+  storageFull: boolean
 }
 
 /** Upload throughput snapshot, measured over in-flight upload time. */

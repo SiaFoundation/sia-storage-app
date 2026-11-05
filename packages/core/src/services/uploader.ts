@@ -204,6 +204,8 @@ export class UploadManager {
    * a connection shows. See checkNetworkBack().
    */
   private networkDown = false
+  /** When the indexer last answered whether the account is full. */
+  private storageCheckedAt = 0
   /** Whether the async loop is running; set false by shutdown() to exit. */
   private active = false
   /** Whether the loop is parked waiting for DB to become available. */
@@ -848,6 +850,25 @@ export class UploadManager {
         continue
       }
 
+      // A file enqueued directly, such as a Finder save, would otherwise be
+      // packed and sent while the account is full, and fail. It stays queued
+      // until the account has room. An answer older than the check interval
+      // is asked again whichever way it went, since the account can fill
+      // between two checks.
+      if (this.explicitQueue.length > 0) {
+        // Every enqueue wakes the loop, so a folder of Finder saves would
+        // otherwise ask the indexer once per file.
+        const checkedRecently = Date.now() - this.storageCheckedAt < STORAGE_FULL_POLL_INTERVAL
+        const stillFull = checkedRecently
+          ? this.app.uploads.getState().storageFull
+          : await this.isStorageFull()
+        if (!this.isCurrent(generation)) break
+        if (stillFull) {
+          await this.waitForWorkOrTimeout(STORAGE_FULL_POLL_INTERVAL, generation)
+          continue
+        }
+      }
+
       const next = this.explicitQueue.shift() ?? this.polledFiles.shift() ?? null
 
       if (next) {
@@ -1212,19 +1233,56 @@ export class UploadManager {
     return cap
   }
 
-  /** Returns true if the account has no remaining storage. */
+  /**
+   * Returns true if the account has no remaining storage, and records the
+   * answer for the status line. A check that cannot reach the indexer leaves
+   * the last answer in place.
+   */
   private async isStorageFull(): Promise<boolean> {
-    if (!this.app.connection.getState().isConnected) return false
+    const lastAnswer = this.app.uploads.getState().storageFull
+    if (!this.app.connection.getState().isConnected) return lastAnswer
     try {
       const account = await this.app.account()
-      if (account.remainingStorage === 0n) {
-        logger.warn('uploadManager', 'storage_full')
-        return true
-      }
-      return false
+      const full = account.remainingStorage === 0n
+      if (full) logger.warn('uploadManager', 'storage_full')
+      this.storageCheckedAt = Date.now()
+      this.app.uploads.setStorageFull(full)
+      return full
     } catch {
-      return false
+      return lastAnswer
     }
+  }
+
+  /**
+   * Removes the failed entries of files the poll would no longer take, along
+   * with their retry schedules. A version replaced here or by another device,
+   * a file marked lost, or one uploaded from elsewhere is never tried again,
+   * and its failed entry would otherwise stay in the status for good. The
+   * check uses the poll's own filter. A file that failed on the network is
+   * left alone, since the uploader queues it again itself whether or not
+   * it is still the current version.
+   */
+  private async dropFailedNotTaken(indexerURL: string): Promise<void> {
+    const failed = Object.values(this.app.uploads.getState().uploads)
+      .filter((u) => u.status === 'error' && !this.retries.get(u.id)?.entry)
+      .map((u) => u.id)
+    if (failed.length === 0) return
+    const taken = await this.app.files.query({
+      order: 'ASC',
+      pinned: { indexerURL, isPinned: false },
+      fileExistsLocally: true,
+      includeThumbnails: true,
+      ids: failed,
+    })
+    const keep = new Set(taken.map((f) => f.id))
+    // An enqueue during the query can replace a failed entry with a queued
+    // one, which stays.
+    const gone = failed.filter(
+      (id) => !keep.has(id) && this.app.uploads.getEntry(id)?.status === 'error',
+    )
+    if (gone.length === 0) return
+    this.app.uploads.removeMany(gone)
+    for (const id of gone) this.retries.delete(id)
   }
 
   /**
@@ -1255,6 +1313,7 @@ export class UploadManager {
     try {
       const activeIds = [...this.app.uploads.getActiveIds(), ...this.waitingToRetry()]
       const indexerURL = await this.app.settings.getIndexerURL()
+      await this.dropFailedNotTaken(indexerURL)
       // Back up current versions only. Omitting includeOldVersions excludes
       // superseded (current=0) files and orphan thumbnails (whose original is no
       // longer current), so we don't re-upload stale duplicates — and the

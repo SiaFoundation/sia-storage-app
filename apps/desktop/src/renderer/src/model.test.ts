@@ -31,6 +31,7 @@ function status(over: Partial<Status> = {}): Status {
     folderCount: 2,
     libraryBytes: 1000,
     uploads: NO_UPLOADS,
+    storageFull: false,
     syncingDown: false,
     syncDownProgress: 0,
     syncingUp: false,
@@ -118,6 +119,54 @@ describe('what the status line says', () => {
     expect(
       activity(status({ filesNotUploaded: 5, uploads: uploads({ queued: 1, queuedFiles: 1 }) })),
     ).toBe('Waiting to upload 5 files')
+  })
+
+  it("says storage is full in red, with the library's files not uploaded, ahead of an upload that cannot finish", () => {
+    const s = status({
+      storageFull: true,
+      filesNotUploaded: 4,
+      uploads: uploads({ active: 1, activeFiles: 1, queued: 6, queuedFiles: 6 }),
+    })
+
+    expect(activity(s)).toBe('Storage full')
+    expect(activityDetail(s)).toBe('4 files waiting to upload')
+    expect(indicator(s)).toBe('red')
+  })
+
+  it('says storage is full when only thumbnails are queued', () => {
+    const s = status({ storageFull: true, uploads: uploads({ queued: 2 }) })
+
+    expect(activity(s)).toBe('Storage full')
+    expect(activityDetail(s)).toBeNull()
+  })
+
+  it('says storage is full when the only file held is in a batch packed before the account filled', () => {
+    const s = status({
+      storageFull: true,
+      filesNotUploaded: 1,
+      uploads: uploads({ active: 1, activeFiles: 1 }),
+    })
+
+    expect(activity(s)).toBe('Storage full')
+  })
+
+  it('says nothing about a full account when no file is waiting on it', () => {
+    expect(activity(status({ storageFull: true }))).toBe('Up to date')
+  })
+
+  it('names the files that failed in orange once nothing else is uploading', () => {
+    const s = status({ filesNotUploaded: 2, uploads: uploads({ failedFiles: 2 }) })
+
+    expect(activity(s)).toBe('2 files could not upload')
+    expect(activityDetail(s)).toBe('Sia Storage will try again')
+    expect(indicator(s)).toBe('orange')
+    expect(
+      activity(status({ uploads: uploads({ failedFiles: 1, active: 1, activeFiles: 1 }) })),
+    ).toBe('Preparing 1 file')
+  })
+
+  it('ignores a failed entry once the library has no file left to upload', () => {
+    expect(activity(status({ uploads: uploads({ failedFiles: 1 }) }))).toBe('Up to date')
   })
 
   it('calls a sync-down a metadata sync, not a download', () => {
