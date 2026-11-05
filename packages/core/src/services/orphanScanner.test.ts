@@ -12,12 +12,14 @@ function mockApp(
     files?: string[]
     orphanedIds?: string[]
     inFlightIds?: string[]
+    /** Ids a writer is putting in the files folder now. */
+    beingWritten?: string[]
     /** fileId -> stored type, i.e. the rows the library still holds. */
     liveTypes?: Record<string, string>
   } = {},
 ) {
   const removeFile = jest.fn(async () => {})
-  const removeFileByPath = jest.fn(async () => {})
+  const removeFileByPath = jest.fn(async () => 40)
   const findOrphanedFileIds = jest.fn(async () => new Set(over.orphanedIds ?? []))
   const inFlightImportFileIds = jest.fn(async () => new Set(over.inFlightIds ?? []))
   const liveFileTypes = jest.fn(async (ids: string[]) => {
@@ -27,9 +29,12 @@ function mockApp(
   const deleteMetaBatch = jest.fn(async () => {})
   const renameToType = jest.fn(async () => ({ uri: 'file://renamed' }))
   const getFileUri = jest.fn(async () => 'file://restored')
+  const sizeOnDisk = jest.fn(async () => 100)
   const app = {
     fs: {
+      sizeOnDisk,
       listFiles: jest.fn(async () => over.files ?? []),
+      filesBeingWritten: () => new Set(over.beingWritten ?? []),
       findOrphanedFileIds,
       inFlightImportFileIds,
       liveFileTypes,
@@ -69,6 +74,7 @@ describe('runOrphanScanner claim temps', () => {
     expect(m.removeFileByPath).toHaveBeenCalledWith('/data/abc.tok1.tmp')
     expect(m.removeFile).not.toHaveBeenCalled()
     expect(res?.removed).toBe(1)
+    expect(res?.bytesFreed).toBe(40)
   })
 
   it('looks the temp up under its base id, not `<id>.<token>`', async () => {
@@ -86,6 +92,14 @@ describe('runOrphanScanner claim temps', () => {
     const res = await runOrphanScanner(m.app)
     expect(m.removeFileByPath).toHaveBeenCalledWith('/data/abc.tok1.tmp')
     expect(res?.removed).toBe(1)
+  })
+
+  it('keeps bytes a writer is putting down before their fs row exists, and their row', async () => {
+    const m = mockApp({ files: ['/data/new.webp'], orphanedIds: ['new'], beingWritten: ['new'] })
+    const res = await runOrphanScanner(m.app)
+    expect(m.removeFile).not.toHaveBeenCalled()
+    expect(m.deleteMetaBatch).not.toHaveBeenCalled()
+    expect(res?.removed).toBe(0)
   })
 
   it('still deletes a non-temp orphan by id and type', async () => {
@@ -134,7 +148,7 @@ describe('runOrphanScanner type drift', () => {
     )
     expect(m.removeFile).not.toHaveBeenCalled()
     expect(m.removeFileByPath).not.toHaveBeenCalled()
-    expect(res).toEqual({ removed: 0, repaired: 1 })
+    expect(res).toEqual({ removed: 0, repaired: 1, bytesFreed: 0 })
   })
 
   it('rebuilds the fs row for a file it moved back', async () => {
@@ -187,7 +201,7 @@ describe('runOrphanScanner type drift', () => {
       { id: 'abc', type: 'application/octet-stream' },
       'image/jpeg',
     )
-    expect(res).toEqual({ removed: 0, repaired: 1 })
+    expect(res).toEqual({ removed: 0, repaired: 1, bytesFreed: 0 })
   })
 
   it.each([['/data/abc.unknownext'], ['/data/abc.jpeg']])(
@@ -203,7 +217,7 @@ describe('runOrphanScanner type drift', () => {
       expect(m.removeFile).not.toHaveBeenCalled()
       expect(m.removeFileByPath).not.toHaveBeenCalled()
       expect(m.renameToType).not.toHaveBeenCalled()
-      expect(res).toEqual({ removed: 0, repaired: 0 })
+      expect(res).toEqual({ removed: 0, repaired: 0, bytesFreed: 0 })
     },
   )
 

@@ -121,8 +121,25 @@ export function buildQuerySpecs(
       category: 'thumbnails',
       run: () => app.thumbnails.queryProgress(app.thumbnails.allowedTypes),
     },
+
+    // One batch of the orphan scan, which checks every name in the files
+    // folder in batches of this size.
+    {
+      name: 'orphanScanBatch:orphanedIds',
+      category: 'orphanScan',
+      run: async () => [
+        ...(await app.fs.findOrphanedFileIds(ORPHAN_SCAN_BATCH, { writtenSince: 0 })),
+      ],
+    },
+    {
+      name: 'orphanScanBatch:liveTypes',
+      category: 'orphanScan',
+      run: async () => [...(await app.fs.liveFileTypes(ORPHAN_SCAN_BATCH))],
+    },
   ]
 }
+
+const ORPHAN_SCAN_BATCH = Array.from({ length: 500 }, (_, i) => `f-${i * 7}`)
 
 /**
  * Write benchmarks for version group operations. Those that only need undoing

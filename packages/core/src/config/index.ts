@@ -178,6 +178,10 @@ export const PROVIDER_THUMBNAIL_RETRY_INTERVAL = secondsInMs(30)
 export const FS_MAX_BYTES = 4_000_000_000 // 4 GB
 // File system orphaned file cleanup frequency.
 export const FS_ORPHAN_FREQUENCY = daysInMs(1) // 1 day
+// A scheduled orphan scan keeps files whose fs row is younger than this.
+export const FS_ORPHAN_MIN_AGE = minutesInMs(10) // 10 minutes
+// How long the mobile app stays in the foreground before its daily orphan scan starts.
+export const FS_ORPHAN_FOREGROUND_DELAY = secondsInMs(30) // 30 seconds
 // How often the phone runs its eviction pass.
 export const FS_EVICTION_FREQUENCY = minutesInMs(60) // 60 minutes
 // Shortest gap between eviction passes a running mobile import asks for.
