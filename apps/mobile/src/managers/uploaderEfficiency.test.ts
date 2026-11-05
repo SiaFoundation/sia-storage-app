@@ -193,6 +193,12 @@ describe('UploadManager packing efficiency', () => {
     PACKER_POLL_INTERVAL: 5000,
     SAVE_BATCH_CONCURRENCY: 50,
     SAVE_REMOVAL_DELAY_MS: 0,
+    // Longer than any test here advances its timers, so a file that fails
+    // stays failed rather than being queued again mid-test.
+    UPLOAD_RETRY_BASE_DELAY: 60000,
+    UPLOAD_RETRY_MAX_DELAY: 60000,
+    UPLOAD_NETWORK_RETRY_BASE_DELAY: 60000,
+    UPLOAD_NETWORK_RETRY_MAX_DELAY: 60000,
   }
 
   function enablePolling() {

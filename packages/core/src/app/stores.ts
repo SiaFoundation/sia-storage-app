@@ -92,6 +92,12 @@ export type ConnectionState = {
   /** Whether an authentication handshake is in progress. */
   isAuthing: boolean
   isReconnecting: boolean
+  /**
+   * When isConnected last turned true. A reader that polls compares it with
+   * the value it saw last, which shows a reconnect even when the connection
+   * dropped and came back between two reads.
+   */
+  connectedAt?: number
 }
 
 /** A single step in the app initialization sequence. */

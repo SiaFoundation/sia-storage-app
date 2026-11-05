@@ -286,7 +286,9 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     connection: {
       getState: () => ({ ...connectionState }),
       setState: (patch) => {
+        const reconnected = patch.isConnected === true && !connectionState.isConnected
         connectionState = { ...connectionState, ...patch }
+        if (reconnected) connectionState.connectedAt = Date.now()
         raw.emit('connection')
       },
     },
