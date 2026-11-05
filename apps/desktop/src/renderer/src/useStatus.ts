@@ -15,18 +15,11 @@ import {
   useIndexerURL,
   useSyncState,
 } from '@siastorage/core/stores'
+import { NO_UPLOADS, summarizeUploads, type Uploads } from '@siastorage/core/lib/uploadActivity'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import useSWR from 'swr'
 import { sia } from './api'
-import {
-  type DomainState,
-  type LocalCache,
-  type Materializing,
-  NO_UPLOADS,
-  type Status,
-  summarizeUploads,
-  type Uploads,
-} from './model'
+import type { DomainState, LocalCache, Materializing, Status } from './model'
 
 type Shell = {
   domain: DomainState
