@@ -367,6 +367,32 @@ describe('Provider reads', () => {
       )
     })
 
+    it('reports a file on the current indexer as not uploading while its upload entry is still open', async () => {
+      const [file] = await app.addFiles(generateTestFiles(1, { startId: 77 }))
+      await app.waitForNoActiveUploads()
+      // The uploader saves the object, which re-reports the file, and removes
+      // the upload entry a moment later.
+      app.app.uploads.registerMany([{ id: file.id, size: file.size }])
+      app.app.uploads.setStatus(file.id, 'uploading')
+
+      expect(await app.app.provider.item(file.id)).toMatchObject({
+        uploaded: true,
+        uploading: false,
+      })
+    })
+
+    it('reports a file with an open upload entry and no object as uploading', async () => {
+      app.setConnected(false)
+      const [file] = await app.addFiles(generateTestFiles(1, { startId: 78 }))
+      app.app.uploads.registerMany([{ id: file.id, size: file.size }])
+      app.app.uploads.setStatus(file.id, 'uploading')
+
+      expect(await app.app.provider.item(file.id)).toMatchObject({
+        uploaded: false,
+        uploading: true,
+      })
+    })
+
     it('reports a folder as carrying no transfer state', async () => {
       const dir = await app.app.directories.create('Empty')
 

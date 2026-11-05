@@ -255,7 +255,11 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
         thumbnailNudge,
       ].join(':'),
       uploaded,
-      uploading: uploading !== undefined,
+      // The uploader saves the object, which re-reports the file, and removes
+      // the upload entry SAVE_REMOVAL_DELAY_MS later. Removing it re-reports
+      // nothing, so an entry read in that gap would leave the OS showing an
+      // upload in progress.
+      uploading: uploading !== undefined && !uploaded,
       downloaded,
       downloading: downloading !== undefined,
       progress: uploading ?? downloading ?? 0,
