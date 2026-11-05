@@ -76,12 +76,66 @@ export const librarySizeLabel = (s: Status): string =>
   s.libraryBytes > 0 ? formatBytes(s.libraryBytes) : '-'
 
 /** What the local cache holds against its limit. Null fields are still loading. */
-export type LocalCache = { bytes: number | null; maxBytes: number | null | undefined }
+export type LocalCache = {
+  bytes: number | null
+  maxBytes: number | null | undefined
+  /**
+   * Size of the local copies with no copy on the network yet, trashed files
+   * and older versions included. Eviction never removes these, so they can
+   * hold the cache over its limit.
+   */
+  notUploadedBytes: number | null
+  /** How long after its last use an uploaded file is kept, in milliseconds. */
+  minAge: number | undefined
+}
 
 export function localCacheLabel(cache: LocalCache): string {
   if (cache.bytes === null || cache.maxBytes === undefined) return '-'
   const held = formatBytes(cache.bytes)
   return cache.maxBytes === null ? `${held}, no limit` : `${held} of ${formatBytes(cache.maxBytes)}`
+}
+
+/**
+ * Why the cache holds what it does, under the On this Mac row, when that is
+ * not plain from the numbers: copies not backed up, which nothing removes,
+ * and, over the limit, which uploaded files the eviction pass removes. A file
+ * is used when it is saved, opened or read for an upload, not only opened.
+ */
+export function localCacheDescription(cache: LocalCache): string | undefined {
+  if (cache.bytes === null || cache.maxBytes === undefined) return undefined
+  if (cache.notUploadedBytes === null || cache.minAge === undefined) return undefined
+  // The library's sizes and the cache's are read at different moments.
+  const waiting = Math.min(cache.notUploadedBytes, cache.bytes)
+  const lines: string[] = []
+  if (waiting > 0) {
+    lines.push(`${formatBytes(waiting)} isn't backed up yet, so it stays on this Mac.`)
+  }
+  if (cache.maxBytes !== null && cache.bytes > cache.maxBytes && cache.bytes > waiting) {
+    lines.push(
+      cache.minAge
+        ? `Uploaded files are removed once unused for ${span(cache.minAge)}.`
+        : 'Uploaded files are removed to stay under the limit.',
+    )
+  }
+  return lines.length > 0 ? lines.join(' ') : undefined
+}
+
+/** "an hour", "3 hours", "a day", "90 minutes", "30 seconds". */
+function span(ms: number): string {
+  const units: [number, string][] = [
+    [86_400_000, 'day'],
+    [3_600_000, 'hour'],
+    [60_000, 'minute'],
+    [1_000, 'second'],
+  ]
+  for (const [size, unit] of units) {
+    if (ms >= size && ms % size === 0) {
+      const n = ms / size
+      return n === 1 ? `${unit === 'hour' ? 'an' : 'a'} ${unit}` : `${n} ${unit}s`
+    }
+  }
+  const seconds = Math.max(1, Math.round(ms / 1_000))
+  return seconds === 1 ? 'a second' : `${seconds} seconds`
 }
 
 // Host only, and never an echo when that fails: a custom indexer URL can carry

@@ -11,6 +11,7 @@ import {
   formatBitrate,
   formatBytes,
   indexerLabel,
+  localCacheDescription,
   localCacheLabel,
   indicator,
   metadataLabel,
@@ -18,6 +19,7 @@ import {
   setupFailed,
   setupFinished,
   setupSteps,
+  type LocalCache,
   type Status,
   uploadsRow,
   working,
@@ -612,21 +614,76 @@ describe('the indexer the tray names', () => {
   })
 })
 
+const cache = (over: Partial<LocalCache>): LocalCache => ({
+  bytes: 0,
+  maxBytes: 4_000_000_000,
+  notUploadedBytes: 0,
+  minAge: 3_600_000,
+  ...over,
+})
+
 describe('localCacheLabel', () => {
   it('shows what the cache holds against its limit', () => {
-    expect(localCacheLabel({ bytes: 1_200_000_000, maxBytes: 4_000_000_000 })).toBe(
+    expect(localCacheLabel(cache({ bytes: 1_200_000_000, maxBytes: 4_000_000_000 }))).toBe(
       `${formatBytes(1_200_000_000)} of ${formatBytes(4_000_000_000)}`,
     )
   })
 
   it('says when there is no limit', () => {
-    expect(localCacheLabel({ bytes: 1_200_000_000, maxBytes: null })).toBe(
+    expect(localCacheLabel(cache({ bytes: 1_200_000_000, maxBytes: null }))).toBe(
       `${formatBytes(1_200_000_000)}, no limit`,
     )
   })
 
   it('shows a dash until both values have loaded', () => {
-    expect(localCacheLabel({ bytes: null, maxBytes: 4_000_000_000 })).toBe('-')
-    expect(localCacheLabel({ bytes: 10, maxBytes: undefined })).toBe('-')
+    expect(localCacheLabel(cache({ bytes: null, maxBytes: 4_000_000_000 }))).toBe('-')
+    expect(localCacheLabel(cache({ bytes: 10, maxBytes: undefined }))).toBe('-')
+  })
+})
+
+describe('localCacheDescription', () => {
+  const waitingLine = (bytes: number) =>
+    `${formatBytes(bytes)} isn't backed up yet, so it stays on this Mac.`
+
+  it('says how much of the cache waits to upload, and which uploaded files go, when both hold it over its limit', () => {
+    expect(
+      localCacheDescription(
+        cache({ bytes: 79_000_000_000, maxBytes: 4_000_000_000, notUploadedBytes: 75_000_000_000 }),
+      ),
+    ).toBe(`${waitingLine(75_000_000_000)} Uploaded files are removed once unused for an hour.`)
+  })
+
+  it('says files waiting to upload stay even under the limit', () => {
+    expect(localCacheDescription(cache({ bytes: 1_000_000, notUploadedBytes: 400_000 }))).toBe(
+      waitingLine(400_000),
+    )
+  })
+
+  it('names the configured minimum age when the cache is over its limit with everything uploaded', () => {
+    const over = { bytes: 6_000_000_000, maxBytes: 4_000_000_000 }
+    expect(localCacheDescription(cache(over))).toBe(
+      'Uploaded files are removed once unused for an hour.',
+    )
+    expect(localCacheDescription(cache({ ...over, minAge: 3 * 86_400_000 }))).toBe(
+      'Uploaded files are removed once unused for 3 days.',
+    )
+    expect(localCacheDescription(cache({ ...over, minAge: 90 * 60_000 }))).toBe(
+      'Uploaded files are removed once unused for 90 minutes.',
+    )
+    expect(localCacheDescription(cache({ ...over, minAge: 30_000 }))).toBe(
+      'Uploaded files are removed once unused for 30 seconds.',
+    )
+    expect(localCacheDescription(cache({ ...over, minAge: 0 }))).toBe(
+      'Uploaded files are removed to stay under the limit.',
+    )
+  })
+
+  it('says nothing with nothing waiting and the cache under its limit, with no limit, or while any value loads', () => {
+    expect(localCacheDescription(cache({ bytes: 1_000, maxBytes: 4_000_000_000 }))).toBeUndefined()
+    expect(localCacheDescription(cache({ bytes: 9e12, maxBytes: null }))).toBeUndefined()
+    const over = { bytes: 6_000_000_000, maxBytes: 4_000_000_000 }
+    expect(localCacheDescription(cache({ ...over, bytes: null }))).toBeUndefined()
+    expect(localCacheDescription(cache({ ...over, notUploadedBytes: null }))).toBeUndefined()
+    expect(localCacheDescription(cache({ ...over, minAge: undefined }))).toBeUndefined()
   })
 })

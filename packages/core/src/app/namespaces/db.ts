@@ -201,6 +201,7 @@ export function buildDbNamespaces(
     deleteMetaBatch: (fileIds) => ops.deleteManyFsMeta(db, fileIds),
     updateMetaUsedAt: (fileId, usedAt) => ops.updateFsMetaUsedAt(db, fileId, usedAt ?? Date.now()),
     calcTotalSize: () => ops.queryFsMetaTotalSize(db),
+    calcNotBackedUpSize: (indexerURL) => ops.queryFsMetaNotBackedUpSize(db, indexerURL),
     evictionCandidates: (indexerURL, thresholdUsedAt, after, limit) =>
       ops.queryEvictionCandidates(db, indexerURL, thresholdUsedAt, after, limit),
     nonCurrentCachedFiles: (thresholdUsedAt, after, limit) =>
