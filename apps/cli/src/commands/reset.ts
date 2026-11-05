@@ -1,6 +1,12 @@
 import * as fs from 'fs'
 import * as clack from '@clack/prompts'
-import { getPaths, isDaemonRunning, readDaemonPid, sendIpcCommand } from '@siastorage/node-adapters'
+import {
+  ensureDataDir,
+  getPaths,
+  isDaemonRunning,
+  readDaemonPid,
+  sendIpcCommand,
+} from '@siastorage/node-adapters'
 import { ensureDaemonRunning } from '../daemon/supervisor'
 import { c } from '../lib/format'
 
@@ -8,7 +14,8 @@ export async function resetCommand(dataDir: string) {
   const p = getPaths(dataDir)
 
   const confirm = await clack.confirm({
-    message: 'This will wipe the local database and re-sync from the indexer. Continue?',
+    message:
+      'This will wipe the local database and cached files and re-sync from the indexer. Continue?',
     initialValue: false,
   })
 
@@ -36,8 +43,26 @@ export async function resetCommand(dataDir: string) {
         }
       }
     }
+    // A daemon still running, such as one waiting on a slow upload, would go
+    // on using the database and the files folder deleted below.
+    if (isDaemonRunning(p.pidPath)) {
+      console.error(
+        c.red(
+          `The daemon (PID ${pid}) is still running, so nothing was reset. Stop it with \`sia daemon stop\` and run reset again.`,
+        ),
+      )
+      process.exitCode = 1
+      return
+    }
     console.log(c.dim('Daemon stopped'))
   }
+
+  // The cached copies belong to the library about to be dropped. Cache eviction
+  // finds what to remove through the database, so nothing would ever remove
+  // these. They go first, as in the daemon's forced reset: a reset cut off
+  // after them leaves a database whose missing copies read as remote-only,
+  // and one cut off after the database would strand them.
+  fs.rmSync(p.filesDir, { recursive: true, force: true })
 
   // Delete DB and storage (keep secrets.json for credentials)
   for (const file of [
@@ -55,6 +80,8 @@ export async function resetCommand(dataDir: string) {
       // File may not exist
     }
   }
+
+  ensureDataDir(p.dataDir)
 
   console.log(c.green('Database reset'))
 

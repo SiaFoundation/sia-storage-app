@@ -1,5 +1,5 @@
 import { Alert } from 'react-native'
-import { resetData } from '../managers/app'
+import { resetLocalDataAndResync } from '../managers/app'
 import { Button } from './Button'
 
 /**
@@ -22,7 +22,7 @@ export function LibraryLocalResetButton() {
             {
               text: 'Reset',
               style: 'destructive',
-              onPress: () => resetData(),
+              onPress: () => resetLocalDataAndResync(),
             },
           ],
         )
