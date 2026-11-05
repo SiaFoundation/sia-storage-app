@@ -93,7 +93,7 @@ const manager = createSuspensionManager(
         // Pause (not stop) so foreground resume restarts both timers.
         pauseDbLogAppender()
         pauseRemoteLogShipper()
-        app().downloads.cancelAll()
+        void app().downloads.cancelAll()
         cancelFsEvictionScanner()
         cancelFsOrphanScanner()
         pauseArchiveSync()

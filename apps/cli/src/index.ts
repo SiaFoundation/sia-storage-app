@@ -86,7 +86,7 @@ if (process.env.SIA_DAEMON_MODE === '1') {
 
   program
     .command('reset')
-    .description('Wipe the local database and re-sync from the indexer')
+    .description('Wipe the local database and cached files and re-sync from the indexer')
     .action(async () => {
       const { resetCommand } = await import('./commands/reset')
       await resetCommand(resolveDataDir())

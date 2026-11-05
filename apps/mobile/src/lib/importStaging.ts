@@ -40,6 +40,13 @@ export async function stageFileForImport(sourceUri: string): Promise<string | nu
   }
 }
 
+/** Deletes every staged file. Only safe once no import row names one. */
+export async function removeImportStagingDirectory(): Promise<void> {
+  if (await RNFS.exists(IMPORT_STAGING_DIR)) {
+    await RNFS.unlink(IMPORT_STAGING_DIR)
+  }
+}
+
 function isStagedPath(pathOrUri: string): boolean {
   return decodePath(pathOrUri).startsWith(`${IMPORT_STAGING_DIR}/`)
 }

@@ -230,7 +230,7 @@ export function MenuScreen({ navigation }: Props) {
       <InsetGroupSection header="Danger zone">
         <InsetGroupLink
           label="Clear local data and resync"
-          description="Rebuilds your library from your indexer. Pending uploads are lost. You stay signed in."
+          description="Removes this device's copies of your files and rebuilds your library from your indexer. Pending uploads are lost. You stay signed in."
           destructive
           onPress={promptClearAndResync}
           showChevron={false}

@@ -12,6 +12,13 @@ import { fileUriToPath } from '@siastorage/core/lib/fileUri'
 
 const fsStorageDirectoryUri = `${getStorageDirectoryUri()}/files`
 
+/** Deletes the folder of local file copies and everything in it. */
+export async function removeFsStorageDirectory(): Promise<void> {
+  if (await RNFS.exists(fsStorageDirectoryUri)) {
+    await RNFS.unlink(fsStorageDirectoryUri)
+  }
+}
+
 function fsFileUri(fileId: string, type: string): string {
   return `${fsStorageDirectoryUri}/${fileId}${extFromMime(type)}`
 }
