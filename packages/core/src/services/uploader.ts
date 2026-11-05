@@ -1106,7 +1106,7 @@ export class UploadManager {
 
       const newEntries: FileEntry[] = []
       for (const file of candidateFiles) {
-        const fileUri = await this.app.fs.getFileUri(file)
+        const fileUri = await this.app.fs.getFileUri(file, { recordUse: false })
         if (!fileUri) continue
         // An empty file can never upload: the network rejects an object with
         // zero slabs, so an enqueued one re-fails every poll. Removing the

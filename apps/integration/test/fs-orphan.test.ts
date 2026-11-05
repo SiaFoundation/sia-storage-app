@@ -1,4 +1,4 @@
-import { runOrphanScanner } from '@siastorage/core/services'
+import { runCacheEviction, runOrphanScanner } from '@siastorage/core/services'
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
 import * as nodeFs from 'fs'
 import * as path from 'path'
@@ -109,6 +109,21 @@ describe('FS Orphan Scanner', () => {
     // fs metadata should also be cleaned up
     const metaAfter = await app.app.fs.readMeta(file.id)
     expect(metaAfter).toBeNull()
+  })
+
+  it('a live file found on disk without an fs row is recorded as unused, so eviction can take it', async () => {
+    const [file] = await app.addFiles(generateTestFiles(1, { startId: 1, sizeBytes: 100 }))
+    await app.waitForNoActiveUploads()
+    // The state a cleared database leaves once sync-down brings the record
+    // back: the bytes and the files row are there, the fs row is not.
+    await app.app.fs.deleteMeta(file.id)
+
+    await runOrphanScanner(app.app)
+
+    const meta = await app.app.fs.readMeta(file.id)
+    expect(meta?.usedAt).toBe(0)
+    const evicted = await runCacheEviction(app.app, { maxBytes: 0 })
+    expect(evicted?.evictedFileIds).toContain(file.id)
   })
 
   it('returns undefined when no files exist on disk', async () => {

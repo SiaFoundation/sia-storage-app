@@ -25,7 +25,7 @@ export function buildUploaderNamespace(
           skipped++
           continue
         }
-        const fileUri = await getFsFileUri(db, file, fsIO)
+        const fileUri = await getFsFileUri(db, file, fsIO, { recordUse: false })
         if (!fileUri) {
           skipped++
           continue

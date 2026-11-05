@@ -207,10 +207,10 @@ export class ThumbnailScanner {
 
     this.processingFiles.add(fileRecord.id)
     try {
-      const sourceUri = await app.fs.getFileUri({
-        id: fileRecord.id,
-        type: fileRecord.type,
-      })
+      const sourceUri = await app.fs.getFileUri(
+        { id: fileRecord.id, type: fileRecord.type },
+        { recordUse: false },
+      )
       if (!sourceUri) {
         logger.warn('generateThumbnailsForFile', 'no_source_uri', {
           fileId: fileRecord.id,
@@ -549,10 +549,10 @@ export class ThumbnailScanner {
           }
 
           // Check if we can get source URI before attempting sizes.
-          const sourceUri = await app.fs.getFileUri({
-            id: c.id,
-            type: c.type,
-          })
+          const sourceUri = await app.fs.getFileUri(
+            { id: c.id, type: c.type },
+            { recordUse: false },
+          )
           if (!sourceUri) {
             if (!skippedNoSourceUri.has(c.id)) {
               skippedNoSourceUri.add(c.id)

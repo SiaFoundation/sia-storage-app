@@ -587,12 +587,17 @@ export interface AppService {
     updateMetaUsedAt(fileId: string, usedAt?: number): Promise<void>
     /** Returns the total size in bytes of all tracked local files. */
     calcTotalSize(): Promise<number>
-    /** Returns files eligible for eviction after `after`, ordered by least recently used. */
+    /**
+     * Returns files eligible for eviction after `after`, ordered by least
+     * recently used. With `thumbnails`, a file of one of `types` waits for its
+     * thumbnails until its copy was added before `addedBefore`.
+     */
     evictionCandidates(
       indexerURL: string,
       thresholdUsedAt: number,
       after: EvictionCursor | null,
       limit: number,
+      thumbnails?: { types: readonly string[]; addedBefore: number },
     ): Promise<EvictionRow[]>
     /** Returns cached superseded file versions (current=0) uploaded to any indexer, after `after`. */
     nonCurrentCachedFiles(
@@ -612,8 +617,15 @@ export interface AppService {
     liveFileTypes(fileIds: string[]): Promise<Map<string, string>>
     /** Which of `fileIds` still have an in-flight import_files row (owns bytes on disk). */
     inFlightImportFileIds(fileIds: string[]): Promise<Set<string>>
-    /** Returns the local file URI if the file exists on disk, or null. */
-    getFileUri(file: { id: string; type: string }): Promise<string | null>
+    /**
+     * Returns the local file URI if the file exists on disk, or null. Counts as
+     * a use for cache eviction unless `recordUse` is false, which background
+     * readers such as the uploader and thumbnail generator pass.
+     */
+    getFileUri(
+      file: { id: string; type: string },
+      opts?: { recordUse?: boolean },
+    ): Promise<string | null>
     /** Returns the predicted local file URI for an id+type pair, with
      *  no disk check or side effects. Callers that already know the file
      *  is on disk (e.g., the library fetcher priming the fs URI cache)

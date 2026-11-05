@@ -145,7 +145,10 @@ describe('runOrphanScanner type drift', () => {
       liveTypes: { abc: 'image/jpeg' },
     })
     await runOrphanScanner(m.app)
-    expect(m.getFileUri).toHaveBeenCalledWith({ id: 'abc', type: 'image/jpeg' })
+    expect(m.getFileUri).toHaveBeenCalledWith(
+      { id: 'abc', type: 'image/jpeg' },
+      { recordUse: false },
+    )
     expect(m.deleteMetaBatch).not.toHaveBeenCalled()
   })
 
@@ -169,7 +172,10 @@ describe('runOrphanScanner type drift', () => {
     })
     const res = await runOrphanScanner(m.app)
     expect(m.removeFile).not.toHaveBeenCalled()
-    expect(m.getFileUri).toHaveBeenCalledWith({ id: 'abc', type: 'image/jpeg' })
+    expect(m.getFileUri).toHaveBeenCalledWith(
+      { id: 'abc', type: 'image/jpeg' },
+      { recordUse: false },
+    )
     expect(m.deleteMetaBatch).not.toHaveBeenCalled()
     expect(res?.removed).toBe(0)
   })
