@@ -85,8 +85,14 @@ export type DownloadsState = {
   downloads: Record<string, DownloadEntry>
 }
 
-/** State of the connection to the Sia network. */
+/** State of the app's signed-in client for the indexer. */
 export type ConnectionState = {
+  /**
+   * Whether the app holds a signed-in indexer client. Set when a connect
+   * succeeds, and cleared only when a connect fails, on sign-out or on a
+   * reset. A dropped network leaves it true on every platform, so a caller
+   * that needs to know the indexer answers right now has to ask it.
+   */
   isConnected: boolean
   connectionError: string | null
   /** Whether an authentication handshake is in progress. */

@@ -107,6 +107,16 @@ export const SLAB_FILL_THRESHOLD = 0.9
 export const PACKER_POLL_INTERVAL = SIM_FAST_TIMERS ? secondsInMs(1) : secondsInMs(5)
 // How often to re-check account when storage is full.
 export const STORAGE_FULL_POLL_INTERVAL = secondsInMs(30)
+// Wait before a file whose add to an upload failed is tried again. It doubles
+// with each failure in a row, up to the max, so a file whose bytes cannot be
+// read is not packed again on every poll. A slab upload that fails during an
+// add waits on this schedule too, since its error looks the same.
+export const UPLOAD_RETRY_BASE_DELAY = SIM_FAST_TIMERS ? secondsInMs(2) : secondsInMs(30)
+export const UPLOAD_RETRY_MAX_DELAY = SIM_FAST_TIMERS ? secondsInMs(10) : minutesInMs(30)
+// The same for a file whose pin or batch send failed. Those fail on the
+// network and usually pass on a later try, so the wait stays short.
+export const UPLOAD_NETWORK_RETRY_BASE_DELAY = SIM_FAST_TIMERS ? secondsInMs(1) : secondsInMs(5)
+export const UPLOAD_NETWORK_RETRY_MAX_DELAY = SIM_FAST_TIMERS ? secondsInMs(5) : minutesInMs(2)
 // Sync events interval.
 export const SYNC_EVENTS_INTERVAL = SIM_FAST_TIMERS ? secondsInMs(1) : secondsInMs(10)
 // Sync new photos interval.
