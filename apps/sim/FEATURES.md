@@ -496,8 +496,9 @@ its sign-in window shows only after Sign Out.
 - Code: `app.auth`; screens `OnboardingWelcome`, `OnboardingRecoveryPhrase`,
   `OnboardingAdvancedIndexer`, `SwitchIndexer`, `SwitchRecoveryPhrase`,
   `SwitchFinished`; CLI `connect`, `reset`
-- Tests: none drive the phone's sign-in screens. Sim phones sign in through
-  test mode. The desktop app's are under Signing in on the Mac.
+- Tests: scenarios `mobile/resync-removes-local-copies` runs Clear local data
+  and resync. None drive the phone's sign-in screens. Sim phones sign in
+  through test mode. The desktop app's are under Signing in on the Mac.
 - Phone, the Switch indexer screens:
 
 ```sim

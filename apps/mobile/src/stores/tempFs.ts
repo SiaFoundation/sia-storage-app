@@ -27,6 +27,13 @@ export async function ensureTempFsStorageDirectory(): Promise<void> {
   }
 }
 
+/** Deletes every partial download. */
+export async function removeTempFsStorageDirectory(): Promise<void> {
+  if (await RNFS.exists(tempFsStorageDirectory.uri)) {
+    await RNFS.unlink(tempFsStorageDirectory.uri)
+  }
+}
+
 function getTempDownloadFileForId(file: TempFsFileInfo): File {
   const name = file.attempt ? `${file.id}.${file.attempt}` : file.id
   return new File(tempFsStorageDirectory, `${name}.download.tmp`)

@@ -472,6 +472,55 @@ describe('Download priority', () => {
     expect(await app.app.fs.sizeOnDisk(file)).toBe(file.size)
   })
 
+  it('cancelling every download resolves only once a download already transferring has stopped', async () => {
+    // A reset deletes the files folder right after this resolves, so a
+    // download still finishing would put its file back.
+    const { file, stored } = await setupDownloadableFile(app)
+    const gates: Array<() => void> = []
+    const download = app.sdk.downloadByObjectId.bind(app.sdk)
+    jest.spyOn(app.sdk, 'downloadByObjectId').mockImplementation(async (objectId) => {
+      if (objectId === stored.id) await new Promise<void>((resolve) => gates.push(resolve))
+      return download(objectId)
+    })
+    const running = app.app.downloads.downloadFile(file.id, 'user').catch(() => undefined)
+    await waitForCondition(() => gates.length === 1)
+
+    let cancelled = false
+    const cancelling = app.app.downloads.cancelAll().then(() => {
+      cancelled = true
+    })
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(cancelled).toBe(false)
+
+    gates[0]()
+    await cancelling
+    await running
+  })
+
+  it('cancelling every download also waits for one an earlier cancel dropped', async () => {
+    const { file, stored } = await setupDownloadableFile(app)
+    const gates: Array<() => void> = []
+    const download = app.sdk.downloadByObjectId.bind(app.sdk)
+    jest.spyOn(app.sdk, 'downloadByObjectId').mockImplementation(async (objectId) => {
+      if (objectId === stored.id) await new Promise<void>((resolve) => gates.push(resolve))
+      return download(objectId)
+    })
+    const running = app.app.downloads.downloadFile(file.id, 'user').catch(() => undefined)
+    await waitForCondition(() => gates.length === 1)
+    app.app.downloads.cancel(file.id)
+
+    let cancelled = false
+    const cancelling = app.app.downloads.cancelAll().then(() => {
+      cancelled = true
+    })
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(cancelled).toBe(false)
+
+    gates[0]()
+    await cancelling
+    await running
+  })
+
   it('a download cancelled while it waits for a cancelled one to stop never starts its transfer', async () => {
     const { file, stored } = await setupDownloadableFile(app)
     const gates: Array<() => void> = []
