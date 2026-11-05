@@ -36,7 +36,7 @@ async function until(done: () => boolean, timeoutMs = 4_000): Promise<void> {
   }
 }
 
-it('reports every connect after subscribing, and whether it follows a drop', async () => {
+it('reports every connect after subscribing, the first and each after a drop', async () => {
   const connections: Socket[] = []
   const frames: string[] = []
   const server = createServer((socket) => {
@@ -44,21 +44,19 @@ it('reports every connect after subscribing, and whether it follows a drop', asy
     socket.on('data', (chunk) => frames.push(chunk.toString('utf8').trim()))
   })
   await new Promise<void>((resolve) => server.listen(daemonSocketPath(), resolve))
-  const ups: boolean[] = []
+  let ups = 0
   const stream = new DaemonStream(
     () => {},
     undefined,
     undefined,
-    (recovered) => ups.push(recovered),
+    () => (ups += 1),
   )
   try {
     stream.start()
-    await until(() => ups.length === 1)
-    expect(ups).toEqual([false])
+    await until(() => ups === 1)
 
     connections[0].destroy()
-    await until(() => ups.length === 2)
-    expect(ups).toEqual([false, true])
+    await until(() => ups === 2)
 
     await until(() => frames.length === 2)
     expect(frames.map((frame) => JSON.parse(frame).method)).toEqual(['subscribe', 'subscribe'])

@@ -117,20 +117,19 @@ export class DaemonStream {
   private socket: Socket | null = null
   private stopped = false
   private retry: NodeJS.Timeout | null = null
-  private wasDown = false
 
   /**
    * `onDown` fires each time a reconnect attempt fails, so the caller can count
    * them and decide the daemon is gone rather than restarting. Deciding that
    * here would put process supervision inside a transport. `onUp` fires each
-   * time the stream connects and has sent its subscribe, told whether it is
-   * recovering from a drop.
+   * time the stream connects and has sent its subscribe, the first time
+   * included.
    */
   constructor(
     private readonly onEvent: (event: ChangeEvent) => void,
     private readonly onCache: (message: IpcMessage) => void = () => {},
     private readonly onDown: () => void = () => {},
-    private readonly onUp: (recovered: boolean) => void = () => {},
+    private readonly onUp: () => void = () => {},
     private readonly onShare: (fileIds: string[]) => void = () => {},
   ) {}
 
@@ -145,9 +144,7 @@ export class DaemonStream {
 
     socket.on('connect', () => {
       socket.write(`${JSON.stringify({ id: 'subscribe', method: 'subscribe' })}\n`)
-      const recovered = this.wasDown
-      this.wasDown = false
-      this.onUp(recovered)
+      this.onUp()
     })
     socket.on('data', (chunk) => {
       buffer += chunk.toString('utf8')
@@ -180,7 +177,6 @@ export class DaemonStream {
       // not see it twice.
       if (!reported) {
         reported = true
-        this.wasDown = true
         this.onDown()
       }
       if (this.retry) clearTimeout(this.retry)

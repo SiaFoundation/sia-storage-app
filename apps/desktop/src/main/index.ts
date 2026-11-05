@@ -298,9 +298,15 @@ if (!app.requestSingleInstanceLock()) {
       // Sign-out relaunches into this path. Without the check the user lands
       // at a bare menu bar and has to find the tray icon to reach sign-in. A
       // login launch with no account stays in the menu bar rather than put
-      // sign-in in front of the user at every login.
-      void Daemon.hasAccount().then((has) => {
-        if (!has && !openedAtLogin) showMainWindow()
+      // sign-in in front of the user at every login. A daemon still migrating
+      // its database or reaching the indexer after an update is not listening
+      // yet, so this waits for its answer rather than reading the silence as
+      // no account, which would open sign-in over a signed-in library. It
+      // ends without an answer only on quit, or when the app gives up
+      // restarting a daemon that keeps dying, and the window then opens on
+      // the status view, which says it is not running.
+      void Daemon.awaitAccountState(() => quitting !== null || gaveUp).then((has) => {
+        if (has !== true && !quitting && !openedAtLogin) showMainWindow()
       })
 
       try {
@@ -330,14 +336,17 @@ if (!app.requestSingleInstanceLock()) {
           broadcast('change', { event: 'change', scope: 'connection' })
           void reviveDaemon()
         },
-        (recovered) => {
+        () => {
           // Checked once the stream has sent its subscribe, not at startup,
           // where a sign-in finishing before the stream subscribed sent its
           // connection event to no one.
           void loginItem?.applyDefault(Daemon.hasAccount)
-          if (!recovered) return
-          // A reconnected stream is what starts the extension's warm pass,
-          // and this scope is what re-arms the popover's bounded polling.
+          // Every connect, the first included. The popover polls on this scope
+          // for the extension's warm pass, which a daemon coming back starts,
+          // and the window asks again whether there is an account, since what
+          // it read before may have been read while the daemon could not
+          // answer, and a daemon that came up before the stream first tried it
+          // shows no drop.
           broadcast('change', { event: 'change', scope: 'connection' })
         },
         (fileIds) => void app.whenReady().then(() => receiveShareRequest(fileIds)),

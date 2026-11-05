@@ -425,9 +425,12 @@ by hand.
 ### Signing in on the Mac
 
 - When: the desktop app with no account: asking the indexer for a connection,
-  the recovery phrase, the tour, and setup after it.
+  the recovery phrase, the tour, and setup after it. Sign-in shows only when
+  the daemon says there is no account, never while it cannot be asked.
 - Code: `app.auth`; files `apps/desktop/src/renderer/src/SignIn.tsx`,
   `apps/desktop/src/renderer/src/pairing.ts`,
+  `apps/desktop/src/renderer/src/account.ts`,
+  `apps/desktop/src/main/daemon.ts` (`accountState`),
   `apps/desktop/src/renderer/src/onboarding/Tour.tsx`,
   `apps/desktop/src/renderer/src/Setup.tsx`,
   `apps/desktop/src/renderer/src/Window.tsx`,
@@ -436,7 +439,8 @@ by hand.
   told it was reconnecting, and the app keys registered.
 - Tests: scenarios `desktop/sign-in-new-account`,
   `desktop/sign-in-existing-account`, `desktop/sign-in-not-approved`,
-  `desktop/sign-in-forgets-typed-phrase`, `desktop/tour-closed-part-way`
+  `desktop/sign-in-forgets-typed-phrase`, `desktop/tour-closed-part-way`,
+  `desktop/no-sign-in-while-the-service-cannot-answer`
 - Desktop, a device added signed out:
 
 ```sh
