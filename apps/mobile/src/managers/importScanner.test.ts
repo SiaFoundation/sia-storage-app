@@ -3,7 +3,7 @@ import RNFS from 'react-native-fs'
 import { getMediaLibraryUri } from '../lib/mediaLibrary'
 import { SourceRefs } from '../lib/sourceRefs'
 import { app } from '../stores/appService'
-import { resolveSource } from './importScanner'
+import { importEvictionFor, resolveSource } from './importScanner'
 
 jest.mock('../lib/mediaLibrary', () => ({
   getMediaLibraryUri: jest.fn(),
@@ -26,6 +26,7 @@ jest.mock('../lib/fileTypes', () => ({ getMimeType: jest.fn() }))
 jest.mock('../stores/appService', () => ({ app: jest.fn() }))
 jest.mock('./thumbnailScanner', () => ({ triggerThumbnailScanner: jest.fn() }))
 jest.mock('./bgTaskContext', () => ({ isBgTaskActive: jest.fn(() => false) }))
+jest.mock('./fsEvictionScanner', () => ({ evictDuringImport: jest.fn() }))
 jest.mock('react-native-fs', () => ({ exists: jest.fn(async () => true) }))
 
 const getMediaLibraryUriMock = jest.mocked(getMediaLibraryUri)
@@ -200,5 +201,38 @@ describe('mobile resolveSource durable refs', () => {
         'tok',
       ),
     ).toEqual({ status: 'deleted' })
+  })
+})
+
+describe('importEvictionFor', () => {
+  const pressure = (cause: 'critical-floor' | 'headroom' | 'backlog' | null) => ({
+    cause,
+    freeBytes: null,
+    pendingLocalBytes: null,
+  })
+
+  it('asks for no pass when the tick copied nothing and held nothing back', () => {
+    expect(importEvictionFor({ finalized: 0, deferred: 0, pressure: pressure(null) })).toBeNull()
+  })
+
+  it('asks for a pass at the cache cap while an import copies files', () => {
+    expect(importEvictionFor({ finalized: 3, deferred: 0, pressure: pressure(null) })).toEqual({
+      underStoragePressure: false,
+    })
+  })
+
+  it('asks for the pass that clears every uploaded copy when the import waits for space', () => {
+    expect(
+      importEvictionFor({ finalized: 0, deferred: 20, pressure: pressure('headroom') }),
+    ).toEqual({ underStoragePressure: true })
+    expect(
+      importEvictionFor({ finalized: 0, deferred: 20, pressure: pressure('critical-floor') }),
+    ).toEqual({ underStoragePressure: true })
+  })
+
+  it('keeps the cache at its cap when the import waits on the upload backlog, which eviction cannot shrink', () => {
+    expect(
+      importEvictionFor({ finalized: 0, deferred: 20, pressure: pressure('backlog') }),
+    ).toEqual({ underStoragePressure: false })
   })
 })

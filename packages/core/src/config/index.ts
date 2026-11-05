@@ -180,6 +180,8 @@ export const FS_MAX_BYTES = 4_000_000_000 // 4 GB
 export const FS_ORPHAN_FREQUENCY = daysInMs(1) // 1 day
 // How often the phone runs its eviction pass.
 export const FS_EVICTION_FREQUENCY = minutesInMs(60) // 60 minutes
+// Shortest gap between eviction passes a running mobile import asks for.
+export const FS_EVICTION_IMPORT_FREQUENCY = minutesInMs(1) // 1 minute
 // How often the CLI and desktop daemon runs its eviction pass. A pass under
 // the cap with no trashed or superseded copies to remove reads one sum and
 // runs the two pre-pass queries, so running it often costs little, and a
