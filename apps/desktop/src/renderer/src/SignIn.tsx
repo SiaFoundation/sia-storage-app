@@ -78,11 +78,20 @@ export function SignIn({ onDone }: { onDone: () => void }) {
   // waiting on, so its outcome is discarded rather than moving the form on.
   const attempt = useRef(0)
 
+  // Made when the phrase screen first needs it, not on mount. The daemon has
+  // just answered the approval by then, while one asked at mount may still be
+  // starting, and a failure there would leave the connect screen showing an
+  // outage that has passed and no phrase to continue with.
   useEffect(() => {
+    if (stage !== 'phrase' || generated !== null) return
+    let live = true
     generateRecoveryPhrase(app)
-      .then((phrase) => setGenerated(splitPhrase(phrase)))
-      .catch((e: Error) => setError(safeMessage(e)))
-  }, [app])
+      .then((phrase) => live && setGenerated(splitPhrase(phrase)))
+      .catch((e: Error) => live && setError(safeMessage(e)))
+    return () => {
+      live = false
+    }
+  }, [app, stage, generated])
 
   useEffect(() => {
     if (!copied) return

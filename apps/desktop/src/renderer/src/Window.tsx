@@ -1,9 +1,10 @@
 /*
  * What the window shows.
  *
- * Sign-in until there is an account, then the tour and setup while the library
- * arrives for the first time, then the status view. The tour and setup are
- * reached only from a sign-in made in this window: an app launched with an
+ * Sign-in while the daemon says there is no account, then the tour and setup
+ * while the library arrives for the first time, then the status view. A daemon
+ * that cannot be asked is never read as having no account. The tour and setup
+ * are reached only from a sign-in made in this window: an app launched with an
  * account already on it goes straight to the status view, whatever the
  * library is doing. Share links take over the window when Finder asks to
  * share files and when the status view opens them, until they are closed,
@@ -13,8 +14,8 @@
  * which it is showing before the view is measured.
  */
 
-import { useApp } from '@siastorage/core/app'
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { type Account, nextAccount } from './account'
 import { sia } from './api'
 import { Details } from './Details'
 import { useReportedHeight } from './height'
@@ -23,10 +24,12 @@ import { ShareView } from './ShareView'
 import { TrashView } from './TrashView'
 import { SignIn } from './SignIn'
 
+/** How often the window asks again while the daemon cannot say whether there is an account. */
+const ACCOUNT_RETRY_MS = 2_000
+
 export function Window() {
-  const app = useApp()
   const root = useReportedHeight<HTMLDivElement>()
-  const [needsAccount, setNeedsAccount] = useState<boolean | null>(null)
+  const [account, setAccount] = useState<Account>('asking')
   const [settingUp, setSettingUp] = useState(false)
   // The files Finder asked to share, null to manage links with none picked,
   // and undefined when share links are not showing. `request` counts requests,
@@ -36,25 +39,38 @@ export function Window() {
   )
   const [showingTrash, setShowingTrash] = useState(false)
 
+  const latest = useRef(0)
+  const retry = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
   const read = useCallback(async () => {
-    try {
-      const url = await app.settings.getIndexerURL()
-      setNeedsAccount(!(await app.auth.hasAppKey(url)))
-    } catch {
-      // With the daemon down the read rejects. Sign-in is where the outage is
-      // named, so showing it beats a window that stays blank.
-      setNeedsAccount(true)
-    }
-  }, [app])
+    // Retries and change signals overlap, so only the newest read may answer.
+    const ticket = ++latest.current
+    clearTimeout(retry.current)
+    const answer = await sia.accountState().catch(() => null)
+    if (ticket !== latest.current) return
+    setAccount((prev) => nextAccount(prev, answer))
+    // A connection signal does not always follow a daemon that could not
+    // answer. One too busy to answer in time keeps its stream open and never
+    // reports a recovery, so the window keeps asking until it gets an answer.
+    if (answer === null) retry.current = setTimeout(() => void read(), ACCOUNT_RETRY_MS)
+  }, [])
 
   useEffect(() => {
     void read()
-    // The daemon reports a connection change, which is what signing in causes.
+    // The daemon reports a connection change, which is what signing in causes,
+    // and the main process sends one each time it connects to the daemon.
     // Other scopes arrive several times a second during a sync, and each read
     // is two daemon round trips.
-    return sia.onChange((event) => {
+    const stop = sia.onChange((event) => {
       if (event.scope === 'connection') void read()
     })
+    return () => {
+      stop()
+      // Also retires a read still in flight, which would otherwise schedule
+      // a retry after this cleanup has run.
+      latest.current += 1
+      clearTimeout(retry.current)
+    }
   }, [read])
 
   // Closing the window hides it and leaves this mounted, so without this the
@@ -90,9 +106,9 @@ export function Window() {
 
   const view = settingUp
     ? 'setup'
-    : needsAccount === null
+    : account === 'asking'
       ? null
-      : needsAccount
+      : account === 'signed-out'
         ? 'sign-in'
         : sharing !== undefined
           ? 'share'

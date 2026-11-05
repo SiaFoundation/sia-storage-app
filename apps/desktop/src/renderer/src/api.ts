@@ -34,6 +34,8 @@ export type SiaApi = {
   rpc(method: string, args?: unknown[], timeoutMs?: number): Promise<unknown>
   openUrl(url: string): Promise<void>
   daemonReachable(): Promise<boolean>
+  /** Whether this Mac has an account, or null when the daemon could not be asked. */
+  accountState(): Promise<boolean | null>
   connectDaemon(): Promise<{ connected: boolean }>
   shellStatus(): Promise<DomainState>
   /** How far the OS shell has got through writing the library out. */

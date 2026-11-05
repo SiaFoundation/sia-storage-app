@@ -1,8 +1,8 @@
 /*
  * The menu bar item.
  *
- * Left click opens the popover, or the window when this machine has no account
- * yet: the popover reports the problem and the window is where it is fixed.
+ * Left click opens the popover, or the window when the daemon says this machine
+ * has no account yet, since the window is where signing in happens.
  * Right click gives the menu. The icon is a template image so the system tints
  * it for light and dark menu bars.
  */
@@ -29,7 +29,11 @@ export function createTray(): Tray {
   item.setToolTip('Sia Storage')
 
   item.on('click', (_event, bounds) => {
-    void Daemon.hasAccount().then((has) => (has ? togglePopover(bounds) : showMainWindow()))
+    // Only the daemon's own no opens sign-in. One that cannot answer gets the
+    // popover, which says it is not running.
+    void Daemon.accountState().then((has) =>
+      has === false ? showMainWindow() : togglePopover(bounds),
+    )
   })
   item.on('right-click', () => {
     hidePopover()

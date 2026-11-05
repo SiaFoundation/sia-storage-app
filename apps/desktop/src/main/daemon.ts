@@ -30,9 +30,10 @@ const facade = createRemoteAppService(
   (channel, args, timeoutMs) => call(channel, args, timeoutMs),
   undefined,
   {
-    // Read on a tray click. Each call is bounded at three seconds and the two
-    // run in sequence, so a hung daemon degrades to the sign-in window inside
-    // six rather than holding the click for the transport default.
+    // Read on a tray click, at launch and for the window. Each call is bounded
+    // at three seconds and the two run in sequence, so a hung daemon is
+    // reported as unknown inside six rather than holding the click for the
+    // transport default.
     timeouts: { 'ds:settings:getIndexerURL': 3_000, 'ds:auth:hasAppKey': 3_000 },
   },
 )
@@ -106,16 +107,39 @@ export class Daemon {
   }
 
   /**
-   * Whether this machine has been paired with its indexer.
-   *
-   * False when the daemon cannot be asked, which sends the click to the window:
-   * signing in is the one thing worth offering when nothing else works.
+   * Whether this machine has been paired with its indexer: true or false as
+   * the daemon answers, and null when it could not be asked. Null is never a
+   * no. A daemon migrating its database after an update, or one too busy to
+   * answer in time, still holds its account, and treating its silence as no
+   * account sends a signed-in user to sign-in.
    */
-  static async hasAccount(): Promise<boolean> {
+  static async accountState(): Promise<boolean | null> {
     try {
       return await facade.auth.hasAppKey(await facade.settings.getIndexerURL())
     } catch {
-      return false
+      return null
+    }
+  }
+
+  /**
+   * True only when the daemon says this Mac has an account. A no and a daemon
+   * that could not be asked both read false, so a caller that would show
+   * sign-in on false uses `accountState` instead.
+   */
+  static async hasAccount(): Promise<boolean> {
+    return (await Daemon.accountState()) === true
+  }
+
+  /**
+   * Asks until the daemon answers, for a launch that may have attached before
+   * the daemon it started was listening. Null when `stopped` ends the wait
+   * first.
+   */
+  static async awaitAccountState(stopped: () => boolean, gapMs = 1_000): Promise<boolean | null> {
+    for (;;) {
+      const state = await Daemon.accountState()
+      if (state !== null || stopped()) return state
+      await new Promise((resolve) => setTimeout(resolve, gapMs))
     }
   }
 

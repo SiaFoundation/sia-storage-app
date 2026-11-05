@@ -37,9 +37,14 @@ type FakeDaemon = { calls: string[]; close: () => Promise<void> }
  * it closes its socket at once and releases the lock 200ms later, the order a
  * real daemon exits in, so a caller that does not wait for the lock still sees
  * it held. With `lingers` it keeps serving and holding the lock instead, as a
- * daemon finishing its uploads does.
+ * daemon finishing its uploads does. It answers the account check with
+ * `account`.
  */
-function fakeDaemon(reports: DaemonIdentity | null, lingers = false): Promise<FakeDaemon> {
+function fakeDaemon(
+  reports: DaemonIdentity | null,
+  lingers = false,
+  account = true,
+): Promise<FakeDaemon> {
   const lockPath = join(dir, 'daemon.lock')
   // The test runner's own pid, so the lock reads as held by a live process.
   writeFileSync(lockPath, String(process.pid))
@@ -56,7 +61,11 @@ function fakeDaemon(reports: DaemonIdentity | null, lingers = false): Promise<Fa
           ? { id: request.id, ok: true, result: { ok: true } }
           : request.method === 'version' && reports
             ? { id: request.id, ok: true, result: reports }
-            : { id: request.id, ok: false, error: `Unknown method: ${request.method}` }
+            : request.method === 'ds:settings:getIndexerURL'
+              ? { id: request.id, ok: true, result: 'https://sia.storage' }
+              : request.method === 'ds:auth:hasAppKey'
+                ? { id: request.id, ok: true, result: account }
+                : { id: request.id, ok: false, error: `Unknown method: ${request.method}` }
       socket.end(`${JSON.stringify(reply)}\n`)
       if (request.method === 'shutdown' && !lingers) {
         server.close()
@@ -235,5 +244,39 @@ describe('reconciling with the daemon serving at launch', () => {
     expect(asked).toEqual([null])
     expect(fake.calls).toContain('shutdown')
     expect(Daemon.holdsLock()).toBe(false)
+  })
+})
+
+describe('asking at launch whether this Mac has an account', () => {
+  let fake: FakeDaemon | null = null
+
+  afterEach(async () => {
+    await fake?.close()
+    fake = null
+    rmSync(join(dir, 'daemon.lock'), { force: true })
+    rmSync(join(dir, 'daemon.sock'), { force: true })
+  })
+
+  it('waits for a daemon that starts listening late, rather than reading it as no account', async () => {
+    const starting = Bun.sleep(600).then(async () => (fake = await fakeDaemon(identity())))
+
+    const state = await Daemon.awaitAccountState(() => false, 100)
+    await starting
+
+    expect(state).toBe(true)
+  })
+
+  it('reports no account only when the daemon says so', async () => {
+    fake = await fakeDaemon(identity(), false, false)
+
+    expect(await Daemon.awaitAccountState(() => false, 100)).toBe(false)
+  })
+
+  it('keeps asking a daemon that never listens until told to stop, then reports no answer', async () => {
+    let asked = 0
+    const stopAfterThree = () => ++asked >= 3
+
+    expect(await Daemon.awaitAccountState(stopAfterThree, 50)).toBe(null)
+    expect(asked).toBe(3)
   })
 })

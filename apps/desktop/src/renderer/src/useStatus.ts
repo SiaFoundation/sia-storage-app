@@ -62,7 +62,7 @@ function useShell(watch: boolean): Shell {
   const latest = useRef(0)
   const lastActive = useRef(false)
 
-  const read = useCallback(async () => {
+  const read = useCallback(async (): Promise<{ active: boolean; reachable: boolean } | null> => {
     // The interval and the change signal both call this, and the four reads
     // can settle out of order, so a stale answer must not overwrite a newer one.
     const ticket = ++latest.current
@@ -75,7 +75,7 @@ function useShell(watch: boolean): Shell {
       sia.daemonReachable(),
       sia.materializing(),
     ])
-    if (ticket !== latest.current) return false
+    if (ticket !== latest.current) return null
     setShell((prev) => ({
       domain: domain.status === 'fulfilled' ? domain.value : prev.domain,
       mountPath: mountPath.status === 'fulfilled' ? mountPath.value : prev.mountPath,
@@ -87,14 +87,17 @@ function useShell(watch: boolean): Shell {
     }))
     // A transient rejection keeps the last known answer: reading it as idle
     // would stop the poll while the popover still shows the pass running. A
-    // down daemon clears it, or an outage would keep this polling for good.
+    // down daemon clears it, since no pass runs without one.
     if (materializing.status === 'fulfilled') lastActive.current = materializing.value.active
     else if (daemonReachable.status === 'fulfilled' && !daemonReachable.value) {
       lastActive.current = false
     }
     // Both need the poll: writing the library out raises no change signal,
     // and a mount transition comes from this process, so neither announces.
-    return lastActive.current || (domain.status === 'fulfilled' && domain.value === 'starting')
+    return {
+      active: lastActive.current || (domain.status === 'fulfilled' && domain.value === 'starting'),
+      reachable: daemonReachable.status === 'fulfilled' && daemonReachable.value,
+    }
   }, [])
 
   useEffect(() => {
@@ -118,10 +121,17 @@ function useShell(watch: boolean): Shell {
     const tick = async () => {
       if (stopped) return
       const mine = ++generation
-      const active = await read()
-      if (stopped || mine !== generation) return
+      const result = await read()
+      if (stopped || mine !== generation || !result) return
+      const { active, reachable } = result
       clearTimeout(timer)
-      if (!active && graceLeft > 0) graceLeft -= 1
+      // A daemon frozen or too busy to answer keeps its socket and the main
+      // process's change stream open, so answering again sends no connection
+      // signal. Without the poll the view would say Not running until the next
+      // reconnect. The grace stays full meanwhile, so recovery gets what a
+      // signal would.
+      if (!reachable) graceLeft = GRACE_POLLS
+      else if (!active && graceLeft > 0) graceLeft -= 1
       if (watch || active || graceLeft > 0) {
         timer = setTimeout(() => void tick(), PREPARING_POLL_MS)
       }

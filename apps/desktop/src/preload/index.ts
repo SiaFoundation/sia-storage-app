@@ -21,6 +21,7 @@ const api = {
   openUrl: (url: string) => ipcRenderer.invoke('open:url', url),
 
   daemonReachable: () => ipcRenderer.invoke('shell:daemon'),
+  accountState: () => ipcRenderer.invoke('account:state'),
   /** Asks the daemon to wire an SDK from a key stored since it started. */
   connectDaemon: () => ipcRenderer.invoke('daemon:connect'),
   shellStatus: () => ipcRenderer.invoke('shell:status'),

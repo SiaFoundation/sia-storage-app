@@ -71,6 +71,9 @@ export function registerBridge(
   ipcMain.handle('daemon:connect', () => call('connect', [], 60_000))
 
   ipcMain.handle('shell:daemon', () => Daemon.isReachable())
+  // Asked here rather than over `rpc` so the window, the tray and launch all
+  // read the account the same way, with the same bounded wait.
+  ipcMain.handle('account:state', () => Daemon.accountState())
   // The daemon's own channel: how far the OS shell has got through writing the
   // library out, which it infers from what the shell has asked it for.
   // The reachability probe answers in three seconds; the transport default

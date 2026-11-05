@@ -126,6 +126,26 @@ export class CliDevice implements Device {
     }
   }
 
+  /**
+   * Stops the daemon's process where it stands, as a daemon blocked on a long
+   * migration or a busy event loop is. Its socket and the connections already
+   * open on it stay up, so a client sees calls time out rather than the daemon
+   * going away. Pair with `resumeDaemon`, in a `finally`: a paused daemon
+   * cannot answer the `shutdown` that stopping the device sends.
+   */
+  pauseDaemon(): void {
+    const pid = readDaemonPid(this.paths.pidPath)
+    if (pid === null || !isCliDaemon(pid, this.paths.dataDir)) {
+      throw new Error(`${this.name} has no daemon running to pause`)
+    }
+    process.kill(pid, 'SIGSTOP')
+  }
+
+  resumeDaemon(): void {
+    const pid = readDaemonPid(this.paths.pidPath)
+    if (pid !== null && isCliDaemon(pid, this.paths.dataDir)) process.kill(pid, 'SIGCONT')
+  }
+
   async isRunning(): Promise<boolean> {
     const pid = readDaemonPid(this.paths.pidPath)
     return pid !== null && isCliDaemon(pid, this.paths.dataDir)
