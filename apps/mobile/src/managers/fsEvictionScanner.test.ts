@@ -227,11 +227,12 @@ async function createLocalOnlyFile(params: { id: string; size: number; usedAt: n
   })
 }
 
+// A type with no thumbnails, so no pass here waits for them.
 function makeFileRecord(id: string, size: number): FileRecord {
   return {
     id,
-    name: `${id}.jpg`,
-    type: 'image/jpeg',
+    name: `${id}.bin`,
+    type: 'application/octet-stream',
     kind: 'file',
     size,
     hash: `sha256:hash-${id}`,

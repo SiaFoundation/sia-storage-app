@@ -1,6 +1,12 @@
 import { logger } from '@siastorage/logger'
 import type { DatabaseAdapter } from '../adapters/db'
-import { deleteFsMeta, readFsMeta, updateFsMetaUsedAt, upsertFsMeta } from '../db/operations/fs'
+import {
+  deleteFsMeta,
+  insertFsMetaIfAbsent,
+  readFsMeta,
+  updateFsMetaUsedAt,
+  upsertFsMeta,
+} from '../db/operations/fs'
 import type { ContentHash } from '../lib/contentHash'
 
 const USED_AT_UPDATE_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
@@ -120,11 +126,24 @@ export type FsIOAdapter = FsFileUriAdapter & {
   getDeviceSpace?(): Promise<{ freeBytes: number }>
 }
 
+/**
+ * Resolves a file's local copy, or null when its bytes are not on disk. It
+ * drops the `fs` row when the bytes are gone and rebuilds it when bytes exist
+ * without one.
+ *
+ * A read normally counts as a use and moves `usedAt`, the clock cache eviction
+ * ages copies by. `recordUse: false` is for reads the app makes on its own,
+ * such as the uploader and the thumbnail generator. Counting those would mark
+ * every freshly imported copy as just used, and the eviction pass skips
+ * anything used within its minimum age, so a large import would keep every
+ * uploaded copy on disk until the device runs out of space.
+ * A row rebuilt by such a read gets `usedAt` 0, the value the importer writes.
+ */
 export async function getFsFileUri(
   db: DatabaseAdapter,
   file: { id: string; type: string },
   adapter: FsFileUriAdapter,
-  opts?: { usedAtUpdateInterval?: number },
+  opts?: { usedAtUpdateInterval?: number; recordUse?: boolean },
 ): Promise<string | null> {
   const existingMeta = await readFsMeta(db, file.id)
   const { value: size, error } = await adapter.size(file.id, file.type)
@@ -142,15 +161,15 @@ export async function getFsFileUri(
     return null
   }
   const now = Date.now()
+  const recordUse = opts?.recordUse ?? true
 
-  if (!existingMeta) {
-    await upsertFsMeta(db, {
-      fileId: file.id,
-      size,
-      addedAt: now,
-      usedAt: now,
-    })
-  } else {
+  if (!existingMeta && recordUse) {
+    await upsertFsMeta(db, { fileId: file.id, size, addedAt: now, usedAt: now })
+  } else if (!existingMeta) {
+    // A user's read of the same file may have recorded a row while this one
+    // waited on the size, and replacing it would reset its use time to 0.
+    await insertFsMetaIfAbsent(db, { fileId: file.id, size, addedAt: now, usedAt: 0 })
+  } else if (recordUse) {
     const interval = opts?.usedAtUpdateInterval ?? USED_AT_UPDATE_INTERVAL_MS
     const timeSinceLastUse = now - existingMeta.usedAt
     if (timeSinceLastUse > interval) {

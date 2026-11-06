@@ -1,4 +1,5 @@
 import type { DatabaseAdapter } from '../../adapters/db'
+import { ThumbSizes } from '../../types/files'
 import * as sql from '../sql'
 
 export type FsMetaRow = {
@@ -26,6 +27,16 @@ export async function upsertFsMeta(db: DatabaseAdapter, row: FsMetaRow): Promise
       usedAt: row.usedAt,
     },
     { conflictClause: 'OR REPLACE' },
+  )
+}
+
+/** Records a row only where the file has none, leaving an existing row as it is. */
+export async function insertFsMetaIfAbsent(db: DatabaseAdapter, row: FsMetaRow): Promise<void> {
+  await sql.insert(
+    db,
+    'fs',
+    { fileId: row.fileId, size: row.size, addedAt: row.addedAt, usedAt: row.usedAt },
+    { conflictClause: 'OR IGNORE' },
   )
 }
 
@@ -103,8 +114,24 @@ export async function queryEvictionCandidates(
   thresholdUsedAt: number,
   after: EvictionCursor | null,
   limit: number,
+  thumbnails?: { types: readonly string[]; addedBefore: number },
 ): Promise<EvictionRow[]> {
   const cursor = afterCursor(after)
+  const thumbnailTypes = thumbnails?.types ?? []
+  // Thumbnails are made from the local copy, so a copy evicted before they
+  // exist leaves the file without them on every device. Waiting is bounded
+  // by the copy's age, so a file whose thumbnail always fails still goes.
+  const thumbnailClause =
+    thumbnails && thumbnailTypes.length > 0
+      ? `AND (
+          f.type NOT IN (${thumbnailTypes.map(() => '?').join(',')})
+          OR fs.addedAt <= ?
+          OR (SELECT COUNT(DISTINCT t.thumbSize) FROM files t
+              WHERE t.thumbForId = f.id AND t.thumbSize IN (${ThumbSizes.join(',')})) >= ${ThumbSizes.length}
+        )`
+      : ''
+  const thumbnailParams =
+    thumbnails && thumbnailTypes.length > 0 ? [...thumbnailTypes, thumbnails.addedBefore] : []
   return db.getAllAsync<EvictionRow>(
     `SELECT fs.fileId, fs.size, f.type, fs.usedAt FROM fs
      JOIN files f ON f.id = fs.fileId
@@ -114,11 +141,13 @@ export async function queryEvictionCandidates(
        AND EXISTS (
          SELECT 1 FROM objects o WHERE o.fileId = fs.fileId AND o.indexerURL = ?
        )
+       ${thumbnailClause}
        ${cursor.clause}
      ORDER BY fs.usedAt ASC, fs.fileId ASC
      LIMIT ?`,
     thresholdUsedAt,
     indexerURL,
+    ...thumbnailParams,
     ...cursor.params,
     limit,
   )

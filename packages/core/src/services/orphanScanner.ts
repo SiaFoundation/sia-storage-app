@@ -134,7 +134,9 @@ export async function runOrphanScanner(
         // In place. A missing fs row is a crash between the byte write and
         // the row write; rebuild it rather than delete a referenced file.
         if (orphanedIds.has(entry.fileId)) {
-          await app.fs.getFileUri({ id: entry.fileId, type: liveType }).catch(() => null)
+          await app.fs
+            .getFileUri({ id: entry.fileId, type: liveType }, { recordUse: false })
+            .catch(() => null)
         }
         continue
       }
@@ -169,7 +171,7 @@ export async function runOrphanScanner(
       try {
         await app.fs.renameToType({ id: entry.fileId, type: diskType }, liveType)
         // Rebuild the fs row; its absence is what hid the file.
-        await app.fs.getFileUri({ id: entry.fileId, type: liveType })
+        await app.fs.getFileUri({ id: entry.fileId, type: liveType }, { recordUse: false })
         present.add(target)
         repaired++
         logger.info('orphanScanner', 'type_drift_repaired', {
