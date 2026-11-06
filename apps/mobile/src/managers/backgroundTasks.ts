@@ -1,16 +1,19 @@
 import { minutesInMs, secondsInMs } from '@siastorage/core'
+import { BACKGROUND_TASK_OFFLINE_GRACE, BACKGROUND_TASK_STALL_LIMIT } from '@siastorage/core/config'
 import { isAbortError } from '@siastorage/core/lib/errors'
 import { logger } from '@siastorage/logger'
 import { Platform } from 'react-native'
 import BackgroundFetch, { type BackgroundFetchConfig } from 'react-native-background-fetch'
 import { delayWithSignal } from '../lib/delayWithSignal'
-import { scheduleAfter } from '../lib/scheduleAfter'
 import { app } from '../stores/appService'
 import { getFileStatsLocal } from '../stores/files'
 import { clearActiveBgTask, setActiveBgTask } from './bgTaskContext'
 import { runFsEvictionScanner } from './fsEvictionScanner'
+import { runFsOrphanScanner } from './fsOrphanScanner'
 import { getLifecycle } from './lifecycle'
 import { registerBackgroundTaskLifecycle, releaseBackgroundTaskLifecycle } from './suspension'
+import { getPhotosScannedCount, isArchiveWalkActive } from './syncPhotosArchive'
+import { triggerSyncDownEvents } from './syncDownEvents'
 import { getUploadManager } from './uploader'
 
 /**
@@ -275,21 +278,6 @@ async function waitForInitialization(
   return 'ready'
 }
 
-/**
- * Run background work for a given task configuration and state. This function
- * works by simply checking if the resumed app has work to do. If it does, it
- * gives it time to complete. If it doesn't, it will finish the task and return.
- *
- * iOS background task start types:
- * - Warm: App suspended in memory, iOS resumes it - init already complete
- * - Cold: App terminated by system, iOS relaunches - init runs from scratch
- * - Force quit: User swiped up - background tasks won't fire until manual open
- *
- * Note: There is a small chance the two task types will run concurrently,
- * with the current implementation this is fine because both tasks are simply
- * allowing the app to continue already scheduled work. If we ever make the
- * work these tasks more explicit, we may want to take this into account.
- */
 // Soft deadline per task type, leaving headroom inside the OS budget for
 // release + suspend cleanup. iOS does NOT reliably extend a BGTask via
 // beginBackgroundTask from inside the expirationHandler (Apple DTS forum
@@ -308,6 +296,194 @@ function softDeadlineMs(type: TaskConfig['type']): number {
   }
 }
 
+/**
+ * Work the app's own services finish while it stays awake. Thumbnails still to
+ * be made are not waited on, because one whose original is not on the device
+ * can never be made, and counting them would hold every task to its deadline.
+ * Thumbnails already made count with the files waiting to upload.
+ */
+type PendingWork = {
+  filesRemaining: number
+  bytesRemaining: number
+  activeUploads: number
+  importing: boolean
+  /** Bytes the import copies in progress have written. */
+  importBytesCopied: number
+  /** Photos the library walk has looked at, which moves past ones already imported. */
+  archiveScanned: number
+  metadataSyncUp: number
+  syncingDown: boolean
+  /** No sync-down run has finished since the task started. */
+  syncDownUnchecked: boolean
+  /** Where sync-down has read up to, as JSON. */
+  syncDownCursor: string
+}
+
+/**
+ * Reads what is still pending. Uploads count the files waiting and any the
+ * uploader holds that no longer count as waiting, such as a file a newer
+ * version superseded mid-upload. Imports count while a file is being copied,
+ * a file is ready to copy now, or the photo library walk is still finding
+ * files, so a task does not wait out an import's retry backoff. Sync-down
+ * counts until one run has finished since the task started, because a quiet
+ * check finds no events and leaves nothing else to see.
+ */
+async function readPendingWork(
+  longTask: boolean,
+  syncDownRunsAtStart: number,
+): Promise<PendingWork> {
+  if (!longTask) {
+    const stats = await getFileStatsLocal({ localOnly: true })
+    return {
+      filesRemaining: stats.count,
+      bytesRemaining: stats.totalBytes,
+      activeUploads: app().uploads.getActiveIds().length,
+      importing: false,
+      importBytesCopied: 0,
+      archiveScanned: 0,
+      metadataSyncUp: 0,
+      syncingDown: false,
+      syncDownUnchecked: false,
+      syncDownCursor: '',
+    }
+  }
+  // Imports are read before uploads. A file an import finishes between the
+  // two reads then shows as waiting to upload, where the other order would
+  // miss it in both and end the task with it unsent.
+  const walking = isArchiveWalkActive()
+  const indexerURL = await app().settings.getIndexerURL()
+  const [copies, ready, archiveScanned, metadataSyncUp, cursor, autoSyncDown] = await Promise.all([
+    app().imports.activeCopies(),
+    app().imports.pendingFiles(1, Date.now()),
+    getPhotosScannedCount(),
+    app().localObjects.countSyncUp(indexerURL),
+    app().sync.getSyncDownCursor(),
+    app().settings.getAutoSyncDownEvents(),
+  ])
+  const stats = await getFileStatsLocal({ localOnly: true })
+  const sync = app().sync.getState()
+  return {
+    filesRemaining: stats.count,
+    bytesRemaining: stats.totalBytes,
+    activeUploads: app().uploads.getActiveIds().length,
+    importing: copies.files > 0 || ready.length > 0 || walking,
+    importBytesCopied: copies.bytesCopied,
+    archiveScanned,
+    metadataSyncUp,
+    syncingDown: sync.isSyncingDown,
+    syncDownUnchecked:
+      autoSyncDown &&
+      app().connection.getState().isConnected &&
+      sync.syncDownRuns === syncDownRunsAtStart,
+    syncDownCursor: JSON.stringify(cursor ?? null),
+  }
+}
+
+/**
+ * Tracks whether pending work moves forward. A change in what is waiting, in
+ * the bytes the uploader has finished, in the bytes import copies have
+ * written, in the photos the library walk has looked at, or in sync-down's
+ * saved cursor counts. The cursor moves on every
+ * batch sync-down commits, where its object count skips events for files not
+ * on the device and its progress fraction stays put across events sharing a
+ * timestamp. Bytes of uploads in flight count only once they pass the most
+ * seen since that last change, so an upload that fails at the same point on
+ * every retry does not keep a task awake.
+ */
+function createProgressTracker(startedAt: number) {
+  let lastSettled = ''
+  let mostInFlight = 0
+  let movedAt = startedAt
+  return {
+    /** Records a reading and returns how long it has been since work moved forward. */
+    sinceProgress(work: PendingWork, now: number): number {
+      const settled = JSON.stringify([
+        work.filesRemaining,
+        work.bytesRemaining,
+        work.metadataSyncUp,
+        work.importing,
+        work.importBytesCopied,
+        work.archiveScanned,
+        work.syncDownCursor,
+        getUploadManager()?.uploadedBytes ?? 0,
+      ])
+      const inFlight = inFlightUploadBytes()
+      if (settled !== lastSettled) {
+        lastSettled = settled
+        mostInFlight = inFlight
+        movedAt = now
+      } else if (inFlight > mostInFlight) {
+        mostInFlight = inFlight
+        movedAt = now
+      }
+      return now - movedAt
+    },
+  }
+}
+
+/**
+ * Bytes sent so far by the active uploads, from each one's progress. A file
+ * stays `packing` while its bytes stream to the network, so a large file
+ * reports progress for minutes before it reaches `uploading`. A batch keeps
+ * adding shard bytes across failed attempts, which can take its progress past
+ * 1, so each upload counts at most its size.
+ */
+function inFlightUploadBytes(): number {
+  let bytes = 0
+  for (const id of app().uploads.getActiveIds()) {
+    const upload = app().uploads.getEntry(id)
+    if (upload) bytes += Math.min(upload.progress, 1) * upload.size
+  }
+  return bytes
+}
+
+/** Resolves when `work` settles or `signal` aborts, whichever comes first. */
+function untilAborted(work: Promise<unknown>, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const done = () => {
+      signal.removeEventListener('abort', done)
+      resolve()
+    }
+    signal.addEventListener('abort', done, { once: true })
+    work.then(done, done)
+  })
+}
+
+function hasPendingWork(work: PendingWork): boolean {
+  return (
+    work.filesRemaining > 0 ||
+    work.activeUploads > 0 ||
+    work.importing ||
+    work.metadataSyncUp > 0 ||
+    work.syncingDown ||
+    work.syncDownUnchecked
+  )
+}
+
+/**
+ * Keeps the app awake for a background task while it has work left, then
+ * hands it back to the system. The work itself runs on the app's own service
+ * intervals. This function only decides how long to wait for it.
+ *
+ * The long tasks, the iOS BGProcessingTask and the Android worker, first run a
+ * cache eviction pass and then wait on every kind of pending work in
+ * [readPendingWork]. The iOS BGAppRefreshTask has 30 seconds and iOS's CPU
+ * limit (see bgTaskContext.ts), so it skips eviction and waits on uploads
+ * alone. Every task runs the daily orphan scan when it is due, and stops
+ * waiting early after `BACKGROUND_TASK_OFFLINE_GRACE` without the indexer,
+ * unless an import is copying or ready to copy, or after
+ * `BACKGROUND_TASK_STALL_LIMIT` without progress. The refresh task's own
+ * deadline comes before either.
+ *
+ * iOS background task start types:
+ * - Warm: App suspended in memory, iOS resumes it - init already complete
+ * - Cold: App terminated by system, iOS relaunches - init runs from scratch
+ * - Force quit: User swiped up - background tasks won't fire until manual open
+ *
+ * The two iOS task types can run at once. That is safe because only the
+ * processing task runs an eviction pass, the two share one orphan scan, and
+ * the rest of the work here only reads.
+ */
 async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   const log = logTask(config, state)
 
@@ -356,12 +532,38 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
   const isConnected = app().connection.getState().isConnected
   log('app_ready', { connected: isConnected })
 
-  // Defer scanners past the upload manager's spin-up. Skip in the 30s
-  // BGAppRefreshTask — no headroom after the delay.
-  if (getLifecycle() === 'background' && config.type !== 'BGAppRefreshTask') {
-    void scheduleAfter(secondsInMs(30), signal, async (s) => {
-      await runFsEvictionScanner({ signal: s })
-    })
+  const longTask = config.type !== 'BGAppRefreshTask'
+  // Awaited, so the task cannot finish and let the system suspend the app
+  // while a pass is still running. Eviction keeps its hourly gate and the
+  // orphan scan its daily one, so a task soon after a pass ran skips it. In
+  // the foreground the app runs both on its own schedule. The soft deadline
+  // is checked only in the wait loop below, so a timer applies it to the
+  // passes as well, through delayWithSignal, since a plain setTimeout does not
+  // fire in an iOS background task.
+  if (getLifecycle() === 'background') {
+    const passesDone = new AbortController()
+    void delayWithSignal(
+      Math.max(0, deadlineMs - (Date.now() - state.startTime)),
+      passesDone.signal,
+    ).then(
+      () => {
+        log('soft_deadline_reached', { elapsedMs: Date.now() - state.startTime })
+        controller.abort()
+      },
+      () => {},
+    )
+    try {
+      // Both passes are single-flighted, and a caller that joins a pass
+      // someone else started cannot abort it. Resuming a suspended app starts
+      // an eviction pass of its own, and the other iOS task may have started
+      // the scan. The task stops waiting at its own deadline either way and
+      // leaves the pass running.
+      if (longTask) await untilAborted(runFsEvictionScanner({ signal }), signal)
+      if (!signal.aborted) await untilAborted(runFsOrphanScanner({ signal }), signal)
+    } finally {
+      passesDone.abort()
+    }
+    if (signal.aborted) return
   }
 
   const manager = getUploadManager()!
@@ -377,6 +579,12 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
     totalBytes: initialStats.totalBytes,
   })
 
+  let disconnectedSince: number | null = null
+  const progress = createProgressTracker(Date.now())
+  // The sync-down interval may not tick before the task would otherwise end,
+  // so the long tasks ask for a run now and wait for one to finish.
+  const syncDownRunsAtStart = app().sync.getState().syncDownRuns
+  if (longTask) triggerSyncDownEvents()
   while (!signal.aborted) {
     // TODO: query UIApplication.backgroundTimeRemaining via a native
     // module and self-abort when it dips below the cleanup budget,
@@ -387,26 +595,27 @@ async function runBackgroundWork(config: TaskConfig, state: TaskState) {
       controller.abort()
       break
     }
-    const stats = await getFileStatsLocal({ localOnly: true })
+    const work = await readPendingWork(longTask, syncDownRunsAtStart)
     if (signal.aborted) break
-    log('still_uploading', {
-      filesRemaining: stats.count,
-      bytesRemaining: stats.totalBytes,
-      elapsedMs: Date.now() - state.startTime,
-    })
-    // The count covers current versions only, and a file the uploader holds
-    // stops being current when a newer one with its name lands in its folder.
-    if (stats.count === 0 && app().uploads.getActiveIds().length === 0) {
+    log('still_uploading', { ...work, elapsedMs: Date.now() - state.startTime })
+    const now = Date.now()
+    if (app().connection.getState().isConnected) disconnectedSince = null
+    else disconnectedSince ??= now
+    // Imports copy from the device and keep going without the indexer.
+    const stopReason = !hasPendingWork(work)
+      ? 'no work left'
+      : !work.importing &&
+          disconnectedSince !== null &&
+          now - disconnectedSince >= BACKGROUND_TASK_OFFLINE_GRACE
+        ? 'offline'
+        : progress.sinceProgress(work, now) >= BACKGROUND_TASK_STALL_LIMIT
+          ? 'no progress'
+          : null
+    if (stopReason) {
+      const remaining = { count: work.filesRemaining, totalBytes: work.bytesRemaining }
       log(
         'finished',
-        buildSummaryData(
-          'all uploaded',
-          initialStats,
-          { count: 0, totalBytes: 0 },
-          initialSnapshot,
-          manager,
-          state,
-        ),
+        buildSummaryData(stopReason, initialStats, remaining, initialSnapshot, manager, state),
       )
       return
     }

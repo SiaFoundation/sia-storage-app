@@ -56,6 +56,11 @@ export function buildImportQuerySpecs(
       run: () => app.imports.countInFlight(),
     },
     {
+      name: 'imports.activeCopies',
+      category: 'imports-read',
+      run: () => app.imports.activeCopies(),
+    },
+    {
       name: 'imports.countInFlight:directory',
       category: 'imports-read',
       run: () => app.imports.countInFlight(ARCHIVE_DIR_ID),

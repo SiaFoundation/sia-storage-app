@@ -342,6 +342,7 @@ export function buildDbNamespaces(
       pendingFiles: (limit, now) => ops.queryPendingImportFiles(db, { limit, now }),
       inProgressImport: (source) => ops.queryInProgressImport(db, source),
       countInFlight: (directoryId) => ops.countInFlight(db, directoryId),
+      activeCopies: () => ops.queryActiveImportCopies(db),
       getByMediaAssetIds: (mediaAssetIds, directoryId) =>
         ops.queryImportFilesByMediaAssetIds(db, mediaAssetIds, directoryId),
       create: async (imp, files) => {

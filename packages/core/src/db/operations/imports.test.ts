@@ -21,6 +21,7 @@ import {
   markImportFileProgress,
   markImportFileUnavailable,
   queryImportFilesByMediaAssetIds,
+  queryActiveImportCopies,
   queryImportById,
   queryImportFiles,
   queryImportSummary,
@@ -421,6 +422,20 @@ describe('imports ops', () => {
       file({ id: 'c', importId: 'i1', state: 'added' }),
     ])
     expect(await countInFlight(db())).toBe(2)
+  })
+
+  it('queryActiveImportCopies counts only claimed files and the bytes they copied', async () => {
+    await insertImport(db(), imp({ id: 'i1', source: 'picker' }))
+    await insertManyImportFiles(db(), [
+      file({ id: 'a', importId: 'i1', state: 'pending', copyBytes: 5 }),
+      file({ id: 'c', importId: 'i1', state: 'added', copyBytes: 9 }),
+    ])
+    expect(await queryActiveImportCopies(db())).toEqual({ files: 0, bytesCopied: 0 })
+    await insertManyImportFiles(db(), [
+      file({ id: 'b', importId: 'i1', state: 'active', copyBytes: 40 }),
+      file({ id: 'd', importId: 'i1', state: 'active', copyBytes: 2 }),
+    ])
+    expect(await queryActiveImportCopies(db())).toEqual({ files: 2, bytesCopied: 42 })
   })
 
   it('countInFlight scoped to a directory, and to unfiled by its pseudo-id', async () => {
