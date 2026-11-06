@@ -8,7 +8,6 @@ import type { OrphanScannerResult } from '@siastorage/core/services'
 import { runOrphanScanner } from '@siastorage/core/services'
 import { logger } from '@siastorage/logger'
 import { app } from '../stores/appService'
-import { isBgTaskActive } from './bgTaskContext'
 import { getLifecycle } from './lifecycle'
 
 const flight = new SingleInit()
@@ -73,13 +72,6 @@ export async function runFsOrphanScanner(options?: {
   signal?: AbortSignal
 }): Promise<OrphanScannerResult | undefined> {
   const stopsAtStart = stops
-  // BGAppRefreshTask still enforces iOS's 80%/60s CPU monitor; an fs
-  // walk can trip cpu_resource_fatal. `force` (foreground / processing
-  // task) bypasses the gate. See bgTaskContext.ts.
-  if (!options?.force && isBgTaskActive('BGAppRefreshTask')) {
-    logger.debug('fsOrphanScanner', 'skipped', { reason: 'bg_app_refresh_no_cpu_budget' })
-    return
-  }
   if (!options?.force) {
     const lastRun = await app().settings.getFsOrphanLastRun()
     if (Date.now() - lastRun < FS_ORPHAN_FREQUENCY) {
@@ -87,6 +79,9 @@ export async function runFsOrphanScanner(options?: {
       return
     }
   }
+  // A listener added to a signal that already fired never runs, so a scan
+  // started after its background task timed out would run to the end.
+  if (options?.signal?.aborted) return
   // Calls coalesce on one key, so a forced call would otherwise get the result
   // of a scheduled scan, which spares recently written files. Stopping that
   // scan loses nothing, since the forced one checks every file it would.

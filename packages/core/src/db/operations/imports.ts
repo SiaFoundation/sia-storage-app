@@ -490,6 +490,17 @@ export async function countInFlight(db: DatabaseAdapter, directoryId?: string): 
   return row?.n ?? 0
 }
 
+/** The import files claimed and being copied, and the bytes copied so far. */
+export async function queryActiveImportCopies(
+  db: DatabaseAdapter,
+): Promise<{ files: number; bytesCopied: number }> {
+  const row = await db.getFirstAsync<{ files: number; bytesCopied: number }>(
+    `SELECT COUNT(*) AS files, COALESCE(SUM(copyBytes), 0) AS bytesCopied
+     FROM import_files WHERE state = 'active'`,
+  )
+  return { files: row?.files ?? 0, bytesCopied: row?.bytesCopied ?? 0 }
+}
+
 /**
  * "Retry now" for backed-off rows: clear `nextAttemptAt` so the scanner claims
  * them on its next tick. With no ids, retries every backed-off row. Leaves
