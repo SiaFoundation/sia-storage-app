@@ -12,6 +12,8 @@ export type SyncState = {
   syncDownCount: number
   /** Estimated sync-down progress from 0 to 1, based on event timestamps. */
   syncDownProgress: number
+  /** Sync-down runs finished since launch, counted whether or not they found events. */
+  syncDownRuns: number
   isSyncingUp: boolean
   syncUpProcessed: number
   syncUpTotal: number

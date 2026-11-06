@@ -145,6 +145,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     isSyncingDown: false,
     syncDownCount: 0,
     syncDownProgress: 0,
+    syncDownRuns: 0,
     isSyncingUp: false,
     syncUpProcessed: 0,
     syncUpTotal: 0,
