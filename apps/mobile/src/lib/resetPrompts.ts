@@ -4,7 +4,7 @@ import { resetLocalDataAndResync, resetLocalDataAndSignOut } from '../managers/a
 export function promptClearAndResync() {
   Alert.alert(
     'Clear local data and resync',
-    'Rebuilds your library from your indexer. Any files still importing or uploading will be lost. Your account stays signed in.',
+    'Removes the copies of your files on this device and rebuilds your library from your indexer. Any files still importing or uploading will be lost. Your account stays signed in.',
     [
       { text: 'Cancel', style: 'cancel' },
       {

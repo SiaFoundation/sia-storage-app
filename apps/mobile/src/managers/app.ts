@@ -6,8 +6,11 @@ import { activateSyncGate } from '@siastorage/core/services/syncDownEvents'
 import { shutdownDbLogAppender } from '@siastorage/core/services/dbLogAppender'
 import { applyLogContext } from '@siastorage/core/services/logContext'
 import { shutdownRemoteLogShipper } from '@siastorage/core/services/remoteLogShipper'
+import { logger } from '@siastorage/logger'
 import { mutate } from 'swr'
+import { removeFsStorageDirectory } from '../adapters/fsIO'
 import { initializeDB, resetDb } from '../db'
+import { removeImportStagingDirectory } from '../lib/importStaging'
 import { app } from '../stores/appService'
 import { resetFileSelection } from '../stores/fileSelection'
 import { initLogger } from '../stores/logs'
@@ -15,7 +18,7 @@ import { reconnectIndexer, resetSdk } from '../stores/sdk'
 import { initKeepAwake } from '../stores/settings'
 import { closeShareLinkSheet } from '../stores/shareLinkSheet'
 import { resetSheets } from '../stores/sheets'
-import { ensureTempFsStorageDirectory } from '../stores/tempFs'
+import { ensureTempFsStorageDirectory, removeTempFsStorageDirectory } from '../stores/tempFs'
 import { resetViewSettings } from '../stores/viewSettings'
 import { initBackgroundTasks } from './backgroundTasks'
 import { initDbOptimize } from './dbOptimize'
@@ -165,7 +168,7 @@ async function cancelAllTransfers() {
   const manager = getUploadManager()
   if (manager) await manager.shutdown()
   app().uploads.clear()
-  app().downloads.cancelAll()
+  await app().downloads.cancelAll()
 }
 
 export async function shutdownApp() {
@@ -175,12 +178,34 @@ export async function shutdownApp() {
   await cancelAllTransfers()
 }
 
-export async function resetData() {
-  await resetDb()
-  await app().sync.setSyncDownCursor(undefined)
-  await cancelAllTransfers()
-  await app().caches.library.invalidateAll()
-  app().caches.libraryVersion.invalidate()
+/**
+ * Deletes the bytes that belong to the library the database just dropped: the
+ * local file copies, the files staged for an import, and partial downloads.
+ *
+ * Cache eviction finds copies through the `fs` table, which the reset just
+ * emptied, so it would never remove these, and no scan reads the staging or
+ * download folders. After a resync or a sign-in to another account the old
+ * library's copies would otherwise stay on the device, however large.
+ *
+ * Each folder is removed best effort, so a failure here cannot stop the reset
+ * halfway with the database already gone.
+ */
+async function removeLocalFiles(): Promise<void> {
+  const folders = [
+    ['files', removeFsStorageDirectory],
+    ['import-staging', removeImportStagingDirectory],
+    ['downloads', removeTempFsStorageDirectory],
+  ] as const
+  for (const [name, remove] of folders) {
+    try {
+      await remove()
+    } catch (error) {
+      logger.warn('app', 'remove_local_files_failed', { folder: name, error: error as Error })
+    }
+  }
+  app().caches.fsFileUri.invalidateAll()
+  await app().fs.ensureStorageDirectory()
+  await ensureTempFsStorageDirectory()
 }
 
 // Preserved across both reset paths so log forwarding survives — useful for
@@ -206,6 +231,7 @@ async function clearAppState({ keepAuth }: { keepAuth: boolean }) {
 
   // Drop and recreate all database tables.
   await resetDb()
+  await removeLocalFiles()
 
   // Wipe AsyncStorage except the keep list. The Bearer token lives in
   // SecureStore and is preserved by both paths.
@@ -297,7 +323,7 @@ function resetAllStores() {
     syncGateStatus: 'idle',
   })
   app().uploads.clear()
-  app().downloads.cancelAll()
+  void app().downloads.cancelAll()
   resetFileSelection()
   resetSheets()
   closeShareLinkSheet()

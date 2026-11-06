@@ -1,6 +1,12 @@
 import * as fs from 'fs'
 import * as clack from '@clack/prompts'
-import { getPaths, isDaemonRunning, readDaemonPid, sendIpcCommand } from '@siastorage/node-adapters'
+import {
+  ensureDataDir,
+  getPaths,
+  isDaemonRunning,
+  readDaemonPid,
+  sendIpcCommand,
+} from '@siastorage/node-adapters'
 import { ensureDaemonRunning } from '../daemon/supervisor'
 import { c } from '../lib/format'
 
@@ -8,7 +14,8 @@ export async function resetCommand(dataDir: string) {
   const p = getPaths(dataDir)
 
   const confirm = await clack.confirm({
-    message: 'This will wipe the local database and re-sync from the indexer. Continue?',
+    message:
+      'This will wipe the local database and cached files and re-sync from the indexer. Continue?',
     initialValue: false,
   })
 
@@ -36,6 +43,17 @@ export async function resetCommand(dataDir: string) {
         }
       }
     }
+    // A daemon still running, such as one waiting on a slow upload, would go
+    // on using the database and the files folder deleted below.
+    if (isDaemonRunning(p.pidPath)) {
+      console.error(
+        c.red(
+          `The daemon (PID ${pid}) is still running, so nothing was reset. Stop it with \`sia daemon stop\` and run reset again.`,
+        ),
+      )
+      process.exitCode = 1
+      return
+    }
     console.log(c.dim('Daemon stopped'))
   }
 
@@ -55,6 +73,11 @@ export async function resetCommand(dataDir: string) {
       // File may not exist
     }
   }
+
+  // The cached copies belong to the library just dropped. Cache eviction finds
+  // what to remove through the database, so nothing would ever remove these.
+  fs.rmSync(p.filesDir, { recursive: true, force: true })
+  ensureDataDir(p.dataDir)
 
   console.log(c.green('Database reset'))
 

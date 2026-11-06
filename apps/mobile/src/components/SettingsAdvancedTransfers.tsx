@@ -65,7 +65,7 @@ export function SettingsAdvancedTransfers() {
           disabled={totalDownloads === 0}
           showChevron={false}
           onPress={() => {
-            app().downloads.cancelAll()
+            void app().downloads.cancelAll()
           }}
         />
       </InsetGroupSection>

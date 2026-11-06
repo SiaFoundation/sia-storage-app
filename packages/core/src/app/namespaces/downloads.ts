@@ -88,6 +88,17 @@ export function buildDownloadsNamespace(
   // so small files run together while large ones take turns.
   const slotPool = new SlotPool(DEFAULT_MAX_DOWNLOADS, { capacity: budget.downloadRoom() })
   const inFlight = new Map<string, Promise<void>>()
+  // Every download until it settles. A cancel drops its download from
+  // `inFlight` at once, while the task can still be moving its finished file
+  // into the files folder, so cancelAll waits on this set instead.
+  const unsettled = new Set<Promise<void>>()
+  const trackUntilSettled = (promise: Promise<void>) => {
+    unsettled.add(promise)
+    void promise.then(
+      () => unsettled.delete(promise),
+      () => unsettled.delete(promise),
+    )
+  }
   // The priority each download in flight waits at. A `user` call for a file
   // already waiting as `background` raises it here and in the slot pool.
   const priorities = new Map<string, DownloadPriority>()
@@ -398,6 +409,7 @@ export function buildDownloadsNamespace(
       priorities.set(fileId, priority)
       const promise = execute(fileId, priority)
       inFlight.set(fileId, promise)
+      trackUntilSettled(promise)
       return promise
     },
     downloadFromShareUrl: (id, url) => {
@@ -408,6 +420,7 @@ export function buildDownloadsNamespace(
         inFlight.delete(id)
       })
       inFlight.set(id, promise)
+      trackUntilSettled(promise)
       return promise
     },
     cancel: (id) => {
@@ -426,7 +439,10 @@ export function buildDownloadsNamespace(
       caches.downloads.invalidate('counts')
       caches.downloads.invalidate(id)
     },
-    cancelAll: () => {
+    cancelAll: async () => {
+      // A caller about to delete the files folder waits for every download to
+      // stop, including ones an earlier cancel already dropped.
+      const settling = [...unsettled]
       for (const controller of controllers.values()) {
         controller.abort()
       }
@@ -437,6 +453,7 @@ export function buildDownloadsNamespace(
       dropped.clear()
       state = { downloads: {} }
       caches.downloads.invalidateAll()
+      await Promise.allSettled(settling)
     },
     setMaxSlots: async (n) => {
       const clamped = Math.max(1, Math.floor(Number(n) || 1))

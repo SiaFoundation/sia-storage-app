@@ -1197,8 +1197,11 @@ export interface AppService {
     downloadFromShareUrl(id: string, url: string): Promise<void>
     /** Cancels a single in-progress download. */
     cancel(id: string): void
-    /** Cancels all in-progress downloads. */
-    cancelAll(): void
+    /**
+     * Cancels all in-progress downloads and resolves once each has settled,
+     * including one that was moving its file into place.
+     */
+    cancelAll(): Promise<void>
     /** Sets the maximum concurrent download slots and persists the value. */
     setMaxSlots(n: number): Promise<void>
     /**
