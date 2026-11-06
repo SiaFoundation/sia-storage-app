@@ -816,6 +816,8 @@ export interface AppService {
     inProgressImport(source: ImportSource): Promise<ImportRow | null>
     /** Count of in-flight (pending+active) import files, optionally scoped to one destination directory. */
     countInFlight(directoryId?: string): Promise<number>
+    /** The import files claimed and being copied, and the bytes copied so far. */
+    activeCopies(): Promise<{ files: number; bytesCopied: number }>
     /** Identity dedup: which of `mediaAssetIds` are already imported into `directoryId`. */
     getByMediaAssetIds(mediaAssetIds: string[], directoryId: string | null): Promise<Set<string>>
     /** Opens an import: inserts the imports row + its initial import_files in one txn. */

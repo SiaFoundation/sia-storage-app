@@ -172,6 +172,10 @@ export const FS_ORPHAN_FREQUENCY = daysInMs(1) // 1 day
 export const FS_ORPHAN_MIN_AGE = minutesInMs(10) // 10 minutes
 // How long the mobile app stays in the foreground before its daily orphan scan starts.
 export const FS_ORPHAN_FOREGROUND_DELAY = secondsInMs(30) // 30 seconds
+// How long a mobile background task keeps waiting on work without a connection to the indexer.
+export const BACKGROUND_TASK_OFFLINE_GRACE = secondsInMs(30) // 30 seconds
+// How long a mobile background task keeps waiting while none of its work moves forward.
+export const BACKGROUND_TASK_STALL_LIMIT = minutesInMs(2) // 2 minutes
 // File system file eviction frequency.
 export const FS_EVICTION_FREQUENCY = minutesInMs(60) // 60 minutes
 // Shortest gap between eviction passes a running mobile import asks for.

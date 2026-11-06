@@ -262,6 +262,7 @@ export async function syncDownEventsBatch(
     app.sync.setState({
       isSyncingDown: willContinue,
       syncDownCount: counts.total,
+      syncDownRuns: app.sync.getState().syncDownRuns + 1,
       ...(dismissGate && { syncGateStatus: 'dismissed' }),
     })
   }

@@ -61,6 +61,7 @@ export {
   markImportFileFailure,
   markImportFileProgress,
   markImportFileUnavailable,
+  queryActiveImportCopies,
   queryImportById,
   queryImportFiles,
   queryImportFilesByMediaAssetIds,

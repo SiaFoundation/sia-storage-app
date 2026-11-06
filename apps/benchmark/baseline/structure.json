@@ -757,6 +757,20 @@
           }
         ]
       },
+      "imports.activeCopies": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "keys: 2",
+        "plans": [
+          {
+            "sql": "SELECT COUNT(*) AS files, COALESCE(SUM(copyBytes), 0) AS bytesCopied FROM import_files WHERE state = 'active'",
+            "plan": [
+              "SEARCH import_files USING INDEX idx_import_files_state_directory (state=?)"
+            ]
+          }
+        ]
+      },
       "imports.countInFlight:directory": {
         "reads": 1,
         "writes": 0,
