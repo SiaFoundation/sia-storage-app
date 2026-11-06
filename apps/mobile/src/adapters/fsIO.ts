@@ -2,7 +2,7 @@ import { IMPORT_STALE_CLAIM_MS } from '@siastorage/core/config'
 import { extFromMime } from '@siastorage/core/lib/fileTypes'
 import type { FsIOAdapter } from '@siastorage/core/services/fsFileUri'
 import { Buffer } from 'buffer'
-import { getFreeDiskStorageAsync } from 'expo-file-system/legacy'
+import { getFreeDiskStorageAsync, readDirectoryAsync } from 'expo-file-system/legacy'
 import RNFS from 'react-native-fs'
 import { type ContentHash, toContentHash } from '@siastorage/core/lib/contentHash'
 import { copyImportFile } from '../lib/importCopy'
@@ -98,9 +98,10 @@ export function createFsIOAdapter(): FsIOAdapter {
       }
     },
     async removeByPath(path) {
-      if (await RNFS.exists(path)) {
-        await RNFS.unlink(path)
-      }
+      const stat = await RNFS.stat(path).catch(() => null)
+      if (!stat) return 0
+      await RNFS.unlink(path)
+      return stat.size
     },
     async copy(file, sourceUri) {
       const targetUri = fsFileUri(file.id, file.type)
@@ -189,19 +190,26 @@ export function createFsIOAdapter(): FsIOAdapter {
     },
     async list() {
       if (!(await RNFS.exists(fsStorageDirectoryUri))) return []
-      const entries = await RNFS.readDir(fsStorageDirectoryUri)
+      // Names only. `RNFS.readDir` stats every file and sends its size and
+      // dates to JS, and a large library keeps hundreds of thousands of files
+      // here, two thumbnails per photo plus any local copies. Nothing writes
+      // subfolders here, so every name is a file.
+      const names = await readDirectoryAsync(fsStorageDirectoryUri)
       const now = Date.now()
-      // A `.tmp` file is an in-flight scanner copy. Surface it to the orphan sweep
-      // only once it is older than the stale-claim window, so a copy still in
-      // progress is not mistaken for an abandoned one.
-      return entries
-        .filter((e) => e.isFile())
-        .filter((e) => {
-          if (!e.path.endsWith('.tmp')) return true
-          const mtimeMs = e.mtime instanceof Date ? e.mtime.getTime() : 0
-          return now - mtimeMs >= IMPORT_STALE_CLAIM_MS
-        })
-        .map((e) => e.path)
+      const paths: string[] = []
+      for (const name of names) {
+        const path = `${fsStorageDirectoryUri}/${name}`
+        // A `.tmp` file is an in-flight scanner copy. Surface it to the orphan
+        // sweep only once it is older than the stale-claim window, so a copy
+        // still in progress is not mistaken for an abandoned one.
+        if (name.endsWith('.tmp')) {
+          const stat = await RNFS.stat(path).catch(() => null)
+          // `RNFS.stat` resolves `mtime` to a Date though its type says number.
+          if (!stat || now - Number(stat.mtime) < IMPORT_STALE_CLAIM_MS) continue
+        }
+        paths.push(path)
+      }
+      return paths
     },
     async ensureDirectory() {
       if (!(await RNFS.exists(fsStorageDirectoryUri))) {

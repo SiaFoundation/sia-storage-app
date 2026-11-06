@@ -392,6 +392,43 @@
           }
         ]
       },
+      "orphanScanBatch:orphanedIds": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "rows: 350",
+        "plans": [
+          {
+            "sql": "SELECT value AS fileId FROM json_each(?) WHERE NOT EXISTS ( SELECT 1 FROM import_files WHERE import_files.id = value AND import_files.state IN ('pending','active') ) AND NOT EXISTS ( SELECT 1 FROM fs WHERE fs.fileId = value AND fs.addedAt >= ? ) AND ( NOT EXISTS ( SELECT 1 FROM fs WHERE fs.fileId = value ) OR NOT EXISTS ( SELECT 1 FROM files WHERE files.id = value AND files.deletedAt IS NULL ) )",
+            "plan": [
+              "SCAN json_each VIRTUAL TABLE INDEX 1:",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH import_files USING INDEX sqlite_autoindex_import_files_1 (id=?)",
+              "CORRELATED SCALAR SUBQUERY 2",
+              "SEARCH fs USING INDEX sqlite_autoindex_fs_1 (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 3",
+              "SEARCH fs USING COVERING INDEX sqlite_autoindex_fs_1 (fileId=?)",
+              "CORRELATED SCALAR SUBQUERY 4",
+              "SEARCH files USING INDEX sqlite_autoindex_files_1 (id=?)"
+            ]
+          }
+        ]
+      },
+      "orphanScanBatch:liveTypes": {
+        "reads": 1,
+        "writes": 0,
+        "execs": 0,
+        "result": "rows: 500",
+        "plans": [
+          {
+            "sql": "SELECT files.id AS id, files.type AS type FROM json_each(?) CROSS JOIN files ON files.id = json_each.value WHERE files.deletedAt IS NULL",
+            "plan": [
+              "SCAN json_each VIRTUAL TABLE INDEX 1:",
+              "SEARCH files USING INDEX sqlite_autoindex_files_1 (id=?)"
+            ]
+          }
+        ]
+      },
       "recalculateCurrentForGroup:single": {
         "reads": 1,
         "writes": 1,

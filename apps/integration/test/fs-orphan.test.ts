@@ -126,9 +126,90 @@ describe('FS Orphan Scanner', () => {
     expect(evicted?.evictedFileIds).toContain(file.id)
   })
 
+  it('reports the bytes of the orphans it removes', async () => {
+    const stray = { id: 'stray', type: 'image/jpeg' }
+    await app.app.fs.writeFileData(stray, new Uint8Array(300).buffer)
+
+    const result = await runOrphanScanner(app.app)
+
+    expect(result).toMatchObject({ removed: 1, bytesFreed: 300 })
+  })
+
+  it('spares a file whose fs row was written within the given window, as a thumbnail is before its files row', async () => {
+    const thumb = { id: 'thumb-in-progress', type: 'image/webp' }
+    await app.app.fs.writeFileData(thumb, new Uint8Array(50).buffer)
+
+    const result = await runOrphanScanner(app.app, undefined, undefined, {
+      spareWrittenWithin: 10 * 60_000,
+    })
+
+    expect(result?.removed).toBe(0)
+    expect(await app.app.fs.readMeta(thumb.id)).not.toBeNull()
+    expect(await app.app.fs.sizeOnDisk(thumb)).toBe(50)
+  })
+
   it('returns undefined when no files exist on disk', async () => {
     const result = await runOrphanScanner(app.app)
 
     expect(result).toBeUndefined()
   })
+
+  it.each([
+    [
+      'writeFileData',
+      (app: TestApp['app']) =>
+        app.fs.writeFileData({ id: 'thumb-new', type: 'image/webp' }, new ArrayBuffer(10)),
+    ],
+    [
+      'copyFile',
+      (app: TestApp['app']) =>
+        app.fs.copyFile({ id: 'thumb-new', type: 'image/webp' }, 'file:///exports/source.webp'),
+    ],
+  ])(
+    'keeps a new file whose bytes land through %s before its fs row is written',
+    async (_writer, write) => {
+      // Writers put the bytes down, then record the fs row, then the files
+      // row. A scan that lists the bytes before the fs row exists sees a file
+      // nothing records.
+      const disk = new Set<string>()
+      const removed: string[] = []
+      let finishWrite!: () => void
+      const writePaused = new Promise<void>((resolve) => {
+        finishWrite = resolve
+      })
+      const putDown = async (fileId: string, size: number) => {
+        disk.add(`/files/${fileId}.webp`)
+        await writePaused
+        return { uri: `file:///files/${fileId}.webp`, size }
+      }
+      const writer = createTestApp(createEmptyIndexerStorage(), {
+        fsIO: {
+          list: async () => [...disk],
+          writeFile: (file, data) => putDown(file.id, data.byteLength),
+          copy: (file) => putDown(file.id, 10),
+          remove: async (fileId) => {
+            removed.push(fileId)
+          },
+        },
+      })
+      await writer.start()
+      try {
+        const writing = write(writer.app)
+        while (disk.size === 0) await new Promise((resolve) => setImmediate(resolve))
+
+        const result = await runOrphanScanner(writer.app, undefined, undefined, {
+          spareWrittenWithin: 10 * 60_000,
+        })
+
+        expect(removed).toEqual([])
+        expect(result).toMatchObject({ removed: 0 })
+        finishWrite()
+        await writing
+        expect(await writer.app.fs.readMeta('thumb-new')).not.toBeNull()
+      } finally {
+        finishWrite()
+        await writer.shutdown()
+      }
+    },
+  )
 })
