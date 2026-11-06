@@ -170,6 +170,8 @@ export const FS_MAX_BYTES = 4_000_000_000 // 4 GB
 export const FS_ORPHAN_FREQUENCY = daysInMs(1) // 1 day
 // File system file eviction frequency.
 export const FS_EVICTION_FREQUENCY = minutesInMs(60) // 60 minutes
+// Shortest gap between eviction passes a running mobile import asks for.
+export const FS_EVICTION_IMPORT_FREQUENCY = minutesInMs(1) // 1 minute
 // Age threshold for evicting cached files via the LRU cap pass.
 export const FS_EVICTABLE_MIN_AGE = daysInMs(1) // 1 day
 // How long eviction keeps an uploaded copy whose thumbnails are not made yet, from when the copy was added.
