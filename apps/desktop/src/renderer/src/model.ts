@@ -22,6 +22,8 @@ export type Status = {
   folderCount: number
   libraryBytes: number
   uploads: Uploads
+  /** The indexer's last answer was that the account has no storage left. */
+  storageFull: boolean
   syncingDown: boolean
   /** 0..1. Sync-down reports a fraction rather than a count, so it has no total. */
   syncDownProgress: number
@@ -126,6 +128,8 @@ type Condition =
   | 'mount-absent'
   | 'uploading'
   | 'queued'
+  | 'storage-full'
+  | 'upload-failed'
   | 'syncing-down'
   | 'syncing-up'
   | 'mounting'
@@ -150,7 +154,15 @@ function condition(s: Status): Condition {
   // The folder was there and is gone, or was never added. `unsupported` is
   // not here: a build that cannot mount has nothing wrong with it.
   if (s.domain === 'absent') return 'mount-absent'
+  // A batch packed before the account filled counts as active, and stays
+  // unsent until there is room, so it is held as much as a queued file.
+  if (s.storageFull && (waiting(s) > 0 || s.uploads.queued > 0 || s.uploads.active > 0)) {
+    return 'storage-full'
+  }
   if (s.uploads.active > 0) return 'uploading'
+  // A failed entry can outlive its file's need to upload, so it counts only
+  // while the library still has files waiting.
+  if (s.uploads.failedFiles > 0 && s.filesNotUploaded > 0) return 'upload-failed'
   if (s.uploads.queued > 0 || waiting(s) > 0) return 'queued'
   if (syncingDown(s)) return 'syncing-down'
   if (s.syncingUp) return 'syncing-up'
@@ -165,8 +177,11 @@ export function indicator(s: Status): 'red' | 'orange' | 'green' | 'accent' {
     case 'daemon-down':
     case 'mount-error':
     case 'mount-absent':
+    case 'storage-full':
       return 'red'
     // Orange is still trying. A reason means it has stopped.
+    case 'upload-failed':
+      return 'orange'
     case 'disconnected':
       return s.connectionError ? 'red' : 'orange'
     case 'ok':
@@ -205,6 +220,10 @@ export function activity(s: Status): string {
       return inFlight(s)
     case 'queued':
       return withFiles('Waiting to upload', waiting(s))
+    case 'storage-full':
+      return 'Storage full'
+    case 'upload-failed':
+      return `${files(s.uploads.failedFiles)} could not upload`
     case 'syncing-down':
       return 'Syncing encrypted metadata'
     case 'syncing-up':
@@ -259,6 +278,12 @@ export function activityDetail(s: Status): string | null {
       return 'macOS could not add the folder'
     case 'mount-absent':
       return 'The folder is not in Finder'
+    // The library's count, since every save of one document while full is a
+    // version of its own in the uploader's queue.
+    case 'storage-full':
+      return s.filesNotUploaded > 0 ? `${files(s.filesNotUploaded)} waiting to upload` : null
+    case 'upload-failed':
+      return 'Sia Storage will try again'
     default:
       return null
   }
@@ -286,6 +311,10 @@ export function activityHelp(s: Status): string {
       return 'Files are packed together and encrypted on this Mac, then sent to storage providers.'
     case 'queued':
       return 'These files upload once the ones ahead of them have.'
+    case 'storage-full':
+      return 'Your account has no storage left, so files on this Mac stay here until it has room. They upload on their own once it does.'
+    case 'upload-failed':
+      return 'Sia Storage tries each file again, waiting longer after each failure. Open Logs from the More menu for the reason.'
     case 'syncing-down':
       return 'Fetching the names, folders and details of your files. They are encrypted, and only your devices can read them.'
     case 'syncing-up':

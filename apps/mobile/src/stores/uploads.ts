@@ -71,6 +71,10 @@ export function useUploadProgress(): {
   importingFileCount: number
   /** Files on the device with no copy on the network, not being sent now. */
   waitingFileCount: number
+  /** Files whose last upload attempt failed, waiting to be tried again. */
+  failedFileCount: number
+  /** The account had no storage left at the uploader's last check. */
+  storageFull: boolean
   percentDecimal: number
 } {
   const enabled = useAutoScanUploads()
@@ -78,7 +82,8 @@ export function useUploadProgress(): {
   // When auto-scan is off the status line never shows, so skip the DB queries
   // entirely rather than fetching counts we'll discard.
   const pausedWhenDisabled = { isPaused: () => !isEnabled }
-  const uploads = summarizeUploads(useActiveUploads())
+  const state = useSWR(app().caches.uploads.key('all'), () => app().uploads.getState()).data
+  const uploads = summarizeUploads(state ? Object.values(state.uploads) : [])
   // Total local-only count includes thumbnails (keeps the indicator visible
   // while only thumbnails remain); the files-only count drives the number.
   const localOnlyStats = useFileStatsLocal({ localOnly: true }, pausedWhenDisabled)
@@ -101,6 +106,8 @@ export function useUploadProgress(): {
     pendingCount: importingFileCount + localOnlyCount,
     importingFileCount,
     waitingFileCount: filesWaitingToUpload(uploads, localOnlyFileCount),
+    failedFileCount: uploads.failedFiles,
+    storageFull: state?.storageFull ?? false,
     percentDecimal: uploads.progress,
   }
 }

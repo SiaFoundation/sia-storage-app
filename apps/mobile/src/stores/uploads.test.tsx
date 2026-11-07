@@ -68,6 +68,16 @@ describe('useUploadProgress', () => {
     expect(result.current.importingFileCount).toBe(0)
   })
 
+  test('reports failed files and a full account', async () => {
+    app().uploads.register({ id: 'bad', size: 10, kind: 'file', status: 'error', progress: 0 })
+    app().uploads.setStorageFull(true)
+
+    const { result } = await renderHook(() => useUploadProgress(), { wrapper })
+
+    await waitFor(() => expect(result.current.failedFileCount).toBe(1))
+    expect(result.current.storageFull).toBe(true)
+  })
+
   test('counts an upload with no kind as a real file', async () => {
     app().uploads.register({ id: 'legacy', size: 1000, status: 'uploading', progress: 0 })
 
