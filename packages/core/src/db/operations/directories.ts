@@ -677,16 +677,16 @@ export async function deleteDirectory(db: DatabaseAdapter, id: string): Promise<
  * the trash as one entry. One transaction, so a crash or a failed write
  * leaves the folder as it was rather than a folder of trashed files. The
  * parent goes too when nothing is left in it, unless `keepParent` is set.
- * Returns how many files went to the trash.
+ * Returns the ids of the files that went to the trash.
  */
 export async function deleteDirectoryAndTrashFiles(
   db: DatabaseAdapter,
   id: string,
   opts?: { keepParent?: boolean },
-): Promise<number> {
+): Promise<string[]> {
   return sql.transaction(db, async (tx) => {
     const dir = await queryDirectoryById(tx, id)
-    if (!dir) return 0
+    if (!dir) return []
 
     const escaped = escapeLikePattern(dir.path)
     // Newest first across the whole folder, so the batches below stamp one
@@ -725,7 +725,7 @@ export async function deleteDirectoryAndTrashFiles(
       const parent = await queryDirectoryByPath(tx, parentPath)
       if (parent) await deleteEmptyDirectories(tx, [parent.id])
     }
-    return rows.length
+    return rows.map((r) => r.id)
   })
 }
 

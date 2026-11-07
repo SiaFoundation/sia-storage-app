@@ -125,10 +125,32 @@ export function buildDbNamespaces(
     invalidateLibrary()
   }
 
+  // Trashing or deleting a file takes its thumbnails with it, and the uploader
+  // queues each thumbnail under its own id, so both leave the uploads store.
+  // The uploader skips a queued file whose entry is gone.
+  async function dropUploads(ids: string[]) {
+    if (ids.length === 0) return
+    // The files go first, so the uploader cannot take one while the
+    // thumbnail lookup below waits.
+    uploads.removeMany(ids)
+    const thumbs = await thumbnailsOf(ids)
+    uploads.removeMany(thumbs.map((t) => t.id))
+  }
+
+  // In batches, since each id is a bound parameter and a folder or the whole
+  // trash can hold more files than one statement allows.
+  async function thumbnailsOf(ids: string[]) {
+    const thumbs = []
+    for (let i = 0; i < ids.length; i += 500) {
+      thumbs.push(...(await ops.queryThumbnailFileInfoByFileIds(db, ids.slice(i, i + 500))))
+    }
+    return thumbs
+  }
+
   async function tombstoneAndCleanup(files: { id: string; type: string }[]) {
     if (files.length === 0) return
     const ids = files.map((f) => f.id)
-    uploads.removeMany(ids)
+    await dropUploads(ids)
     await ops.tombstoneFilesAndThumbnails(db, ids)
     caches.directories.invalidateAll()
     await removeTombstoned(files)
@@ -141,13 +163,7 @@ export function buildDbNamespaces(
    */
   async function removeTombstoned(files: { id: string; type: string }[]) {
     if (files.length === 0) return
-    const ids = files.map((f) => f.id)
-    // In batches, since each id is a bound parameter and the whole trash can
-    // hold more than one statement allows.
-    const thumbs = []
-    for (let i = 0; i < ids.length; i += 500) {
-      thumbs.push(...(await ops.queryThumbnailFileInfoByFileIds(db, ids.slice(i, i + 500))))
-    }
+    const thumbs = await thumbnailsOf(files.map((f) => f.id))
     await Promise.all([...files, ...thumbs].map((f) => fsNamespace.removeFile(f)))
     invalidateLibrary()
   }
@@ -603,7 +619,7 @@ export function buildDbNamespaces(
       },
       trash: async (ids) => {
         await ops.trashFilesAndThumbnails(db, ids)
-        uploads.removeMany(ids)
+        await dropUploads(ids)
         invalidateLibraryAndFolders()
         caches.shareLinks.invalidateAll()
       },
@@ -716,7 +732,7 @@ export function buildDbNamespaces(
           ops.trashAllFileVersions(tx, stack.name, stack.directoryId, opts),
         )
         if (ids.length === 0) return
-        uploads.removeMany(ids)
+        await dropUploads(ids)
         invalidateLibraryAndFolders()
         caches.shareLinks.invalidateAll()
       },
@@ -725,12 +741,13 @@ export function buildDbNamespaces(
           ops.tombstoneAllFileVersions(tx, stack.name, stack.directoryId),
         )
         if (ids.length === 0) return
-        uploads.removeMany(ids)
+        await dropUploads(ids)
         invalidateLibraryAndFolders()
       },
       trashAllVersions: async (name, directoryId) => {
         const ids = await ops.trashAllFileVersions(db, normalizeName(name), directoryId)
         if (ids.length > 0) {
+          await dropUploads(ids)
           invalidateLibraryAndFolders()
         }
         return ids
@@ -788,13 +805,14 @@ export function buildDbNamespaces(
         // violation) and leak bytes.
         const failedImports = await ops.failImportFilesInDirectory(db, id, 'destination-deleted')
         await Promise.all(failedImports.map((f) => removeFile(f)))
-        const count = await ops.deleteDirectoryAndTrashFiles(db, id, opts)
+        const trashed = await ops.deleteDirectoryAndTrashFiles(db, id, opts)
+        await dropUploads(trashed)
         caches.directories.invalidateAll()
         caches.shareLinks.invalidateAll()
         await caches.library.invalidateAll()
         caches.libraryVersion.invalidate()
         if (failedImports.length > 0) invalidateImports()
-        return count
+        return trashed.length
       },
       deleteEmpty: async (directoryIds, opts) => {
         const count = await ops.deleteEmptyDirectories(db, directoryIds)

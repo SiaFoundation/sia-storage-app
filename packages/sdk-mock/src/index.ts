@@ -63,6 +63,12 @@ export interface MockIndexerStorage {
   sharingKeys: Map<string, StoredSharingKey>
   /** How many of the next packer adds fail, as an add does when it cannot read its file. */
   failingAdds: number
+  /**
+   * Runs before each packer add reads its file, with the file's path. An add
+   * waits on the promise it returns, as an add does on a slow disk, and fails
+   * if it rejects.
+   */
+  beforeAdd: ((path: string) => Promise<void>) | null
 }
 
 export function createEmptyIndexerStorage(): MockIndexerStorage {
@@ -73,6 +79,7 @@ export function createEmptyIndexerStorage(): MockIndexerStorage {
     uploadFailures: new Map(),
     sharingKeys: new Map(),
     failingAdds: 0,
+    beforeAdd: null,
   }
 }
 
@@ -157,6 +164,7 @@ class MockPacker implements PackedUploadRef {
       this.storage.failingAdds--
       throw new Error(`could not read ${path}`)
     }
+    if (this.storage.beforeAdd) await this.storage.beforeAdd(path)
     const bytes = await this.readFile(path)
     const size = BigInt(bytes.length)
     this.files.push({ data: bytes, size })
@@ -610,6 +618,7 @@ export class MockSdk implements SdkAdapter {
     this.storage.uploadFailures.clear()
     this.storage.sharingKeys.clear()
     this.storage.failingAdds = 0
+    this.storage.beforeAdd = null
     objectIdCounter = 0
   }
 

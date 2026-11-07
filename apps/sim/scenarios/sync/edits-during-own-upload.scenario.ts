@@ -4,7 +4,7 @@ import { uploadInFlight } from '../steps'
 export default defineScenario({
   name: 'a rename, a trash and a delete made while the file is still uploading all hold',
   description:
-    'Uploads are slowed and the phone adds 4 files of 512 KB. While they upload it renames one, trashes one and deletes one. The rename reaches the laptop, the deleted file is on neither device nor pinned on the network, the trashed file stays trashed, and it reaches the laptop once it is restored.',
+    'Uploads are slowed and the phone adds 4 files of 512 KB. While they upload it renames one, trashes one and deletes one. The batch finishes without pinning the trashed file, the rename reaches the laptop, the deleted file is on neither device nor pinned on the network, the trashed file stays trashed, and it uploads and reaches the laptop once it is restored.',
   devices: { phone: 'cli', laptop: 'cli' },
   timeoutMs: 4 * 60_000,
   async run(ctx) {
@@ -51,15 +51,17 @@ export default defineScenario({
     await network.setConditions({ uploadBytesPerSec: 0 })
     // The mock fixes an upload's commit time when the upload starts, at the
     // rate then in force, so clearing the rate does not bring it forward. A
-    // trash check before that upload saves the file would pass regardless.
-    await precondition('the upload in flight pins the trashed file', () =>
+    // trash check before that upload saves the batch would pass regardless.
+    await precondition('the upload in flight finishes', () =>
       waitFor(
-        'the trashed file to be pinned and recorded as uploaded on the phone',
-        async () =>
-          (await network.objects()).some((o) => o.metadata?.id === b.id) &&
-          (await phone.library()).find((f) => f.id === b.id)?.uploaded,
+        'the renamed file, in the same batch, to be recorded as uploaded on the phone',
+        async () => (await phone.library()).find((f) => f.id === a.id)?.uploaded,
         { timeoutMs: 90_000 },
       ),
+    )
+    check(
+      'the batch did not pin the trashed file',
+      !(await network.objects()).some((o) => o.metadata?.id === b.id),
     )
     checkEqual(
       'the trashed file stays trashed on the phone',

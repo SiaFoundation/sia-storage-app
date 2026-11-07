@@ -72,7 +72,7 @@ describe('deleting a folder that holds several versions of one file', () => {
   it('trashing the folder from Finder succeeds and journals the file leaving it once', async () => {
     const { dirId, stackId } = await twoVersionsIn('Trips')
 
-    expect(await deleteDirectoryAndTrashFiles(db(), dirId)).toBe(2)
+    expect(await deleteDirectoryAndTrashFiles(db(), dirId)).toHaveLength(2)
 
     const fileDepartures = (await departures()).filter((d) => d.kind === 'file')
     expect(fileDepartures.map(({ id, parentId }) => ({ id, parentId }))).toEqual([
