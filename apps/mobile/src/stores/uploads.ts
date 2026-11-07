@@ -1,5 +1,6 @@
 import type { UploadEntry, UploadStatus } from '@siastorage/core/app'
 import { createProgressThrottle } from '@siastorage/core/lib/progressThrottle'
+import { filesWaitingToUpload, summarizeUploads } from '@siastorage/core/lib/uploadActivity'
 import { useAutoScanUploads, useUploadEntry } from '@siastorage/core/stores'
 import useSWR from 'swr'
 import { app } from './appService'
@@ -66,8 +67,10 @@ export function useUploadProgress(): {
   packerFileBytes: number
   /** Total pending (importing + local-only) including thumbnails — drives show. */
   pendingCount: number
-  /** Pending real files (excludes thumbnails) — drives the count. */
-  pendingFileCount: number
+  /** Files still being copied in by an import. */
+  importingFileCount: number
+  /** Files on the device with no copy on the network, not being sent now. */
+  waitingFileCount: number
   percentDecimal: number
 } {
   const enabled = useAutoScanUploads()
@@ -75,7 +78,7 @@ export function useUploadProgress(): {
   // When auto-scan is off the status line never shows, so skip the DB queries
   // entirely rather than fetching counts we'll discard.
   const pausedWhenDisabled = { isPaused: () => !isEnabled }
-  const activeUploads = useActiveUploads()
+  const uploads = summarizeUploads(useActiveUploads())
   // Total local-only count includes thumbnails (keeps the indicator visible
   // while only thumbnails remain); the files-only count drives the number.
   const localOnlyStats = useFileStatsLocal({ localOnly: true }, pausedWhenDisabled)
@@ -84,29 +87,20 @@ export function useUploadProgress(): {
     pausedWhenDisabled,
   )
   const importingCountQuery = useFileCountImporting(pausedWhenDisabled)
-  const packerUploads = activeUploads.filter((u) => ACTIVE_STATUSES.includes(u.status))
-  const packerCount = packerUploads.length
-  const packerFiles = packerUploads.filter((u) => u.kind !== 'thumb')
-  const packerFileCount = packerFiles.length
-  const packerFileBytes = packerFiles.reduce((s, u) => s + u.size, 0)
-  const packerTotalBytes = packerUploads.reduce((s, u) => s + u.size, 0)
-  const packerWeightedProgress = packerUploads.reduce((s, u) => s + u.progress * u.size, 0)
-  const percentDecimal = packerTotalBytes > 0 ? packerWeightedProgress / packerTotalBytes : 0
   // The in-flight import count comes from import_files rows, which never
   // include thumbnails.
-  const importingCount = importingCountQuery.data ?? 0
+  const importingFileCount = importingCountQuery.data ?? 0
   const localOnlyCount = localOnlyStats.data?.count ?? 0
   const localOnlyFileCount = localOnlyFileStats.data?.count ?? 0
-  const pendingCount = importingCount + localOnlyCount
-  const pendingFileCount = importingCount + localOnlyFileCount
 
   return {
-    show: isEnabled && (packerCount > 0 || pendingCount > 0),
-    packerCount,
-    packerFileCount,
-    packerFileBytes,
-    pendingCount,
-    pendingFileCount,
-    percentDecimal,
+    show: isEnabled && (uploads.active > 0 || importingFileCount + localOnlyCount > 0),
+    packerCount: uploads.active,
+    packerFileCount: uploads.activeFiles,
+    packerFileBytes: uploads.activeFileBytes,
+    pendingCount: importingFileCount + localOnlyCount,
+    importingFileCount,
+    waitingFileCount: filesWaitingToUpload(uploads, localOnlyFileCount),
+    percentDecimal: uploads.progress,
   }
 }

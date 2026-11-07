@@ -32,6 +32,7 @@
     "./lib/naturalSortKey": "./src/lib/naturalSortKey.ts",
     "./lib/progressThrottle": "./src/lib/progressThrottle.ts",
     "./lib/uniqueId": "./src/lib/uniqueId.ts",
+    "./lib/uploadActivity": "./src/lib/uploadActivity.ts",
     "./lib/yieldToEventLoop": "./src/lib/yieldToEventLoop.ts",
     "./types": "./src/types/index.ts",
     "./encoding/fileMetadata": "./src/encoding/fileMetadata.ts",
