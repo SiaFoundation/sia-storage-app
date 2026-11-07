@@ -5,7 +5,7 @@
  * Sync-down clears the library cache once per batch of events it applies, and
  * the daemon forwards every one. Each clear refetches every library hook the
  * window has mounted, and the status view mounts three whole-library queries:
- * the file count, the library size and the count of files not uploaded. A
+ * the file count, the library size and the files not uploaded. A
  * long sync would rerun all three as fast as batches arrive.
  */
 

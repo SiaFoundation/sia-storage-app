@@ -32,6 +32,7 @@ import {
   formatBytes,
   indexerLabel,
   librarySizeLabel,
+  localCacheDescription,
   localCacheLabel,
   metadataLabel,
   mountLabel,
@@ -109,6 +110,7 @@ export function Details({
             label="On this Mac"
             id="on-this-mac"
             value={localCacheLabel(localCache)}
+            description={localCacheDescription(localCache)}
           />
           <ClearLocalFiles bytes={localCache.bytes} onDone={setClearNotice} />
           <button

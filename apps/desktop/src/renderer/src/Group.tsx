@@ -64,37 +64,43 @@ export function Row({
   tone?: Tone
   truncateMiddle?: boolean
 }) {
+  const shown =
+    value === undefined ? null : valueIcon ? (
+      <span title={value} className="flex shrink-0 pr-row-x">
+        {valueIcon}
+        <span data-testid={id} className="sr-only">
+          {value}
+        </span>
+      </span>
+    ) : (
+      <span
+        data-testid={id}
+        className={`shrink pr-row-x text-right text-secondary tabular-nums ${
+          // rtl with an ellipsis keeps the host visible when a URL outgrows the row.
+          truncateMiddle ? 'overflow-hidden text-ellipsis whitespace-nowrap [direction:rtl]' : ''
+        }`}
+      >
+        {value}
+      </span>
+    )
   return (
     <div className={ROW}>
       <span className={`flex w-[15px] shrink-0 ${tone ? TONE_TEXT[tone] : 'text-secondary'}`}>
         {icon}
       </span>
-      <span className="flex flex-auto flex-col gap-px">
-        {label}
+      {/* The description runs under the value as well as the label, so a long
+          one wraps across the row instead of squeezing the value. */}
+      <span className="flex min-w-0 flex-auto flex-col gap-px">
+        <span className="flex items-center gap-2">
+          <span className="flex-auto">{label}</span>
+          {shown}
+        </span>
         {description ? (
-          <span className="text-[11px] leading-[1.4] text-pretty text-secondary">
+          <span className="pr-row-x text-[11px] leading-[1.4] text-pretty text-secondary">
             {description}
           </span>
         ) : null}
       </span>
-      {value === undefined ? null : valueIcon ? (
-        <span title={value} className="flex shrink-0 pr-row-x">
-          {valueIcon}
-          <span data-testid={id} className="sr-only">
-            {value}
-          </span>
-        </span>
-      ) : (
-        <span
-          data-testid={id}
-          className={`shrink pr-row-x text-right text-secondary tabular-nums ${
-            // rtl with an ellipsis keeps the host visible when a URL outgrows the row.
-            truncateMiddle ? 'overflow-hidden text-ellipsis whitespace-nowrap [direction:rtl]' : ''
-          }`}
-        >
-          {value}
-        </span>
-      )}
     </div>
   )
 }

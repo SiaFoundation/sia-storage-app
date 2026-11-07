@@ -155,6 +155,7 @@ export {
   upsertManyFiles,
 } from './files'
 export {
+  queryFsMetaNotBackedUpSize,
   queryFsMetaTotalSize,
   deleteFsMeta,
   deleteManyFsMeta,
