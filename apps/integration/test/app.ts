@@ -122,6 +122,8 @@ export interface TestAppOptions {
   thumbnailWaitMs?: number
   /** Zero so a test can run retry passes back to back. */
   thumbnailRetryBackoffMs?: number
+  /** The daemon's interval, for a test of how its reads move usedAt. */
+  usedAtUpdateIntervalMs?: number
   fsIO?: Partial<FsIOAdapter>
   thumbnail?: Partial<ThumbnailAdapter>
   crypto?: { sha256: (data: ArrayBuffer) => Promise<string> }
@@ -295,6 +297,7 @@ export function createTestApp(
     maxPageSize: options?.maxPageSize,
     thumbnailWaitMs: options?.thumbnailWaitMs,
     thumbnailRetryBackoffMs: options?.thumbnailRetryBackoffMs,
+    usedAtUpdateIntervalMs: options?.usedAtUpdateIntervalMs,
     readMemory: options?.readMemory,
     storage,
     secrets,

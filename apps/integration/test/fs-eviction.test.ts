@@ -1,3 +1,4 @@
+import { USED_AT_UPDATE_INTERVAL_DAEMON } from '@siastorage/core/config'
 import type { LocalObject } from '@siastorage/core/encoding/localObject'
 import { EVICT_ALL_BACKED_UP, runCacheEviction } from '@siastorage/core/services'
 import { createEmptyIndexerStorage } from '@siastorage/sdk-mock'
@@ -280,6 +281,47 @@ describe('FS Cache Eviction', () => {
       expect(result!.evictedFileIds).toEqual([file.id])
       expect(await app.app.fs.readMeta(file.id)).toBeNull()
     }, 60_000)
+  })
+
+  it("the daemon's default minimum age holds a file used in the last hour and evicts one used before that", async () => {
+    const [recent, older] = await app.addFiles(generateTestFiles(2, { startId: 1, sizeBytes: 100 }))
+    for (const file of [recent, older]) {
+      await app.waitForCondition(
+        async () => (await app.readLocalObjectsForFile(file.id)).length > 0,
+        30_000,
+      )
+    }
+    const olderMeta = (await app.app.fs.readMeta(older.id))!
+    await app.app.fs.upsertMeta({ ...olderMeta, usedAt: Date.now() - ONE_HOUR - 60_000 })
+    await app.app.settings.setCacheMaxBytes(0)
+
+    const result = await app.app.cache.evict()
+
+    expect(result?.evictedFileIds).toEqual([older.id])
+    expect(await app.app.fs.readMeta(recent.id)).not.toBeNull()
+  })
+
+  it("a read within the hour moves usedAt at the daemon's interval and not at the default one", async () => {
+    const daemon = createTestApp(createEmptyIndexerStorage(), {
+      usedAtUpdateIntervalMs: USED_AT_UPDATE_INTERVAL_DAEMON,
+    })
+    await daemon.start()
+    try {
+      for (const device of [app, daemon]) {
+        const [file] = await device.addFiles(generateTestFiles(1, { startId: 1, sizeBytes: 100 }))
+        const meta = (await device.app.fs.readMeta(file.id))!
+        const readBefore = Date.now() - ONE_HOUR + 60_000
+        await device.app.fs.upsertMeta({ ...meta, usedAt: readBefore })
+
+        await device.getFsFileUri({ id: file.id, type: file.type })
+
+        const usedAt = (await device.app.fs.readMeta(file.id))!.usedAt
+        if (device === daemon) expect(usedAt).toBeGreaterThan(readBefore)
+        else expect(usedAt).toBe(readBefore)
+      }
+    } finally {
+      await daemon.shutdown()
+    }
   })
 
   it('LRU does not evict files younger than minAge', async () => {

@@ -45,6 +45,7 @@ export function buildDbNamespaces(
     thumbnail?: ThumbnailAdapter
     detectMimeType?: (path: string, name?: string) => Promise<string | null>
     localCopyLock?: LocalCopyLock
+    usedAtUpdateIntervalMs?: number
   },
 ): DatabaseNamespaces {
   // Runs after any copy's bytes land: records the cache row, then corrects
@@ -209,7 +210,8 @@ export function buildDbNamespaces(
     findOrphanedFileIds: (fileIds) => ops.queryOrphanedFileIds(db, fileIds),
     liveFileTypes: (fileIds) => ops.queryLiveFileTypes(db, fileIds),
     inFlightImportFileIds: (fileIds) => ops.queryInFlightImportFileIds(db, fileIds),
-    getFileUri: (file) => getFsFileUri(db, file, fsIO),
+    getFileUri: (file) =>
+      getFsFileUri(db, file, fsIO, { usedAtUpdateInterval: adapters?.usedAtUpdateIntervalMs }),
     uri: (file) => fsIO.uri(file.id, file.type),
     sizeOnDisk: async (file) => {
       const size = await fsIO.size(file.id, file.type)

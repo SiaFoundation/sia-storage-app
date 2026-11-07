@@ -2,7 +2,7 @@ import type { StorageAdapter } from '../../adapters/storage'
 import {
   DEFAULT_INDEXER_URL,
   DEFAULT_MAX_DOWNLOADS,
-  FS_EVICTABLE_MIN_AGE,
+  FS_EVICTABLE_MIN_AGE_DAEMON,
   FS_MAX_BYTES,
   MAX_DOWNLOADS_SETTING,
 } from '../../config'
@@ -103,7 +103,7 @@ export function buildSettingsNamespace(
       await storage.setItem('cacheMaxBytes', v === null ? CACHE_NO_LIMIT : String(Math.floor(v)))
       caches.settings.invalidate('cacheMaxBytes')
     },
-    getCacheMinAge: () => getNum('cacheMinAge', FS_EVICTABLE_MIN_AGE),
+    getCacheMinAge: () => getNum('cacheMinAge', FS_EVICTABLE_MIN_AGE_DAEMON),
     setCacheMinAge: async (v) => {
       if (!Number.isFinite(v) || v < 0) {
         throw new Error(`Cache minimum age must be milliseconds of 0 or more, got ${v}`)
