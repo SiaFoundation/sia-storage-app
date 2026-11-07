@@ -8,6 +8,10 @@ jest.mock('@siastorage/core/config', () => ({
   SYNC_UP_METADATA_INTERVAL: 2000,
   UPLOAD_DATA_SHARDS: 10,
   UPLOAD_PARITY_SHARDS: 20,
+  UPLOAD_RETRY_BASE_DELAY: 1500,
+  UPLOAD_RETRY_MAX_DELAY: 6000,
+  UPLOAD_NETWORK_RETRY_BASE_DELAY: 1000,
+  UPLOAD_NETWORK_RETRY_MAX_DELAY: 8000,
 }))
 
 jest.mock('@siastorage/logger', () => ({
