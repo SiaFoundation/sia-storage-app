@@ -2,7 +2,8 @@
  * The status the tray and the window show.
  *
  * The library half comes from the hooks in `@siastorage/core/stores`, refreshed
- * by the daemon's cache messages. The mount half cannot: a hook keeps serving
+ * by the daemon's cache messages, and refreshed again when the daemon answers
+ * after a stall, which sends none. The mount half cannot: a hook keeps serving
  * its last value once the daemon stops answering, so it is asked of the main
  * process over the bridge, on the change signal and on a poll while settling.
  */
@@ -20,6 +21,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import useSWR from 'swr'
 import { sia } from './api'
 import type { DomainState, LocalCache, Materializing, Status } from './model'
+import { refreshAfterStall, watchRecovery } from './recovery'
 
 type Shell = {
   domain: DomainState
@@ -44,6 +46,7 @@ const PREPARING_POLL_MS = 2_000
  * time a long first sync ends.
  */
 function useShell(watch: boolean): Shell {
+  const app = useApp()
   const [shell, setShell] = useState<Shell>({
     domain: 'absent',
     mountPath: null,
@@ -109,6 +112,7 @@ function useShell(watch: boolean): Shell {
     // at 2 seconds outlasts it.
     const GRACE_POLLS = 20
     let graceLeft = GRACE_POLLS
+    const recovery = watchRecovery(() => refreshAfterStall(app.caches))
     // Writing the library out raises no change signal, so while it is running
     // this is the only way to watch it move and to notice it finish.
     const tick = async () => {
@@ -118,6 +122,7 @@ function useShell(watch: boolean): Shell {
       if (stopped || mine !== generation || !result) return
       const { active, reachable } = result
       clearTimeout(timer)
+      recovery(reachable)
       // A daemon frozen or too busy to answer keeps its socket and the main
       // process's change stream open, so answering again sends no connection
       // signal. Without the poll the view would say Not running until the next
@@ -144,7 +149,7 @@ function useShell(watch: boolean): Shell {
       clearTimeout(timer)
       stop()
     }
-  }, [read, watch])
+  }, [app, read, watch])
 
   return shell
 }
