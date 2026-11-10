@@ -6,10 +6,13 @@
  * through `beginQuit`, the only path that sets the flag those handlers check.
  */
 
-import { app, BrowserWindow, screen, shell, type Rectangle, type WebContents } from 'electron'
+import { BrowserWindow, screen, shell, type Rectangle, type WebContents } from 'electron'
 import { join } from 'node:path'
 
 import { log } from './log'
+import { windowChrome } from './platform'
+
+const chrome = windowChrome()
 
 /**
  * The renderer runs with no Node and no direct filesystem: everything it can
@@ -40,6 +43,8 @@ const MAX_HEIGHT = 720
 const POPOVER_HEIGHT = 320
 /** Gap between the menu bar item and the popover's top edge. */
 const POPOVER_GAP = 6
+/** How far the popover keeps from the edges of the screen other than the tray's. */
+const POPOVER_MARGIN = 8
 /**
  * How many times one window reloads a dead page within `RELOAD_WINDOW_MS`.
  * A page that kills its own renderer as it loads would otherwise reload in a
@@ -164,15 +169,10 @@ function createMainWindow(): BrowserWindow {
     resizable: false,
     maximizable: false,
     fullscreenable: false,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    // The material AppKit draws behind a standard window, so this one matches
-    // native windows in light and dark, focused or not. The popover's
-    // material lightens what is behind it, which across a whole window reads
-    // as flat mid-gray. A solid `backgroundColor` is one fixed colour, so it
-    // would stay dark after a switch to light appearance.
-    transparent: process.platform === 'darwin',
-    vibrancy: process.platform === 'darwin' ? 'window' : undefined,
-    backgroundColor: process.platform === 'darwin' ? undefined : '#1c1c1e',
+    // Sizes are the page's, so a title bar the OS adds sits outside them
+    // rather than covering the bottom of the content.
+    useContentSize: true,
+    ...chrome.mainWindow(),
     webPreferences: RENDERER_PREFERENCES,
   })
 
@@ -191,18 +191,19 @@ function createMainWindow(): BrowserWindow {
     }, SIZE_GRACE_MS)
   })
 
-  // Hide rather than close, so the app stays alive in the tray. On macOS the
-  // dock tile is dropped too, otherwise the app looks running with no window.
+  // Hide rather than close, so the app stays alive in the tray.
   window.on('close', (event) => {
     if (quitting) return
     event.preventDefault()
     window.hide()
-    if (process.platform === 'darwin') app.dock?.hide()
+    chrome.windowsHidden()
     // The page keeps running while hidden and cannot tell this from being
     // covered by another window, which also reads as hidden to it. It is told,
     // so it can leave a screen that should not be there at the next open.
     window.webContents.send('window:closed')
   })
+
+  window.on('moved', () => fitHeight(window))
 
   window.webContents.setWindowOpenHandler(({ url }) => openExternally(url))
   // A destroyed window throws on every call, and a failed update install
@@ -250,7 +251,7 @@ export function showMainWindow(): void {
   // quit has begun. See `installUpdate`.
   if (quitting) return
   const window = createMainWindow()
-  if (process.platform === 'darwin') void app.dock?.show()
+  chrome.windowShown()
   if (window.isMinimized()) window.restore()
   showWhenSized = true
   revealMainWindow()
@@ -274,12 +275,12 @@ export function layoutMainWindow(sender: WebContents, layout: unknown): void {
   if (!window || window !== mainWindow || window.isDestroyed()) return
   if (layout !== 'status' && layout !== 'onboarding') return
   const width = LAYOUT_WIDTH[layout]
-  const bounds = window.getBounds()
+  const bounds = window.getContentBounds()
   if (bounds.width === width) return
   const area = screen.getDisplayMatching(bounds).workArea
   const centred = Math.round(bounds.x + (bounds.width - width) / 2)
   const x = Math.max(area.x, Math.min(centred, area.x + area.width - width))
-  window.setBounds({ ...bounds, x, width }, false)
+  window.setContentBounds({ ...bounds, x, width }, false)
 }
 
 export function createPopover(): BrowserWindow {
@@ -296,12 +297,8 @@ export function createPopover(): BrowserWindow {
     // Keeps the popover out of the window cycle and off the dock, so it behaves
     // like a menu rather than a window.
     fullscreenable: false,
-    transparent: process.platform === 'darwin',
-    vibrancy: process.platform === 'darwin' ? 'popover' : undefined,
-    // The popover loses focus only while a menu it opened holds it, see
-    // `holdPopover`, and keeps its focused look then too.
-    visualEffectState: 'active',
-    backgroundColor: process.platform === 'darwin' ? undefined : '#1c1c1e',
+    useContentSize: true,
+    ...chrome.popover(),
     webPreferences: RENDERER_PREFERENCES,
   })
 
@@ -360,6 +357,7 @@ export function togglePopover(trayBounds: Rectangle): void {
     ? trayBounds
     : { ...screen.getCursorScreenPoint(), width: 0, height: 0 }
   placePopover(window, lastTrayBounds)
+  fitHeight(window)
   window.show()
   window.focus()
 }
@@ -383,14 +381,21 @@ function placePopover(window: BrowserWindow, trayBounds: Rectangle): void {
   const area = screen.getDisplayNearestPoint(anchor).workArea
 
   const centred = Math.round(anchor.x - POPOVER_WIDTH / 2)
-  const x = Math.min(Math.max(centred, area.x + 8), area.x + area.width - POPOVER_WIDTH - 8)
+  const x = Math.min(
+    Math.max(centred, area.x + POPOVER_MARGIN),
+    area.x + area.width - POPOVER_WIDTH - POPOVER_MARGIN,
+  )
 
-  // Below the icon when the tray sits at the top of the screen, above it when
-  // the taskbar is at the bottom.
+  // Below the icon when the tray sits at the top of the screen. When the
+  // taskbar is at the bottom it rests on the taskbar rather than on the icon:
+  // Windows can keep the icon in the overflow panel above the taskbar, which
+  // closes as the popover opens, and a popover placed against the icon would
+  // be left floating where the panel was.
   const below = trayBounds.y + trayBounds.height + POPOVER_GAP
+  const bottom = area.y + area.height
   const y =
-    below + height > area.y + area.height
-      ? Math.max(area.y + 8, trayBounds.y - height - POPOVER_GAP)
+    below + height > bottom
+      ? Math.max(area.y + POPOVER_MARGIN, bottom - height - POPOVER_GAP)
       : below
 
   window.setPosition(x, y, false)
@@ -407,16 +412,47 @@ function placePopover(window: BrowserWindow, trayBounds: Rectangle): void {
 export function resizeToContent(sender: WebContents, height: number): void {
   const window = BrowserWindow.fromWebContents(sender)
   if (!window || window.isDestroyed()) return
-  const [width] = window.getSize()
-  const clamped = Math.max(MIN_HEIGHT, Math.min(Math.ceil(height), MAX_HEIGHT))
-  if (window.getSize()[1] !== clamped) {
-    window.setSize(width, clamped, false)
-    if (window === popover && lastTrayBounds) placePopover(window, lastTrayBounds)
-  }
+  requestedHeight.set(window, height)
+  fitHeight(window)
   if (window === mainWindow && !mainSized) {
     mainSized = true
     revealMainWindow()
   }
+}
+
+/** The height each window's page last asked for, before the screen capped it. */
+const requestedHeight = new WeakMap<BrowserWindow, number>()
+
+/**
+ * Sizes a window to the height its page asked for, within the display it is
+ * on. The page reports its height only when that changes, so this runs again
+ * when the window moves to another display and when the popover opens, or a
+ * cap from a shorter display would stay after a move to a taller one.
+ */
+function fitHeight(window: BrowserWindow): void {
+  const height = requestedHeight.get(window)
+  if (height === undefined) return
+  const [width, current] = window.getContentSize()
+  // Never taller than the screen leaves room for, counting the title bar the
+  // OS draws outside the content, or the bottom of the page would sit under
+  // the taskbar or off the screen. The page scrolls instead.
+  const frame = window.getSize()[1] - current
+  // The popover also keeps its margin from the top and its gap from the tray.
+  const inset = window === popover ? POPOVER_MARGIN + POPOVER_GAP : 0
+  const area = screen.getDisplayMatching(window.getBounds()).workArea
+  const room = area.height - frame - inset
+  const clamped = Math.max(MIN_HEIGHT, Math.min(Math.ceil(height), MAX_HEIGHT, room))
+  if (current === clamped) return
+  window.setContentSize(width, clamped, false)
+  if (window === popover && lastTrayBounds) placePopover(window, lastTrayBounds)
+  else keepOnScreen(window, area)
+}
+
+/** Moves a window that grew past the bottom of the work area back up into it. */
+function keepOnScreen(window: BrowserWindow, area: Rectangle): void {
+  const bounds = window.getBounds()
+  const overflow = bounds.y + bounds.height - (area.y + area.height)
+  if (overflow > 0) window.setPosition(bounds.x, Math.max(area.y, bounds.y - overflow), false)
 }
 
 export function hidePopover(): void {
