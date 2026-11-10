@@ -68,6 +68,7 @@ comes from Metro, so a JS change needs no rebuild, and `device stop` and
 | `ios`     | the mobile debug build on its own iOS simulator                     | `bun run mobile:dev:ios:simulator -- --no-run` once                        |
 | `android` | the mobile debug build on its own emulator                          | `bun run mobile:dev:android:emulator -- --no-run` once, and a system image |
 | `desktop` | the installed desktop test build on this Mac, and its Finder folder | macOS, and `bun run desktop:package test` once                             |
+| `windows` | the desktop app from this checkout's source in a Windows 11 VM      | Parallels Desktop Pro, and `bun sim windows create <iso>` once             |
 
 Phones load JavaScript from one Metro server per checkout, so a JS change needs
 no rebuild. A native change needs the build command again. Simulators and
@@ -141,6 +142,31 @@ page in a browser. The test approves the request on the network instead.
 macOS syncs the test build's Finder folder only once it has been switched on
 under File Providers in System Settings, General, Login Items & Extensions.
 Until then the device stops at start and says so.
+
+### Windows devices
+
+A Windows device is the desktop app running in the Windows VM described
+below, started and driven from this Mac. Each start sends this checkout to the
+VM as a git bundle, uncommitted work included as a commit no branch points at,
+checks it out in a worktree of its own on the VM's Dev Drive, installs and
+builds whatever changed, and launches Electron and its daemon from source in
+the VM's signed-in desktop session. `up` on a Windows device that is already
+running starts it again only when the checkout has changed, so running `up`
+after an edit is how a change reaches the VM. The app has no Explorer folder
+yet and runs as the Mac app does from source.
+
+The VM reaches the session's network at this Mac's address on Parallels'
+shared network, where the network serves the app's routes only. The device
+signs in through the network's account like a CLI device, and its calls,
+queries, logs and screenshots go through the VM's agent. `device open` shows
+the app's window, and `device screenshot` saves the VM's screen. The window
+cannot be driven yet, and `addFile` and scenarios do not take Windows devices.
+
+The VM's desktop session runs one copy of the app, so one Windows device runs
+at a time across every checkout on this Mac, and a second waits for the first,
+the way the macOS test build is leased. A device's first start clears its
+folder in the VM, and `down --clean` deletes it, and `prune --all` stops an
+app a Windows device left running when no session holds the VM.
 
 ### The Windows VM
 
@@ -221,6 +247,8 @@ bun sim transcript                      # every command so far, to reproduce
 bun sim device tray mac                 # the status popover
 bun sim device finder-state mac a.png   # downloaded, extension, type
 bun sim device download mac a.png       # reads it through Finder
+bun sim up --cli= --windows win         # the desktop app in the Windows VM, again after an edit
+bun sim device screenshot win shot.png  # the VM's screen
 bun sim down --clean
 ```
 

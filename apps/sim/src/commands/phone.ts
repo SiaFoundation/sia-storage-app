@@ -65,10 +65,18 @@ export function registerPhoneCommands({ program, current }: CommandContext): voi
       console.log(`device ${name} back in the foreground`)
     })
 
-  device.command('screenshot <name> <path>').action(async (name: string, path: string) => {
-    await phone(name).screenshot(path)
-    console.log(path)
-  })
+  device
+    .command('screenshot <name> <path>')
+    .description("Save a PNG of a phone's screen or the Windows VM's desktop")
+    .action(async (name: string, path: string) => {
+      const d = openDevice(current(), name)
+      if (!d.screenshot)
+        throw new Error(
+          `${name} is a ${d.kind} device. Only phones and Windows devices take screenshots.`,
+        )
+      await d.screenshot(path)
+      console.log(path)
+    })
 
   device
     .command('locks <name>')
