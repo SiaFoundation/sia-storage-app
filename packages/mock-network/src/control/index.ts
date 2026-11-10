@@ -44,6 +44,13 @@ export function createNetworkControl(url: string) {
   })
 
   return {
+    /**
+     * Has the network also listen on `hostname`, an address of this machine
+     * that a VM reaches it at, serving the app routes only. Returns the URL
+     * apps in the VM use.
+     */
+    listen: async (hostname: string) =>
+      (await call<{ url: string }>('/listen', json('POST', { hostname }))).url,
     summary: () => call<Summary>('/summary'),
     /** Pinned objects, which is what devices can see. `unpinned` adds uploads not yet pinned. */
     objects: (opts: { unpinned?: boolean } = {}) =>

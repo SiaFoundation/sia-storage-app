@@ -100,6 +100,8 @@ export function registerSessionCommands({ program, sessionName, current }: Comma
           ? openDevice(session, device)
           : await addDevice(session, device, kind, { signedOut: signedOut.has(device) })
         if (!(await d.isRunning())) await d.start()
+        else if (d.refresh && (await d.refresh()))
+          console.log(`device ${device} restarted on new code`)
         console.log(`device ${device} (${kind}) running`)
       }),
     )
