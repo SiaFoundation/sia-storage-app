@@ -1,8 +1,9 @@
 name: Sim
 
 # The apps' sim scenarios per platform, one workflow each: the phones in
-# sim-ios.yml and sim-android.yml. Too slow for every PR, so they run when the
-# `sim` label is added to a PR, or on demand.
+# sim-ios.yml and sim-android.yml, and the desktop app on a Mac in
+# sim-macos.yml. Too slow for every PR, so they run when the `sim` label is
+# added to a PR, or on demand.
 #
 # A labelled run tests the PR's head commit and posts each platform's result
 # on that commit as its sim/<platform> status. `bun sim attest <platform>`
@@ -27,10 +28,10 @@ on:
       platform:
         description: Which platform to run
         type: choice
-        options: [all, ios, android]
+        options: [all, ios, android, macos]
         default: all
       scenarios:
-        description: Scenario filters for bun sim run, or empty for the platform's whole suite
+        description: Scenario filters for bun sim run, or empty for each platform's whole suite. Filters go to every platform chosen, so pick one platform with them.
         default: ''
   pull_request:
     types: [labeled, synchronize]
@@ -61,6 +62,29 @@ jobs:
     with:
       scenarios: ${{ inputs.scenarios }}
 
+  # A fork's run gets no secrets, and macOS signs the test app with them.
+  macos:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && contains(fromJSON('["all","macos"]'), inputs.platform)) ||
+      (github.event.action == 'labeled' && github.event.label.name == 'sim' &&
+      github.event.pull_request.head.repo.full_name == github.repository)
+    permissions:
+      contents: read
+      statuses: write
+    uses: ./.github/workflows/sim-macos.yml
+    # A called workflow gets only the secrets its caller passes, environment
+    # secrets included, and an unpassed one reads as empty with no error. So
+    # each is named rather than inherited, which would hand it every secret.
+    secrets:
+      APPLE_CERT_B64: ${{ secrets.APPLE_CERT_B64 }}
+      APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      MACOS_PROVISIONING_PROFILE_TEST_BASE64: ${{ secrets.MACOS_PROVISIONING_PROFILE_TEST_BASE64 }}
+      MACOS_PROVISIONING_PROFILE_EXTENSION_TEST_BASE64: ${{ secrets.MACOS_PROVISIONING_PROFILE_EXTENSION_TEST_BASE64 }}
+      MACOS_FILEPROVIDER_GROUP_TEST: ${{ secrets.MACOS_FILEPROVIDER_GROUP_TEST }}
+    with:
+      scenarios: ${{ inputs.scenarios }}
+
   # Runs on a push to a PR that has the label. Each leg joins one platform
   # job's concurrency group, which cancels that job if it is still testing
   # the previous commit.
@@ -70,7 +94,7 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'sim')
     strategy:
       matrix:
-        group: [ios, ios-native, android]
+        group: [ios, ios-native, android, macos]
     concurrency:
       group: sim-${{ matrix.group }}-${{ github.event.pull_request.number }}
       cancel-in-progress: true
@@ -87,7 +111,7 @@ jobs:
   # removed it on finishing would leave the others' stop legs with no label
   # to see, and a push would then let them finish on the old commit.
   unlabel:
-    needs: [ios, android]
+    needs: [ios, android, macos]
     if: >-
       always() && github.event_name == 'pull_request' && github.event.action == 'labeled' &&
       github.event.label.name == 'sim'

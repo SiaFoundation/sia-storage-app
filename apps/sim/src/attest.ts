@@ -10,7 +10,7 @@ import type { Progress } from './report'
 export const ATTEST_PLATFORMS = ['ios', 'android', 'macos'] as const
 export type AttestPlatform = (typeof ATTEST_PLATFORMS)[number]
 
-/** The filters and options passed to `sim run`, matching what the iOS and Android workflows run in CI. */
+/** The filters and options passed to `sim run`, matching what each platform's workflow runs in CI. */
 export const ATTEST_SUITES: Record<AttestPlatform, { filters: string[]; options: string[] }> = {
   ios: { filters: ['mobile/', 'photos/'], options: [] },
   android: { filters: ['mobile/', 'photos/'], options: ['--phone', 'android'] },

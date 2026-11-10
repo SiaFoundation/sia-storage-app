@@ -1,0 +1,227 @@
+name: Sim (macOS)
+
+# The desktop app's sim scenarios on macOS: the installed test app, its
+# Finder folder and its daemon, syncing with CLI devices over the shared mock
+# network. sim.yml calls this when a PR gets the sim label or on demand, and
+# it posts the result as the sim/macos status.
+#
+# A runner is a new Mac every job, and a development profile runs only on
+# registered Macs, so the test app is signed with a Developer ID certificate
+# and Developer ID profiles for the test App IDs. It is not notarized: macOS
+# checks notarization only for an app a download marked as quarantined.
+#
+# The PR's build scripts run while the certificate is in the runner's
+# keychain. Only someone with write access to the repository can add the
+# label, and sim.yml skips fork PRs. The keychain and profiles are deleted
+# once the app is signed, before any scenario runs, and the signed app is
+# never uploaded.
+
+on:
+  workflow_call:
+    inputs:
+      scenarios:
+        description: Scenario filters for bun sim run, or empty for the whole suite
+        type: string
+        default: ''
+    # Required, so a caller that stops passing one fails the run at once
+    # rather than signing with an empty value.
+    secrets:
+      APPLE_CERT_B64:
+        required: true
+      APPLE_CERT_PASSWORD:
+        required: true
+      APPLE_TEAM_ID:
+        required: true
+      MACOS_PROVISIONING_PROFILE_TEST_BASE64:
+        required: true
+      MACOS_PROVISIONING_PROFILE_EXTENSION_TEST_BASE64:
+        required: true
+      MACOS_FILEPROVIDER_GROUP_TEST:
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  APP_NAME: Sia Storage Test
+  APP_BUNDLE_ID: sia.storage.desktop.test
+  EXT_BUNDLE_ID: sia.storage.desktop.test.file-provider
+
+jobs:
+  suite:
+    # sim.yml's stop job joins this group to cancel a run when the PR moves on.
+    concurrency:
+      group: sim-macos-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      statuses: write
+    # GitHub's macOS images run with SIP off, which lets a step with root
+    # write the privacy grants sim needs. Tenki's have SIP on, and their
+    # runner agent lacks Full Disk Access, so no grant can be written there.
+    # SIM_MACOS_RUNNER names another GitHub macOS runner.
+    runs-on: ${{ vars.SIM_MACOS_RUNNER || 'macos-26' }}
+    environment: desktop-sim
+    timeout-minutes: 60
+    steps:
+      - if: github.event_name == 'pull_request'
+        name: Post sim/macos as started
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state=pending -f context=sim/macos -f description='Starting: building and signing' \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > /dev/null
+      # A PR event checks out the merge of the PR into its base by default,
+      # and the status goes on the head commit, so that is the one tested.
+      # Nothing after this needs git access, so the job's token is not left
+      # in .git/config for the PR's own scripts to read.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - id: setup
+        uses: ./.github/actions/setup
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: '26.2'
+      - name: Fetch Electron
+        run: bun run desktop:setup
+      - name: Grant sim's permissions
+        run: bun scripts/macos-ci-setup.ts grant --app "$APP_BUNDLE_ID"
+
+      # As in release-desktop.yml, except that the .p12 is deleted once
+      # imported and the keychain once the app is signed.
+      - name: Install Apple certificate
+        env:
+          APPLE_CERT_B64: ${{ secrets.APPLE_CERT_B64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
+          printf '%s' "$APPLE_CERT_B64" | base64 -d > "$CERTIFICATE_PATH"
+          security import "$CERTIFICATE_PATH" -P "$APPLE_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          rm -f "$CERTIFICATE_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" > /dev/null
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychain -d user | tr -d '"')
+      - name: Install provisioning profiles
+        env:
+          APP_PROFILE_BASE64: ${{ secrets.MACOS_PROVISIONING_PROFILE_TEST_BASE64 }}
+          EXT_PROFILE_BASE64: ${{ secrets.MACOS_PROVISIONING_PROFILE_EXTENSION_TEST_BASE64 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/profiles"
+          printf '%s' "$APP_PROFILE_BASE64" | base64 -d > "$RUNNER_TEMP/profiles/app.provisionprofile"
+          printf '%s' "$EXT_PROFILE_BASE64" | base64 -d > "$RUNNER_TEMP/profiles/ext.provisionprofile"
+          echo "SIA_APP_PROFILE=$RUNNER_TEMP/profiles/app.provisionprofile" >> "$GITHUB_ENV"
+          echo "SIA_EXT_PROFILE=$RUNNER_TEMP/profiles/ext.provisionprofile" >> "$GITHUB_ENV"
+      # Packaging installs the app in /Applications and launches it once,
+      # which registers its File Provider extension.
+      - name: Build, sign and install the test app
+        env:
+          SIA_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          SIA_FILEPROVIDER_GROUP: ${{ secrets.MACOS_FILEPROVIDER_GROUP_TEST }}
+        run: |
+          SIA_SIGN_IDENTITY=$(bun -e "import { developerIdIdentity } from './apps/desktop/build/identity.ts'; console.log(await developerIdIdentity(process.env.SIA_TEAM_ID))")
+          export SIA_SIGN_IDENTITY
+          bun run desktop:package test
+      - if: always()
+        name: Remove signing material
+        run: |
+          security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" 2> /dev/null || true
+          rm -rf "$RUNNER_TEMP/profiles" "$RUNNER_TEMP/certificate.p12"
+      # Quit first, so the app does not hold its Finder folder while
+      # fileproviderd restarts underneath it.
+      - name: Switch on the Finder folder
+        run: |
+          osascript -e "quit app \"$APP_NAME\"" || true
+          bun scripts/macos-ci-setup.ts enable-file-provider --ext "$EXT_BUNDLE_ID"
+      # Starts one desktop device and stops it, and fails within minutes when
+      # the app cannot start or its Finder folder does not open, which would
+      # otherwise cost every scenario its full timeout.
+      - id: smoke
+        name: Launch smoke test
+        timeout-minutes: 10
+        shell: bash
+        env:
+          SIM_SESSION: smoke
+        run: |
+          bun sim up --cli= --desktop mac 2>&1 | tee /tmp/sim-smoke.out
+          bun sim down --clean
+      - id: suite
+        shell: bash
+        env:
+          SCENARIOS: ${{ inputs.scenarios || 'desktop/' }}
+          SIM_PROGRESS_FILE: /tmp/sim-progress.json
+          PROGRESS_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        # Only the poster gets the token. sim hands its whole environment to
+        # the app and daemons it starts, whose logs this job uploads.
+        # ci-progress finishes a post in flight before it exits, and the trap
+        # waits for that, so no pending post lands after the result.
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            GH_TOKEN="$PROGRESS_TOKEN" bun apps/sim/src/cli.ts ci-progress macos &
+            poster=$!
+            trap 'kill "$poster" 2> /dev/null || true; wait "$poster" || true' EXIT
+          fi
+          unset PROGRESS_TOKEN
+          bun sim run $SCENARIOS 2>&1 | tee /tmp/sim-suite.out
+      # A failure before the suite ran, such as a failed build, also posts
+      # failure, so the PR shows the labelled run did not pass.
+      - if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        name: Post sim/macos
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          STATE: ${{ steps.suite.outcome == 'success' && 'success' || 'failure' }}
+          SMOKE: ${{ steps.smoke.outcome }}
+          RUNNER: ${{ vars.SIM_MACOS_RUNNER || 'macos-26' }}
+        run: |
+          summary=$(grep -E '^run [^ ]+: [0-9]+ passed' /tmp/sim-suite.out 2>/dev/null | tail -n 1 | sed -E 's/^run [^ ]+: //')
+          if [ "$SMOKE" = failure ]; then
+            summary="Launch smoke test failed: $(grep -v '^error: script' /tmp/sim-smoke.out 2>/dev/null | tail -n 1)"
+          fi
+          description="${summary:-The run failed before the suite finished} on $RUNNER"
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state="$STATE" -f context=sim/macos -f description="${description:0:139}" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > /dev/null
+      # A cancelled run leaves its last pending status on the commit. Only the
+      # release PR requires one, so on any other the status goes back to what
+      # pr.yml posts.
+      - if: cancelled() && github.event_name == 'pull_request'
+        name: Restore sim/macos after a cancel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          RELEASE: ${{ github.head_ref == 'release' }}
+        run: |
+          if [ "$RELEASE" = true ]; then
+            state=pending description='Waiting for a sim run: the labelled run was cancelled or timed out'
+          else
+            state=success description='Not required for this PR. The labelled run was cancelled or timed out'
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state="$state" -f context=sim/macos -f description="$description" > /dev/null
+      - if: failure()
+        name: What macOS allowed
+        run: |
+          bun scripts/macos-ci-setup.ts report || true
+          pluginkit -m -v -i "$EXT_BUNDLE_ID" || true
+          fileproviderctl dump "$EXT_BUNDLE_ID" 2>&1 | head -60 || true
+      # Every run uploads its report and the kept session of every scenario
+      # that did not pass. The signed app stays on the runner.
+      - if: always() && steps.setup.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sim-macos-runs
+          path: |
+            /tmp/sia-sim/runs
+            /tmp/sia-sim/run-*
+            /tmp/sia-sim/smoke
+          retention-days: 7
