@@ -38,7 +38,7 @@
       "entry": ["src/**/*.ts"]
     },
     "apps/sim": {
-      "entry": ["scenarios/**/*.scenario.ts", "test/**/*.test.ts"]
+      "entry": ["scenarios/**/*.scenario.ts", "src/windows/agent.ts", "test/**/*.test.ts"]
     },
     "apps/cli": {
       "ignore": ["**"]
