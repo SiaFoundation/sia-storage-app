@@ -112,7 +112,7 @@ export function registerAttestCommand({ program }: CommandContext): void {
       })
       if (refusal || !pr) throw new Error(refusal ?? 'No pull request')
 
-      if (platform === 'desktop') {
+      if (platform === 'macos') {
         const identity = desktopIdentity()
         const unavailable = desktopUnavailable(identity)
         if (unavailable) throw new Error(`${unavailable}\n${desktopSetup(identity.context)}`)

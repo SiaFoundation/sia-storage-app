@@ -1,0 +1,201 @@
+name: Sim (Android)
+
+# The mobile app's sim scenarios on Android emulators, syncing with CLI
+# devices over the shared mock network. sim.yml calls this when a PR gets the
+# sim label or on demand, and it posts the result as the sim/android status.
+
+on:
+  workflow_call:
+    inputs:
+      scenarios:
+        description: Scenario filters for bun sim run, or empty for the whole suite
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    # sim.yml's stop job joins this group to cancel a run when the PR moves on.
+    concurrency:
+      group: sim-android-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      statuses: write
+    # A RunsOn machine in the org's AWS account: 8 vCPUs and 32 GB, with
+    # nested-virt for the /dev/kvm the emulator needs. Its default disk ran
+    # out during the Android build, so it asks for 100 GB. On GitHub's 4-core
+    # runner the app ran so slowly that queries took 1 to 2 seconds and taps
+    # landed before screens finished drawing. SIM_ANDROID_RUNNER names another
+    # runner, and SIM_ANDROID_JOBS runs that many emulators at once.
+    runs-on: ${{ vars.SIM_ANDROID_RUNNER || format('runs-on={0}/family=m8i.2xlarge/image=ubuntu24-full-x64/volume=100gb/nested-virt', github.run_id) }}
+    # A first run builds the app too.
+    timeout-minutes: 120
+    steps:
+      - if: github.event_name == 'pull_request'
+        name: Post sim/android as started
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state=pending -f context=sim/android -f description='Starting: building and launching' \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > /dev/null
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          android: false
+          tool-cache: false
+          swap-storage: false
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - id: setup
+        uses: ./.github/actions/setup
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      # The emulator needs hardware acceleration, and a runner without
+      # /dev/kvm would only time out booting it much later.
+      - name: Check the runner can accelerate the emulator
+        run: |
+          [ -e /dev/kvm ] || { echo "::error::This runner has no /dev/kvm, so the Android emulator cannot run with hardware acceleration."; exit 1; }
+      # A Linux runner's /dev/kvm can be open to root only, and
+      # without it the emulator falls back to software emulation too slow to
+      # boot within sim's five minutes.
+      - run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      # GitHub's runner image sets ANDROID_HOME to a preinstalled SDK, and
+      # RunsOn's leaves it unset. Without one, Google's command-line tools go
+      # into cmdline-tools/latest, where sdkmanager and sim's avdmanager live.
+      - name: Find or install the Android SDK
+        run: |
+          if [ -z "$ANDROID_HOME" ] && [ -x /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager ]; then
+            ANDROID_HOME=/usr/local/lib/android/sdk
+          fi
+          if [ -z "$ANDROID_HOME" ] || [ ! -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            ANDROID_HOME="${ANDROID_HOME:-$HOME/android-sdk}"
+            curl -fsSL -o /tmp/cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip
+            unzip -q -o /tmp/cmdline-tools.zip -d /tmp/cmdline-tools
+            mkdir -p "$ANDROID_HOME/cmdline-tools"
+            rm -rf "$ANDROID_HOME/cmdline-tools/latest"
+            mv /tmp/cmdline-tools/cmdline-tools "$ANDROID_HOME/cmdline-tools/latest"
+          fi
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+      # sim creates its own AVD from the newest installed image. Gradle fetches
+      # the platforms and build tools the app needs, once their licenses are
+      # accepted.
+      - run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" platform-tools emulator 'system-images;android-36;google_apis;x86_64' > /dev/null
+          "$ANDROID_HOME/emulator/emulator" -accel-check
+      - id: native
+        run: echo "hash=$(bun -e "import { computeBuildHash } from './apps/mobile/scripts/buildCache.ts'; console.log(computeBuildHash())")" >> "$GITHUB_OUTPUT"
+      # sim installs the debug APK from where gradle writes it.
+      - id: cache
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: apps/mobile/android/app/build/outputs/apk/debug
+          key: android-sim-${{ steps.native.outputs.hash }}
+      - if: steps.cache.outputs.cache-hit != 'true'
+        run: bun run mobile:dev:android:emulator -- --no-run
+        # The app's Gradle config builds for ARM only, as phones and Apple
+        # Silicon emulators need, and a Linux runner's emulator is x86_64. A
+        # property set in the environment overrides the one in the config.
+        # A build with no Maps key throws when the file viewer draws its map,
+        # and a placeholder only leaves the map blank. The cache key names
+        # this build apart from one made with other settings.
+        env:
+          ORG_GRADLE_PROJECT_reactNativeArchitectures: x86_64
+          GOOGLE_MAPS_API_KEY: sim-placeholder
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: apps/mobile/android/app/build/outputs/apk/debug
+          key: android-sim-${{ steps.native.outputs.hash }}
+      - id: smoke
+        name: Launch smoke test
+        timeout-minutes: 15
+        shell: bash
+        env:
+          SIM_SESSION: smoke
+        run: |
+          bun sim up --cli= --android phone 2>&1 | tee /tmp/sim-smoke.out
+          bun sim down --clean
+      # An emulator that exits before booting says why only in its own log,
+      # which sim keeps outside the session directory the artifact uploads.
+      - if: failure() && steps.smoke.outcome == 'failure'
+        name: Print the emulator's log
+        run: tail -n 80 /tmp/sia-sim/android-pool-*/emulator-*.log || true
+      - id: suite
+        shell: bash
+        env:
+          SCENARIOS: ${{ inputs.scenarios || 'mobile/ photos/' }}
+          SIM_JOBS: ${{ vars.SIM_ANDROID_JOBS || '1' }}
+          SIM_PROGRESS_FILE: /tmp/sim-progress.json
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        # ci-progress finishes a post in flight before it exits, and the trap
+        # waits for that, so no pending post lands after the result.
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            bun apps/sim/src/cli.ts ci-progress android &
+            poster=$!
+            trap 'kill "$poster" 2> /dev/null || true; wait "$poster" || true' EXIT
+          fi
+          bun sim run $SCENARIOS --phone android --jobs "$SIM_JOBS" 2>&1 | tee /tmp/sim-suite.out
+      - if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        name: Post sim/android
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          STATE: ${{ steps.suite.outcome == 'success' && 'success' || 'failure' }}
+          SMOKE: ${{ steps.smoke.outcome }}
+        run: |
+          summary=$(grep -E '^run [^ ]+: [0-9]+ passed' /tmp/sim-suite.out 2>/dev/null | tail -n 1 | sed -E 's/^run [^ ]+: //')
+          if [ "$SMOKE" = failure ]; then
+            summary="Launch smoke test failed: $(grep -v '^error: script' /tmp/sim-smoke.out 2>/dev/null | tail -n 1)"
+          fi
+          description="${summary:-The run failed before the suite finished} on ${{ vars.SIM_ANDROID_RUNNER || 'RunsOn m8i.2xlarge' }}"
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state="$STATE" -f context=sim/android -f description="${description:0:139}" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > /dev/null
+      # A cancelled run leaves its last pending status on the commit. On a PR
+      # other than the release PR that would block a merge nothing requires, so
+      # the status goes back to what the PR workflow posts.
+      - if: cancelled() && github.event_name == 'pull_request'
+        name: Restore sim/android after a cancel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          RELEASE: ${{ github.head_ref == 'release' }}
+        run: |
+          if [ "$RELEASE" = true ]; then
+            state=pending description='Waiting for a sim run: the labelled run was cancelled or timed out'
+          else
+            state=success description='Not required for this PR. The labelled run was cancelled or timed out'
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state="$state" -f context=sim/android -f description="$description" > /dev/null
+      # Every run uploads its report, with each step's time, and the kept
+      # session of every scenario that did not pass, so a passing run can be
+      # compared with a failing one.
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sim-android-runs
+          path: |
+            /tmp/sia-sim/runs
+            /tmp/sia-sim/run-*
+            /tmp/sia-sim/smoke
+            /tmp/sia-sim/android-pool-*/*.log
+          retention-days: 7
+      # Skipped when Bun never installed, which would only add a second error.
+      - if: always() && steps.setup.outcome == 'success'
+        run: bun sim prune --all --force

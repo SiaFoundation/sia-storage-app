@@ -119,11 +119,11 @@ session in the same checkout does not hold it up, since repackaging under one's
 own device is how the app's native code is changed, and the install says that
 session's device has to be started again. While an install runs, a desktop
 device refuses to start and names it, since what it would drive is then that
-checkout's build. `bun sim attest desktop` refuses the same way before it runs
+checkout's build. `bun sim attest macos` refuses the same way before it runs
 anything, and prints the checkout and commit the installed build came from.
 
 A desktop device turns on, for sim's own process, the downloading of files
-macOS has not fetched yet, and `attest desktop` does the same before it starts
+macOS has not fetched yet, and `attest macos` does the same before it starts
 its run. A launchd job has that off unless its plist turns it on, and every
 process the job starts inherits it, so a shell opened by an app running as a
 background job has it off too. Opening a cloud-only file in the Finder folder
@@ -364,22 +364,23 @@ machine. A PR description is different, as described below.
 
 ## CI and attestation
 
-Every PR runs the CLI-device scenarios in CI. The phone suites run in CI only
-when the `sim-mobile` label is added to a PR, weekly, or on demand, and a push
-while one runs cancels it. A labelled run posts its result on the commit it
-tested as the `sim/ios` and `sim/android` commit statuses, and the label comes
-off when it ends. Running the workflow by hand takes scenario filters and a
-platform, to try a fix on the runner without the whole suite. Every phone
-run uploads its report and the sessions it kept, and the CLI-device run
-uploads them when it fails.
+Every PR runs the CLI-device scenarios in CI. The platform suites, iOS and
+Android, run in CI only when the `sim` label is added to a PR or
+on demand, each in its own workflow (`sim-ios.yml`, `sim-android.yml`) that
+`sim.yml` starts. A push while they run cancels them. A labelled run posts each
+platform's result on the commit it tested as its `sim/<platform>` commit
+status, and the label comes off when every platform has ended. Running `sim.yml`
+by hand takes a platform and scenario filters, to try a fix on the runner
+without every suite. Every platform run uploads its report and the sessions it
+kept, and the CLI-device run uploads them when it fails.
 
-`bun sim attest <ios|android|desktop>` runs that platform's suite on this
+`bun sim attest <ios|android|macos>` runs that platform's suite on this
 checkout and posts the same status from the local run. It finds the PR from the
 current branch, or takes it as `--pr <number>`, which a checkout on a detached
 HEAD needs. It refuses unless the
 tracked files have no uncommitted changes and local HEAD is the PR's head, and
 it posts nothing when the run is interrupted or skips a scenario. The release
-PR needs `sim/ios` and `sim/android` on its head commit, and `sim/desktop` when
+PR needs `sim/ios` and `sim/android` on its head commit, and `sim/macos` when
 it changes the desktop app's version. Every other PR gets them as not required.
 
 ## Reporting a fix
