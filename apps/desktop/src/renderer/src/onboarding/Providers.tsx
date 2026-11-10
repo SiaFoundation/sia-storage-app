@@ -10,6 +10,7 @@
 import { COASTLINE } from './coastline'
 import { KEPT, PIECES, ShardGlyph } from './ShardField'
 import { seededShard } from './shards'
+import { terms } from '../terms'
 
 /** The part of the 720 x 360 map that is shown: the poles are left off. */
 const VIEW = { x: 24, y: 44, width: 672, height: 236 }
@@ -67,7 +68,7 @@ export function Providers({ offline }: { offline: boolean }) {
   return (
     <div
       role="img"
-      aria-label={`This Mac sending one piece to each of ${PIECES.toLocaleString()} storage providers around the world`}
+      aria-label={`This ${terms.computer} sending one piece to each of ${PIECES.toLocaleString()} storage providers around the world`}
       className="relative"
       style={{ width: WIDTH, height: HEIGHT }}
     >

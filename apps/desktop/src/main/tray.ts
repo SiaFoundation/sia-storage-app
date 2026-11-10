@@ -1,31 +1,23 @@
 /*
- * The menu bar item.
+ * The menu bar item on macOS, the notification area icon on Windows.
  *
  * Left click opens the popover, or the window when the daemon says this machine
  * has no account yet, since the window is where signing in happens.
- * Right click gives the menu. The icon is a template image so the system tints
- * it for light and dark menu bars.
+ * Right click gives the menu.
  */
 
-import { app, Menu, Tray, nativeImage } from 'electron'
-import { join } from 'node:path'
+import { app, Menu, Tray } from 'electron'
 import { Daemon } from './daemon'
+import { windowChrome } from './platform'
 import { updateMenuItems } from './updates'
 import { beginQuit, hidePopover, showMainWindow, togglePopover } from './windows'
 
 let tray: Tray | null = null
 
-function iconPath(): string {
-  return join(__dirname, '../../assets/tray-Template.png')
-}
-
 export function createTray(): Tray {
   if (tray) return tray
 
-  const image = nativeImage.createFromPath(iconPath())
-  image.setTemplateImage(true)
-
-  const item = new Tray(image)
+  const item = new Tray(windowChrome().trayImage())
   item.setToolTip('Sia Storage')
 
   item.on('click', (_event, bounds) => {
