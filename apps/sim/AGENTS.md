@@ -142,6 +142,21 @@ macOS syncs the test build's Finder folder only once it has been switched on
 under File Providers in System Settings, General, Login Items & Extensions.
 Until then the device stops at start and says so.
 
+### The Windows VM
+
+`bun sim windows create <iso>` builds a Windows 11 ARM VM in Parallels
+Desktop, `sia-sim-win11` or `SIM_WINDOWS_VM`, from Microsoft's ISO,
+unattended, and snapshots it as `golden`. It has a test account signed in at
+every boot, OpenSSH, a Dev Drive for builds, and Bun, Git and PowerShell 7.
+Installs and builds run over SSH as the VM's administrator, since Windows'
+OpenSSH will not follow links a plain account created, and `bun install`
+links every workspace package. What needs the desktop runs through an agent
+(`src/windows/agent.ts`) that a logon task starts in the test account's
+session, since a process started over SSH has none. `windows provision` runs
+the setup again, `revert` goes back to a snapshot, and `status` says whether
+SSH and the agent answer. The VM's passwords, SSH key and agent token are in
+`~/.sia-sim/windows`, which survives a reboot as `/tmp` does not.
+
 ### Sharing a machine
 
 Several checkouts can run sim and build at once on one machine. sim keeps

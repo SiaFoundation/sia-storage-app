@@ -18,6 +18,7 @@ import { registerObserveCommands } from './commands/observe'
 import { registerPhoneCommands } from './commands/phone'
 import { registerScenarioCommands } from './commands/scenarios'
 import { registerSessionCommands } from './commands/session'
+import { registerWindowsCommands } from './commands/windows'
 import { createContext } from './commands/shared'
 import { recordCommand } from './evidence'
 import { reapIdle } from './prune'
@@ -52,6 +53,7 @@ registerLiveCommands(ctx)
 registerScenarioCommands(ctx)
 registerAttestCommand(ctx)
 registerCiProgressCommand(ctx)
+registerWindowsCommands(ctx)
 
 // Exits when the command finishes rather than when the event loop drains, so
 // a handle left open by a server or device it started cannot keep a finished
