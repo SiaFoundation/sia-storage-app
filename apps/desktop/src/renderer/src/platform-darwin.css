@@ -1,0 +1,30 @@
+/*
+ * macOS. Both windows are transparent over AppKit's material, which follows
+ * the system's light or dark appearance, so the page paints no background.
+ * The main window hides its title bar and the page provides what it did.
+ */
+
+:root[data-platform='darwin'] {
+  /* The main window has no title bar, so the traffic lights sit over the top
+     of the page. Views add this to their top inset to keep their first line
+     out from under them. */
+  --title-bar-clearance: 30px;
+}
+
+:root[data-platform='darwin'] body {
+  background: transparent;
+}
+
+/* The strip across the top, where the traffic lights sit, is what the window
+   is dragged by. Chromium leaves every no-drag element out of the drag area
+   whatever is drawn over it, which keeps a control under the strip clickable. */
+:root[data-platform='darwin'] .drag-strip {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 40px;
+  -webkit-app-region: drag;
+}
+
+:root[data-platform='darwin'] body.window :is(button, a, input, textarea, select, [role='button']) {
+  -webkit-app-region: no-drag;
+}

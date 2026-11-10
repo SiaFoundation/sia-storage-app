@@ -12,6 +12,7 @@ import { type LoginItemStatus, sia } from './api'
 import { ROW, Section } from './Group'
 import { Login } from './icons'
 import { Switch } from './Switch'
+import { terms } from './terms'
 
 export function OpenAtLogin() {
   const [status, setStatus] = useState<LoginItemStatus | null>(null)
@@ -50,7 +51,7 @@ export function OpenAtLogin() {
     ? 'macOS did not add the app to Login Items.'
     : status === 'needs-approval'
       ? 'Turned off in System Settings, under General > Login Items.'
-      : 'Keeps the Finder folder and syncing going after you restart.'
+      : `Keeps the ${terms.fileManager} folder and syncing going after you restart.`
 
   return (
     <Section header="Startup">

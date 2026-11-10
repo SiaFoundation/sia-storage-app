@@ -101,7 +101,7 @@ export function TrashView({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="flex flex-col">
-      <div className="flex flex-col gap-3 px-inset pt-12 pb-[18px]">
+      <div className="flex flex-col gap-3 px-inset pt-[calc(18px+var(--title-bar-clearance))] pb-[18px]">
         <h1 data-testid="trash-heading" className="m-0 text-[15px] font-semibold">
           Trash
         </h1>

@@ -35,6 +35,7 @@ import { ROW, ROW_LAYOUT, Section } from './Group'
 import { CheckCircle, ChevronDown, Clock, Link, ProgressRing, WarnCircle } from './icons'
 import { ScrollArea } from './ScrollArea'
 import { useNow } from './useNow'
+import { terms } from './terms'
 
 /** How many files the list holds. Older ones are in Finder. */
 const RECENT_LIMIT = 30
@@ -177,7 +178,7 @@ function ActivityRow({
         <button
           type="button"
           className={`${HIGHLIGHT} cursor-default border-none bg-transparent p-0 outline-none transition-colors duration-150 enabled:active:bg-card focus-visible:shadow-[0_0_0_2px_var(--color-accent)]`}
-          aria-label={`Show ${file.name} in Finder`}
+          aria-label={`Show ${file.name} in ${terms.fileManager}`}
           disabled={!canReveal}
           onClick={reveal}
         />
