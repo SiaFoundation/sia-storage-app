@@ -15,6 +15,7 @@
  */
 
 import { createRemoteAppService } from '@siastorage/core/app'
+import { endpointMarker } from '@siastorage/core/lib/ipcEndpoint'
 import { app } from 'electron'
 import { spawn } from 'node:child_process'
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:fs'
@@ -86,7 +87,8 @@ export type DaemonSpawn = {
   /** A script host. Never `process.execPath`: under Electron that is the GUI runtime. */
   runtime: string
   script: string
-  shellSocket: string
+  /** Where the storage-provider shell reaches the daemon. None on a platform with no shell yet. */
+  shellSocket?: string
   /** Only a sandboxed shell needs one, so only macOS passes it. */
   handoffDir?: string
 }
@@ -189,7 +191,7 @@ export class Daemon {
   }
 
   static async isReachable(): Promise<boolean> {
-    if (!existsSync(daemonSocketPath())) return false
+    if (!existsSync(endpointMarker(daemonSocketPath()))) return false
     try {
       // The daemon's own liveness channel, rather than a facade call that also
       // answers for whether one store or another came up.
@@ -214,7 +216,10 @@ export class Daemon {
       reachable = await Daemon.isReachable()
       // A daemon answers `ping` before it binds the shell socket, so a miss is
       // not yet degraded: keep looking for the rest of the window.
-      if (reachable && (!spawnWith || existsSync(spawnWith.shellSocket))) {
+      if (
+        reachable &&
+        (!spawnWith?.shellSocket || existsSync(endpointMarker(spawnWith.shellSocket)))
+      ) {
         this.status = spawnWith ? 'running' : 'running-without-shell'
         return this.status
       }
@@ -336,13 +341,17 @@ export class Daemon {
         SIA_DATA_DIR: dataDir(),
         // Picks the forced-reset nonce the daemon answers to.
         SIA_BUILD_VARIANT: buildVariant(),
-        SIA_PROVIDER_SOCKET: config.shellSocket,
+        // Empty with no shell, rather than left out, so a value inherited from
+        // the app's own environment does not start a listener nothing answers.
+        SIA_PROVIDER_SOCKET: config.shellSocket ?? '',
         // What the daemon opens when Finder asks to share while this app is
         // not running. A run from source has no bundle to open.
         ...(app.isPackaged ? { SIA_DESKTOP_APP: resolve(process.execPath, '../../..') } : {}),
         ...(config.handoffDir ? { SIA_HANDOFF_DIR: config.handoffDir } : {}),
       },
       detached: true,
+      // On Windows a detached process gets a console window of its own.
+      windowsHide: true,
       stdio: ['ignore', logFd, logFd],
     })
     closeSync(logFd)
