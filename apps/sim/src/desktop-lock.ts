@@ -2,7 +2,9 @@
  * Who may use a desktop build context's installed app on this Mac. A context,
  * `test` for sim, installs one app with one Finder folder per Mac, so one
  * session drives it at a time, and installing it again replaces the app under
- * whoever is driving it. Three kinds of holder share it:
+ * whoever is driving it. A Windows VM's desktop session is leased the same
+ * way under the context `windows-<vm>`, since the app allows one running copy
+ * there. Three kinds of holder share it:
  *
  * - A session with a desktop device, named in `desktop-<context>.lease` for as
  *   long as the session exists. The file holds the bare session name, which is
@@ -99,11 +101,11 @@ export async function takeLease(
   context: string,
   appName: string,
   session: string,
-  opts: { intervalMs?: number; log?: (line: string) => void } = {},
+  opts: { intervalMs?: number; log?: (line: string) => void; waitsFor?: string } = {},
 ): Promise<void> {
   const run = runOf(session)
   await waitInLine({
-    waitsFor: `the ${appName} app`,
+    waitsFor: opts.waitsFor ?? `the ${appName} app`,
     what: `a desktop device in session ${session}`,
     timeoutMs: 30 * 60_000,
     intervalMs: opts.intervalMs ?? 5000,

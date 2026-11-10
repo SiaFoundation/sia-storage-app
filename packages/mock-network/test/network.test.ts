@@ -497,3 +497,21 @@ describe('mock network', () => {
     )
   })
 })
+
+describe('a listener for a VM', () => {
+  test('serves the app routes and refuses the control routes', async () => {
+    // IPv6 loopback stands in for the shared-network address a VM reaches.
+    const url = await control.listen('::1')
+    expect(url).toBe(`http://[::1]:${network.port}`)
+    const sdk = await fetch(`${url}/sdk/account`, { headers: { 'x-device': 'vm' } })
+    expect(sdk.status).toBe(200)
+    expect((await fetch(`${url}/control/summary`)).status).toBe(403)
+    expect((await fetch(`${url}/relay/vm`)).status).toBe(403)
+    // A second ask returns the listener already open.
+    expect(await control.listen('::1')).toBe(url)
+  })
+
+  test('refuses to listen on every address at once', async () => {
+    await expect(control.listen('0.0.0.0')).rejects.toThrow(/one address/)
+  })
+})
