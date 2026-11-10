@@ -182,7 +182,7 @@ anything on a screen.
 | Sim, CLI devices      | `bun sim run sync/ resilience/ finder/`         | real daemons syncing, killed and offline together                     | yes                  |
 | Benchmarks            | `bun run --cwd apps/benchmark bench:ci`         | core database calls: statement counts, query plans, time against base | on PRs touching core |
 | Sim, phones           | `bun sim run mobile/ photos/ [--phone android]` | the built app on simulators and emulators, suspended and killed       | on label             |
-| Sim, desktop          | `bun sim run desktop/`                          | the installed test app: sign-in, its windows and Finder folder        | no                   |
+| Sim, desktop          | `bun sim run desktop/`                          | the installed test app: sign-in, its windows and Finder folder        | on label             |
 
 The benchmark check compares statement counts, query plans and results exactly against
 `apps/benchmark/baseline/structure.json`, and times each call against the PR's base
@@ -191,11 +191,9 @@ commit on the same runner. A PR that changes a count or a plan on purpose runs
 only once `baseline/timing.json` gives it a tolerance, which `bench:calibrate` computes
 from the reports of CI runs whose two sides ran the same core.
 
-The desktop tier is local-only and rots unless deliberately run. The native device tier
-and the phone scenarios run in CI only on the `sim` label, so run them, or
-add the label, before landing anything that touches native code or the import flow,
-and run the desktop scenarios before landing a change to the desktop app or its
-extension.
+The native device tier, the phone scenarios and the desktop scenarios run in CI only on
+the `sim` label, so run them, or add the label, before landing anything that
+touches native code, the import flow, the desktop app or its extension.
 
 **Which tier.** Core logic gets a unit test beside it. Behavior crossing upload,
 download, sync, and the database gets an integration test, because a unit test cannot
