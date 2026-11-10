@@ -16,6 +16,7 @@
     "./lib/contentHash": "./src/lib/contentHash.ts",
     "./lib/fileUri": "./src/lib/fileUri.ts",
     "./lib/forcedReset": "./src/lib/forcedReset.ts",
+    "./lib/ipcEndpoint": "./src/lib/ipcEndpoint.ts",
     "./lib/errors": "./src/lib/errors.ts",
     "./lib/mutex": "./src/lib/mutex.ts",
     "./lib/retry": "./src/lib/retry.ts",
