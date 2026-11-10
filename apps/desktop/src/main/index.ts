@@ -21,7 +21,12 @@ import { confirmSignOut, warnWipeBlocked, wipeLibrary } from './signout'
 import { log } from './log'
 import { createLoginItem, enabledByDefault, type LoginItem } from './loginItem'
 import { endpointMarker } from '@siastorage/core/lib/ipcEndpoint'
-import { createPlatformIntegration, loginItemSettingsUrl } from './platform'
+import {
+  copyTerms,
+  createPlatformIntegration,
+  loginItemSettingsUrl,
+  windowChrome,
+} from './platform'
 import type { StopOptions } from './platform/types'
 import { call, DaemonStream } from './rpc'
 import { receiveShareRequest } from './share'
@@ -36,6 +41,8 @@ import { beginQuit, broadcast, showMainWindow } from './windows'
  * installed build.
  */
 const BUNDLED = dirname(app.getAppPath())
+
+const terms = copyTerms()
 
 /**
  * Null in a run from source, which would register Electron's own binary
@@ -96,6 +103,7 @@ if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
   const platform = createPlatformIntegration()
+  const chrome = windowChrome()
   const daemon = new Daemon()
   const loginItem = createAppLoginItem()
   let changes: DaemonStream | null = null
@@ -179,7 +187,9 @@ if (!app.requestSingleInstanceLock()) {
       // folder away leaves this account's file names and downloaded contents
       // on the Mac with nothing left that explains where they came from.
       log.error('app', 'sign_out_mount_still_registered')
-      await warnWipeBlocked('The Finder folder could not be removed. Sign out again in a moment.')
+      await warnWipeBlocked(
+        `The ${terms.fileManager} folder could not be removed. Sign out again in a moment.`,
+      )
     } else if (await Daemon.isReachable()) {
       log.error('app', 'sign_out_daemon_still_up')
       await warnWipeBlocked('A Sia daemon still holds the library. Stop it, then sign out again.')
@@ -255,7 +265,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(async () => {
     // Tray-only until the user asks for a window: a dock tile with no window
     // behind it is worse than no tile.
-    if (process.platform === 'darwin') app.dock?.hide()
+    chrome.windowsHidden()
     // Only true when macOS opened the app as a login item, and read here
     // because Electron sets it from the launch event.
     const openedAtLogin = app.getLoginItemSettings().wasOpenedAtLogin

@@ -8,6 +8,7 @@
 
 import type { SyncState } from '@siastorage/core/app'
 import { filesWaitingToUpload, type Uploads } from '@siastorage/core/lib/uploadActivity'
+import { terms } from './terms'
 
 export type DomainState = 'absent' | 'starting' | 'mounted' | 'error' | 'unsupported'
 
@@ -255,7 +256,7 @@ export function activity(s: Status): string {
       return s.connectionError ? 'Indexer not connected' : 'Connecting to indexer'
     case 'mount-error':
     case 'mount-absent':
-      return 'Finder folder not connected'
+      return `${terms.fileManager} folder not connected`
     case 'uploading':
       return inFlight(s)
     case 'queued':
@@ -269,7 +270,7 @@ export function activity(s: Status): string {
     case 'syncing-up':
       return 'Updating encrypted metadata'
     case 'mounting':
-      return 'Adding Finder folder'
+      return `Adding ${terms.fileManager} folder`
     case 'preparing':
       return 'Preparing folders'
     case 'ok':
@@ -317,7 +318,7 @@ export function activityDetail(s: Status): string | null {
     case 'mount-error':
       return 'macOS could not add the folder'
     case 'mount-absent':
-      return 'The folder is not in Finder'
+      return `The folder is not in ${terms.fileManager}`
     // The library's count, since every save of one document while full is a
     // version of its own in the uploader's queue.
     case 'storage-full':
@@ -337,7 +338,7 @@ export function activityHelp(s: Status): string {
   const host = indexerHost(s) ?? 'the indexer'
   switch (condition(s)) {
     case 'checking':
-      return 'Asking the background service and Finder how things stand.'
+      return `Asking the background service and ${terms.fileManager} how things stand.`
     case 'daemon-down':
       return "Sia Storage's background service is not answering, so nothing is syncing. Open Logs from the More menu for the reason, or quit and reopen the app."
     case 'disconnected':
@@ -346,13 +347,13 @@ export function activityHelp(s: Status): string {
         : `Reaching ${host}.`
     case 'mount-error':
     case 'mount-absent':
-      return 'The Sia Storage folder is not in Finder. Quit and reopen the app to add it again.'
+      return `The Sia Storage folder is not in ${terms.fileManager}. Quit and reopen the app to add it again.`
     case 'uploading':
-      return 'Files are packed together and encrypted on this Mac, then sent to storage providers.'
+      return `Files are packed together and encrypted on this ${terms.computer}, then sent to storage providers.`
     case 'queued':
       return 'These files upload once the ones ahead of them have.'
     case 'storage-full':
-      return 'Your account has no storage left, so files on this Mac stay here until it has room. They upload on their own once it does.'
+      return `Your account has no storage left, so files on this ${terms.computer} stay here until it has room. They upload on their own once it does.`
     case 'upload-failed':
       return 'Sia Storage tries each file again, waiting longer after each failure. Open Logs from the More menu for the reason.'
     case 'syncing-down':
@@ -360,7 +361,7 @@ export function activityHelp(s: Status): string {
     case 'syncing-up':
       return 'Sending changes to names, folders and details, encrypted.'
     case 'mounting':
-      return 'Adding the Sia Storage folder to Finder.'
+      return `Adding the Sia Storage folder to ${terms.fileManager}.`
     case 'preparing':
       return 'macOS is listing your folders, so that they open without a wait.'
     case 'ok':
@@ -457,18 +458,23 @@ function finderStep(s: Status, finderName: string): SetupStep {
   switch (s.domain) {
     // Nothing failed: a run from source has no signed helper to register with.
     case 'unsupported':
-      return { ...step, label: 'Finder folder', state: 'skipped', hint: mountLabel(s) }
+      return {
+        ...step,
+        label: `${terms.fileManager} folder`,
+        state: 'skipped',
+        hint: mountLabel(s),
+      }
     case 'mounted':
-      return { ...step, label: `Added ${finderName} to Finder`, state: 'done' }
+      return { ...step, label: `Added ${finderName} to ${terms.fileManager}`, state: 'done' }
     case 'error':
       return {
         ...step,
-        label: `Adding ${finderName} to Finder`,
+        label: `Adding ${finderName} to ${terms.fileManager}`,
         state: 'failed',
         detail: 'The folder could not be registered with macOS',
       }
     default:
-      return { ...step, label: `Adding ${finderName} to Finder`, state: 'active' }
+      return { ...step, label: `Adding ${finderName} to ${terms.fileManager}`, state: 'active' }
   }
 }
 
@@ -515,7 +521,7 @@ function foldersStep(s: Status, earlier: SetupStep[], overdue: boolean): SetupSt
   }
   const { active, done, total, passes } = s.materializing
   if (!active && (total === 0 || passes > 0)) {
-    return { ...step, label: 'Folders ready in Finder', state: 'done' }
+    return { ...step, label: `Folders ready in ${terms.fileManager}`, state: 'done' }
   }
   // The pass is a head start and nothing depends on it: a folder the system
   // has not written out is written when it is first opened. So a pass that

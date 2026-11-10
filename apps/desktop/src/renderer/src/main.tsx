@@ -17,6 +17,8 @@ import './styles.css'
 
 const isPopover = window.location.hash === '#popover'
 document.body.className = isPopover ? 'popover' : 'window'
+// Turns on one platform's rules, from platform-darwin.css or platform-standard.css.
+document.documentElement.dataset.platform = window.sia.platform
 
 const root = document.getElementById('root')
 if (!root) throw new Error('missing #root')

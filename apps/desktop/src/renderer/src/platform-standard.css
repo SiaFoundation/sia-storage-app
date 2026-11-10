@@ -1,0 +1,26 @@
+/*
+ * Windows and Linux. There is no material for a page to sit on, so the page
+ * paints the system's window colour itself, light or dark with the system's
+ * setting, which the text colours above it assume. The OS draws the title
+ * bar, so the drag strip stays inert. `standardChrome.ts` in the main process
+ * gives the window the same colour before the page has painted.
+ *
+ * The rules need the attribute present, so a page that has not set it yet,
+ * as on a Mac before main.tsx runs, paints nothing from here.
+ */
+
+:root[data-platform]:not([data-platform='darwin']) {
+  --window-background: #202020;
+  /* The OS title bar sits above the page, so nothing on it needs clearing. */
+  --title-bar-clearance: 0px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-platform]:not([data-platform='darwin']) {
+    --window-background: #f3f3f3;
+  }
+}
+
+:root[data-platform]:not([data-platform='darwin']) body {
+  background: var(--window-background);
+}

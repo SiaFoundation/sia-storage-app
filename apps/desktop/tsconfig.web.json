@@ -12,5 +12,5 @@
     "composite": true,
     "types": ["bun"]
   },
-  "include": ["src/renderer/**/*.ts", "src/renderer/**/*.tsx"]
+  "include": ["src/shared/**/*.ts", "src/renderer/**/*.ts", "src/renderer/**/*.tsx"]
 }

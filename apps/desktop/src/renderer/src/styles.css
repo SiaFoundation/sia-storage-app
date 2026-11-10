@@ -2,12 +2,17 @@
  * Tokens for the inset-grouped look; the markup styles itself with utilities.
  *
  * Theme and utilities only, no preflight: both windows set every reset they
- * need inline, and neither paints a background, so the system vibrancy shows
- * through. Colours are custom properties so the light scheme flips them here
- * and every utility follows.
+ * need inline. Colours are custom properties so the light scheme flips them
+ * here and every utility follows.
+ *
+ * What the windows sit on differs by platform, and so do the rules that
+ * depend on it: each platform's file holds them, scoped by the
+ * `data-platform` attribute main.tsx sets on the root element.
  */
 @import 'tailwindcss/theme' layer(theme);
 @import 'tailwindcss/utilities' layer(utilities);
+@import './platform-darwin.css';
+@import './platform-standard.css';
 
 @theme {
   /* The numeric utilities step in fours of pixels, not rem: the root font is
@@ -133,7 +138,8 @@
   --secondary: rgba(255, 255, 255, 0.55);
   --card: rgba(255, 255, 255, 0.08);
   --divider: rgba(255, 255, 255, 0.12);
-  /* A popup floats over vibrancy, so it needs a material of its own to stay readable. */
+  /* A popup floats over the window's background, so it needs a material of its own
+     to stay readable. */
   --menu: rgba(48, 48, 50, 0.92);
   --scroll-thumb: rgba(255, 255, 255, 0.22);
   --scroll-thumb-hover: rgba(255, 255, 255, 0.38);
@@ -198,23 +204,7 @@
 
 body {
   margin: 0;
-  background: transparent;
   -webkit-font-smoothing: antialiased;
   user-select: none;
   cursor: default;
-}
-
-/* The window has no title bar, so this strip across its top, where the
-   traffic lights sit, is what it is dragged by. Chromium leaves every no-drag
-   element out of the drag area whatever is drawn over it, which keeps a
-   control under the strip clickable. */
-.drag-strip {
-  position: fixed;
-  inset: 0 0 auto 0;
-  height: 40px;
-  -webkit-app-region: drag;
-}
-
-body.window :is(button, a, input, textarea, select, [role='button']) {
-  -webkit-app-region: no-drag;
 }

@@ -9,6 +9,8 @@
  * are and not what they hold.
  */
 
+import { terms } from '../terms'
+
 export type SlideId = 'encrypt' | 'split' | 'distribute' | 'finder' | 'phone'
 
 export type Slide = {
@@ -20,11 +22,11 @@ export type Slide = {
 }
 
 export function slides(finderName: string): Slide[] {
-  return [
+  const all: Slide[] = [
     {
       id: 'encrypt',
-      title: 'Encrypted on this Mac',
-      body: 'Every file is encrypted here, before anything is uploaded. The key comes from your recovery phrase, so nothing readable ever leaves your Mac.',
+      title: `Encrypted on this ${terms.computer}`,
+      body: `Every file is encrypted here, before anything is uploaded. The key comes from your recovery phrase, so nothing readable ever leaves your ${terms.computer}.`,
       caption: 'This is all anyone but you can see.',
     },
     {
@@ -36,13 +38,13 @@ export function slides(finderName: string): Slide[] {
     {
       id: 'distribute',
       title: 'Sent straight to storage providers',
-      body: 'Each piece goes straight from your Mac to a different independent storage provider. Providers only ever hold encrypted pieces, and the Sia Storage service only knows where they are, not what is in them.',
+      body: `Each piece goes straight from your ${terms.computer} to a different independent storage provider. Providers only ever hold encrypted pieces, and the Sia Storage service only knows where they are, not what is in them.`,
       caption: 'Up to 20 providers can be offline and the file is still there.',
     },
     {
       id: 'finder',
-      title: 'Your files live in Finder',
-      body: `Look for ${finderName} in the Finder sidebar. Open, move and rename files there like any others, and anything you add uploads on its own. The app stays in the menu bar.`,
+      title: `Your files live in ${terms.fileManager}`,
+      body: `Look for ${finderName} in the ${terms.fileManager} sidebar. Open, move and rename files there like any others, and anything you add uploads on its own. The app stays in the ${terms.iconArea}.`,
       caption: 'A cloud marks a file that downloads when you open it.',
     },
     {
@@ -52,6 +54,7 @@ export function slides(finderName: string): Slide[] {
       caption: 'The same folders, wherever you sign in.',
     },
   ]
+  return terms.hasFolder ? all : all.filter((slide) => slide.id !== 'finder')
 }
 
 /** The slide `step` away from `index`, held within the tour. */

@@ -9,10 +9,11 @@
     "build": "electron-vite build",
     "package": "bun run build/package.ts",
     "release": "bun run build/release.ts",
+    "icons:windows": "bun run build/windows-icons.ts",
     "start": "env -u ELECTRON_RUN_AS_NODE electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.build.json",
     "lint": "oxlint . && oxfmt --check .",
-    "test": "bun test --path-ignore-patterns='**/updates.test.ts' --path-ignore-patterns='**/windows.test.ts' && bun test ./src/main/updates.test.ts && bun test ./src/main/windows.test.ts"
+    "test": "bun test --path-ignore-patterns='**/updates.test.ts' --path-ignore-patterns='**/windows.test.ts' --path-ignore-patterns='**/standardChrome.test.ts' && bun test ./src/main/updates.test.ts && bun test ./src/main/windows.test.ts && bun test ./src/main/platform/standardChrome.test.ts"
   },
   "dependencies": {
     "@scure/bip39": "2.4.0",
