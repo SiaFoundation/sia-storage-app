@@ -17,7 +17,7 @@ import { withFileLock } from './lock'
 export const REPO_ROOT = resolve(import.meta.dir, '../../..')
 export const SIM_HOME = process.env.SIM_HOME ?? '/tmp/sia-sim'
 
-export type DeviceKind = 'cli' | 'ios' | 'android' | 'desktop'
+export type DeviceKind = 'cli' | 'ios' | 'android' | 'desktop' | 'windows'
 
 /** A device kind that runs the mobile app. */
 export type PhoneKind = 'ios' | 'android'
@@ -25,12 +25,17 @@ export type PhoneKind = 'ios' | 'android'
 export type DeviceRecord = {
   kind: DeviceKind
   dir: string
-  /** For a phone, the simulator udid or emulator serial it runs on. */
+  /**
+   * For a phone, the simulator udid or emulator serial it runs on. For a
+   * Windows device, the checkout's worktree in the VM.
+   */
   target?: string
   /**
    * For a phone, set once the leased device has been wiped and the app
    * installed. A first start that fails before then leaves it unset, so the
    * next start wipes again rather than launching whatever the device held.
+   * For a desktop or Windows device, set once its first start has cleared
+   * what an earlier device left.
    */
   prepared?: boolean
   /**
@@ -46,6 +51,8 @@ export type DeviceRecord = {
    * the phone is handed back.
    */
   photos?: string[]
+  /** For a Windows device, the commit its running app was built from. */
+  commit?: string
   /** For a desktop device, the port its app serves the Chrome DevTools Protocol on. */
   debugPort?: number
   /**
