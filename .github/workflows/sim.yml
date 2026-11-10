@@ -1,0 +1,101 @@
+name: Sim
+
+# The apps' sim scenarios per platform, one workflow each: the phones in
+# sim-ios.yml and sim-android.yml. Too slow for every PR, so they run when the
+# `sim` label is added to a PR, or on demand.
+#
+# A labelled run tests the PR's head commit and posts each platform's result
+# on that commit as its sim/<platform> status. `bun sim attest <platform>`
+# posts the same status from a local run. The label comes off once every
+# platform has ended, so testing a later commit means adding it again. A push
+# while a run is going cancels it and removes the label. A cancelled or
+# timed-out run puts its platform's status back to what pr.yml posts and says
+# why, and the new head commit gets its statuses from pr.yml.
+#
+# GitHub serves a job's log only once the job ends, so each platform posts
+# its status as pending when it starts and with its progress once a minute
+# while its suite runs.
+
+permissions:
+  contents: read
+
+on:
+  # A manual run can take one platform and a few scenarios, to try a fix on
+  # the runner without every suite.
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Which platform to run
+        type: choice
+        options: [all, ios, android]
+        default: all
+      scenarios:
+        description: Scenario filters for bun sim run, or empty for the platform's whole suite
+        default: ''
+  pull_request:
+    types: [labeled, synchronize]
+
+# Each platform's concurrency group sits on its job, not on this workflow: a
+# run started by adding some other label skips every job here, and must not
+# cancel the run already going.
+jobs:
+  ios:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && contains(fromJSON('["all","ios"]'), inputs.platform)) ||
+      (github.event.action == 'labeled' && github.event.label.name == 'sim')
+    permissions:
+      contents: read
+      statuses: write
+    uses: ./.github/workflows/sim-ios.yml
+    with:
+      scenarios: ${{ inputs.scenarios }}
+
+  android:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && contains(fromJSON('["all","android"]'), inputs.platform)) ||
+      (github.event.action == 'labeled' && github.event.label.name == 'sim')
+    permissions:
+      contents: read
+      statuses: write
+    uses: ./.github/workflows/sim-android.yml
+    with:
+      scenarios: ${{ inputs.scenarios }}
+
+  # Runs on a push to a PR that has the label. Each leg joins one platform
+  # job's concurrency group, which cancels that job if it is still testing
+  # the previous commit.
+  stop:
+    if: >-
+      github.event_name == 'pull_request' && github.event.action == 'synchronize' &&
+      contains(github.event.pull_request.labels.*.name, 'sim')
+    strategy:
+      matrix:
+        group: [ios, ios-native, android]
+    concurrency:
+      group: sim-${{ matrix.group }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/sim" 2> /tmp/unlabel.err || grep -q 'HTTP 404' /tmp/unlabel.err
+
+  # One job removes the label after every platform ends. A platform that
+  # removed it on finishing would leave the others' stop legs with no label
+  # to see, and a push would then let them finish on the old commit.
+  unlabel:
+    needs: [ios, android]
+    if: >-
+      always() && github.event_name == 'pull_request' && github.event.action == 'labeled' &&
+      github.event.label.name == 'sim'
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/sim" 2> /tmp/unlabel.err || grep -q 'HTTP 404' /tmp/unlabel.err

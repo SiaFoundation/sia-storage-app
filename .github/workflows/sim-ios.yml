@@ -1,0 +1,192 @@
+name: Sim (iOS)
+
+# The mobile app's sim scenarios on iOS simulators, syncing with CLI devices
+# over the shared mock network, and the import module's Swift code against
+# the real Photos framework. sim.yml calls this when a PR gets the sim label or
+# on demand, and it posts the result as the sim/ios status.
+#
+# A smoke test launches one phone before the suite and fails the job within
+# 15 minutes when the app cannot start and connect, which would otherwise
+# cost every scenario its full timeout.
+
+on:
+  workflow_call:
+    inputs:
+      scenarios:
+        description: Scenario filters for bun sim run, or empty for the whole suite
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    # sim.yml's stop job joins this group to cancel a run when the PR moves on.
+    concurrency:
+      group: sim-ios-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      statuses: write
+    runs-on: tenki-macos-26-large
+    timeout-minutes: 90
+    steps:
+      - if: github.event_name == 'pull_request'
+        name: Post sim/ios as started
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state=pending -f context=sim/ios -f description='Starting: building and launching' \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > /dev/null
+      # A PR event checks out the merge of the PR into its base by default,
+      # and the status goes on the head commit, so that is the one tested.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - id: setup
+        uses: ./.github/actions/setup
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: '26.2'
+      # sim boots the newest runtime that runs its model, and this runner's set
+      # differs from a laptop's, so the log records which ones it had.
+      - name: List simulator runtimes
+        run: xcrun simctl list runtimes available
+      # The simulator build depends only on native inputs, which this hash
+      # covers, so most runs reuse it and only rebuild the JavaScript.
+      - id: native
+        run: echo "hash=$(bun -e "import { computeBuildHash } from './apps/mobile/scripts/buildCache.ts'; console.log(computeBuildHash())")" >> "$GITHUB_OUTPUT"
+      - id: cache
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: apps/mobile/.build-cache/ios-sim
+          key: ios-sim-${{ steps.native.outputs.hash }}
+      - if: steps.cache.outputs.cache-hit != 'true'
+        run: bun run mobile:dev:ios:simulator -- --no-run
+        # CocoaPods needs a UTF-8 locale and this runner sets none, so pod
+        # install fails and its error report then crashes on the encoding.
+        env:
+          LANG: en_US.UTF-8
+          LC_ALL: en_US.UTF-8
+      # Saved straight after the build, so a failing suite still keeps it.
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: apps/mobile/.build-cache/ios-sim
+          key: ios-sim-${{ steps.native.outputs.hash }}
+      # `down --clean` hands the phone back to the pool still booted, so the
+      # suite leases it rather than booting another. A failed launch keeps the
+      # session directory, with the launch screenshots and the mock network's
+      # log, for the upload.
+      - id: smoke
+        name: Launch smoke test
+        timeout-minutes: 15
+        shell: bash
+        env:
+          SIM_SESSION: smoke
+        run: |
+          bun sim up --cli= --ios phone 2>&1 | tee /tmp/sim-smoke.out
+          bun sim down --clean
+      # The runner runs nothing else, so both phones can boot at once where the
+      # default budget, sized for a laptop, would boot one at a time.
+      - id: suite
+        shell: bash
+        env:
+          SCENARIOS: ${{ inputs.scenarios || 'mobile/ photos/' }}
+          SIM_PHONE_MEMORY_GB: '12'
+          SIM_PROGRESS_FILE: /tmp/sim-progress.json
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        # ci-progress finishes a post in flight before it exits, and the trap
+        # waits for that, so no pending post lands after the result.
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            bun apps/sim/src/cli.ts ci-progress ios &
+            poster=$!
+            trap 'kill "$poster" 2> /dev/null || true; wait "$poster" || true' EXIT
+          fi
+          bun sim run $SCENARIOS --jobs 2 2>&1 | tee /tmp/sim-suite.out
+      # A failure before the suite ran, such as a failed build, also posts
+      # failure, so the PR shows the labelled run did not pass.
+      - if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        name: Post sim/ios
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          STATE: ${{ steps.suite.outcome == 'success' && 'success' || 'failure' }}
+          SMOKE: ${{ steps.smoke.outcome }}
+        run: |
+          summary=$(grep -E '^run [^ ]+: [0-9]+ passed' /tmp/sim-suite.out 2>/dev/null | tail -n 1 | sed -E 's/^run [^ ]+: //')
+          if [ "$SMOKE" = failure ]; then
+            summary="Launch smoke test failed: $(grep -v '^error: script' /tmp/sim-smoke.out 2>/dev/null | tail -n 1)"
+          fi
+          description="${summary:-The run failed before the suite finished} on tenki-macos-26-large"
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state="$STATE" -f context=sim/ios -f description="${description:0:139}" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > /dev/null
+      # A cancelled run leaves its last pending status on the commit. On a PR
+      # other than the release PR that would block a merge nothing requires, so
+      # the status goes back to what the PR workflow posts.
+      - if: cancelled() && github.event_name == 'pull_request'
+        name: Restore sim/ios after a cancel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          RELEASE: ${{ github.head_ref == 'release' }}
+        run: |
+          if [ "$RELEASE" = true ]; then
+            state=pending description='Waiting for a sim run: the labelled run was cancelled or timed out'
+          else
+            state=success description='Not required for this PR. The labelled run was cancelled or timed out'
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state="$state" -f context=sim/ios -f description="$description" > /dev/null
+      # Every run uploads its report, with each step's time, and the kept
+      # session of every scenario that did not pass, so a passing run can be
+      # compared with a failing one.
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sim-ios-runs
+          path: |
+            /tmp/sia-sim/runs
+            /tmp/sia-sim/run-*
+            /tmp/sia-sim/smoke
+          retention-days: 7
+      # Skipped when Bun never installed, which would only add a second error.
+      - if: always() && steps.setup.outcome == 'success'
+        run: bun sim prune --all --force
+
+  # The import module's Swift code against the real Photos framework on a
+  # simulator: edited photos with a separate render, cancelled copies and ids
+  # with no photo, which sim cannot put in a photo library. A job of its own
+  # rather than a step in `suite`, because it builds its own Xcode scheme and
+  # patches the Podfile, and the app build that job caches must not see either.
+  native:
+    concurrency:
+      group: sim-ios-native-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+    runs-on: tenki-macos-26-large
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: ./.github/actions/setup
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: '26.2'
+      - run: bunx expo prebuild --platform ios --no-install
+        working-directory: apps/mobile
+      - run: bun run mobile:test:native:ios:sim
+        # CocoaPods needs a UTF-8 locale and this runner sets none.
+        env:
+          LANG: en_US.UTF-8
+          LC_ALL: en_US.UTF-8

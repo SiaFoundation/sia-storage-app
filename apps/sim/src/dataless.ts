@@ -13,7 +13,7 @@
  * from Finder or the Dock, has it on, which is why the same run passes there.
  *
  * The policy is per process and inherited by children spawned after it is set,
- * so it is set where a desktop device is created and before `attest desktop`
+ * so it is set where a desktop device is created and before `attest macos`
  * starts its run.
  */
 import { dlopen, FFIType } from 'bun:ffi'

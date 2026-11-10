@@ -178,10 +178,10 @@ anything on a screen.
 | Rust                  | `cargo test --workspace`                        | the Rust core                                                         | yes                  |
 | Native unit (iOS)     | `bun run mobile:test:native:ios`                | Swift logic; standalone SwiftPM package                               | yes                  |
 | Native unit (Android) | `bun run mobile:test:native:android`            | Kotlin under Robolectric; needs a prebuilt `android/`                 | yes                  |
-| Native device (iOS)   | `bun run mobile:test:native:ios:sim`            | real Photos-framework behavior                                        | on label and weekly  |
+| Native device (iOS)   | `bun run mobile:test:native:ios:sim`            | real Photos-framework behavior                                        | on label             |
 | Sim, CLI devices      | `bun sim run sync/ resilience/ finder/`         | real daemons syncing, killed and offline together                     | yes                  |
 | Benchmarks            | `bun run --cwd apps/benchmark bench:ci`         | core database calls: statement counts, query plans, time against base | on PRs touching core |
-| Sim, phones           | `bun sim run mobile/ photos/ [--phone android]` | the built app on simulators and emulators, suspended and killed       | on label and weekly  |
+| Sim, phones           | `bun sim run mobile/ photos/ [--phone android]` | the built app on simulators and emulators, suspended and killed       | on label             |
 | Sim, desktop          | `bun sim run desktop/`                          | the installed test app: sign-in, its windows and Finder folder        | no                   |
 
 The benchmark check compares statement counts, query plans and results exactly against
@@ -192,8 +192,8 @@ only once `baseline/timing.json` gives it a tolerance, which `bench:calibrate` c
 from the reports of CI runs whose two sides ran the same core.
 
 The desktop tier is local-only and rots unless deliberately run. The native device tier
-and the phone scenarios run in CI only on the `sim-mobile` label and weekly, so run them,
-or add the label, before landing anything that touches native code or the import flow,
+and the phone scenarios run in CI only on the `sim` label, so run them, or
+add the label, before landing anything that touches native code or the import flow,
 and run the desktop scenarios before landing a change to the desktop app or its
 extension.
 

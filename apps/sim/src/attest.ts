@@ -1,20 +1,20 @@
 /**
  * What `sim attest` posts: the suite each platform runs, the counts read back
  * from the summary line `sim run` prints last, and the commit status built
- * from them. Main's branch rule requires the sim/ios, sim/android and
- * sim/desktop statuses, and pr.yml leaves them pending on the release PR
- * until a run posts a result for its head commit.
+ * from them. Each platform the apps run on has one status, `sim/<platform>`.
+ * pr.yml leaves them pending on the release PR until a run posts a result
+ * for its head commit.
  */
 import type { Progress } from './report'
 
-export const ATTEST_PLATFORMS = ['ios', 'android', 'desktop'] as const
+export const ATTEST_PLATFORMS = ['ios', 'android', 'macos'] as const
 export type AttestPlatform = (typeof ATTEST_PLATFORMS)[number]
 
-/** The filters and options passed to `sim run`, matching what sim-mobile.yml runs in CI. */
+/** The filters and options passed to `sim run`, matching what the iOS and Android workflows run in CI. */
 export const ATTEST_SUITES: Record<AttestPlatform, { filters: string[]; options: string[] }> = {
   ios: { filters: ['mobile/', 'photos/'], options: [] },
   android: { filters: ['mobile/', 'photos/'], options: ['--phone', 'android'] },
-  desktop: { filters: ['desktop/'], options: [] },
+  macos: { filters: ['desktop/'], options: [] },
 }
 
 export type RunSummary = {
