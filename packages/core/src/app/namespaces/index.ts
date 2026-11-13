@@ -7,6 +7,9 @@ import type { StorageAdapter } from '../../adapters/storage'
 import type { ThumbnailAdapter } from '../../adapters/thumbnail'
 import type { FsIOAdapter } from '../../services/fsFileUri'
 import { LocalCopyLock } from '../../services/localCopyLock'
+import { tidyCopies } from '../../services/localCopies'
+import { restoreFromMount } from '../../services/mountRestore'
+import { MountHint, syncMount } from '../../services/mountSync'
 import { type MemoryReader, TransferMemoryBudget } from '../../services/transferMemoryBudget'
 import type { UploaderAdapters, UploadManager } from '../../services/uploader'
 import { restampAllFiles } from '../../db/operations/providerChanges'
@@ -181,6 +184,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
 
   const transferBudget = new TransferMemoryBudget(adapters.readMemory ?? (() => null))
   const localCopyLock = new LocalCopyLock()
+  const mountHint = new MountHint()
   const downloadsNamespace = buildDownloadsNamespace(
     adapters.db,
     adapters.fsIO,
@@ -291,8 +295,14 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       downloadObject: adapters.downloadObject,
       transferBudget,
       localCopyLock,
+      mountHint,
     }),
     mount: {
+      resend: async (stackIds, signal) => {
+        const mount = await settingsNamespace.getMount()
+        if (!mount || !adapters.mount) return null
+        return adapters.mount.resend(mount, stackIds, signal)
+      },
       changes: async (cursor, signal) => {
         const mount = await settingsNamespace.getMount()
         if (!mount || !adapters.mount) return null
@@ -345,9 +355,15 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     caches,
   }
 
+  // When each file the system was asked to hand back may be asked for again.
+  const restoreAskAgainAt = new Map<string, number>()
   const eviction = evictionRunner(
     (config, signal) => runCacheEviction(service, config, signal),
     () => configuredCacheEviction(service),
+    async (signal) => {
+      await syncMount(service, signal)
+      await tidyCopies(service, { signal })
+    },
   )
 
   const internal: AppServiceInternal = {
@@ -365,6 +381,13 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     withTransaction,
     events,
     evictCache: (signal) => eviction.evict(signal),
+    syncMountIfHinted: async (signal) => {
+      // A running pass may be past its read of the mount's files, so the hint
+      // waits for the next check rather than being spent on it.
+      if (!adapters.mount || eviction.busy() || !mountHint.take(Date.now())) return
+      await eviction.walk(signal)
+    },
+    restoreFromMount: (signal) => restoreFromMount(service, restoreAskAgainAt, signal),
     stopEviction: () => eviction.stop(),
   }
 

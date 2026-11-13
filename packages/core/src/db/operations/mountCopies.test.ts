@@ -4,7 +4,9 @@ import { insertObject } from './localObjects'
 import {
   addMountRange,
   deleteMountCopies,
+  querySecondCopies,
   queryMountOnlyBytes,
+  queryStrandedInMount,
   markMountCopiesWhole,
   queryStaleMountStackIds,
   queryWholeMountStackIds,
@@ -218,5 +220,47 @@ describe('markMountCopiesWhole and queryStaleMountStackIds', () => {
     // until the system fetches the new version.
     expect((await queryStaleMountStackIds(db())).sort()).toEqual([trashed, stack].sort())
     expect(await queryWholeMountStackIds(db())).toEqual(expect.arrayContaining([whole]))
+  })
+})
+
+describe('querySecondCopies', () => {
+  it('finds a cache copy only when the version is uploaded and whole in the mount', async () => {
+    const both = await addFile('both', { cached: true })
+    await hold(both, 'both')
+    const waiting = await addFile('waiting', { cached: true, uploaded: false })
+    await hold(waiting, 'waiting')
+    await addFile('cacheOnly', { cached: true })
+    const partial = await addFile('partial', { cached: true })
+    await addMountRange(db(), {
+      stackId: partial,
+      fileId: 'partial',
+      fileSize: 100,
+      bytes: 10,
+      usedAt: 1,
+    })
+
+    const found = async (fileIds?: string[]) =>
+      (await querySecondCopies(db(), INDEXER, { fileIds, after: null, limit: 10 })).map(
+        (r) => r.fileId,
+      )
+    expect(await found()).toEqual(['both'])
+    expect(await found(['both', 'waiting', 'cacheOnly', 'partial'])).toEqual(['both'])
+    expect(await found(['waiting'])).toEqual([])
+  })
+})
+
+describe('queryStrandedInMount', () => {
+  it('finds files only the mount holds that are not on the indexer', async () => {
+    const stranded = await addFile('stranded', { uploaded: false })
+    await insertObject(db(), makeObject('stranded', 'https://old.example.com'))
+    await hold(stranded, 'stranded')
+    const waiting = await addFile('waiting', { uploaded: false, cached: true })
+    await hold(waiting, 'waiting')
+    const fine = await addFile('fine')
+    await hold(fine, 'fine')
+
+    expect(await queryStrandedInMount(db(), INDEXER, 10)).toEqual([
+      { stackId: stranded, fileId: 'stranded' },
+    ])
   })
 })

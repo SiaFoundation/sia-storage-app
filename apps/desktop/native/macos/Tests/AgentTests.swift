@@ -165,7 +165,7 @@ final class AgentTests: XCTestCase {
             _ = try await Agent.run(["mount"], registry: registry)
             XCTFail("expected a usage error")
         } catch let error as AgentError {
-            XCTAssertEqual(error, .usage("register | hide | show | unregister | list | materialized"))
+            XCTAssertEqual(error, .usage("register | hide | show | unregister | list | resend | materialized"))
         } catch {
             XCTFail("expected a usage error, got \(error)")
         }
@@ -210,6 +210,58 @@ final class AgentTests: XCTestCase {
         let parsed = try JSONSerialization.jsonObject(with: Data(result.json.utf8))
         let preserved = (parsed as? [String: Any])?["preserved"] as? String
         XCTAssertEqual(preserved, #"/Volumes/od\d/a"b"#)
+    }
+}
+
+/// Answers each item from a table, and fails `open` for any other domain.
+private struct TableCopies: FinderCopies {
+    let domainId: String
+    let answers: [String: Error]
+
+    func open(domainId: String) async throws -> FinderDomainCopies {
+        guard domainId == self.domainId else { throw AgentError.noSuchDomain(domainId) }
+        return TableDomain(answers: answers)
+    }
+}
+
+private struct TableDomain: FinderDomainCopies, @unchecked Sendable {
+    let answers: [String: Error]
+    func resend(itemId: String) async -> Error? { answers[itemId] }
+}
+
+final class ResendTests: XCTestCase {
+    func testEachSystemAnswerMapsToTheResultTheDaemonActsOn() {
+        let cases: [(Error?, ResendResult)] = [
+            (nil, .asked),
+            (NSError(domain: NSCocoaErrorDomain, code: NSUbiquitousFileUnavailableError), .notHydrated),
+            (NSError(domain: NSFileProviderErrorDomain, code: NSFileProviderError.noSuchItem.rawValue), .notHydrated),
+            (NSError(domain: NSPOSIXErrorDomain, code: Int(EIO)), .failed),
+        ]
+        for (error, expected) in cases {
+            XCTAssertEqual(ResendResult(error), expected, "\(String(describing: error))")
+        }
+    }
+
+    func testTheResendVerbWritesOneResultPerItemToTheGivenFile() async throws {
+        let out = FileManager.default.temporaryDirectory
+            .appendingPathComponent("resend-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: out) }
+        let copies = TableCopies(
+            domainId: "sia-dev",
+            answers: [
+                "cloud-only": NSError(
+                    domain: NSCocoaErrorDomain, code: NSUbiquitousFileUnavailableError)
+            ])
+
+        let result = try await Agent.run(
+            ["resend", "sia-dev", out.path, "held", "cloud-only"], registry: RecordingRegistry(),
+            copies: copies)
+
+        XCTAssertTrue(result.ok)
+        let parsed = try JSONSerialization.jsonObject(with: Data(contentsOf: out)) as? [String: Any]
+        let entries = parsed?["results"] as? [[String: String]] ?? []
+        let byId = Dictionary(uniqueKeysWithValues: entries.map { ($0["id"]!, $0["result"]!) })
+        XCTAssertEqual(byId, ["held": "asked", "cloud-only": "not-hydrated"])
     }
 }
 

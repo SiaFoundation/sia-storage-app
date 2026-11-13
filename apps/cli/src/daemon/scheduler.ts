@@ -1,6 +1,8 @@
 import {
   DB_OPTIMIZE_INTERVAL,
   FS_EVICTION_FREQUENCY_DAEMON,
+  MOUNT_HINT_CHECK_INTERVAL,
+  MOUNT_RESTORE_INTERVAL,
   PROVIDER_THUMBNAIL_RETRY_INTERVAL,
   PRUNE_SLABS_INTERVAL,
   SHARE_LINKS_INTERVAL,
@@ -94,6 +96,21 @@ export function initializeScheduler(app: CliApp): { scheduler: ServiceScheduler 
       worker: async (signal: AbortSignal) => {
         await app.internal.evictCache(signal)
       },
+    },
+    {
+      // The extension says when the system wrote files to disk or dropped
+      // them. The pass reads Finder's files anyway, so this only shortens
+      // how long the record of what Finder holds stays out of date.
+      name: 'mountHint',
+      interval: MOUNT_HINT_CHECK_INTERVAL,
+      worker: (signal: AbortSignal) => app.internal.syncMountIfHinted(signal),
+    },
+    {
+      // After the indexer is changed, a file only Finder holds has to come
+      // back into the cache before it can upload to the new one.
+      name: 'mountRestore',
+      interval: MOUNT_RESTORE_INTERVAL,
+      worker: whenConnected((signal: AbortSignal) => app.internal.restoreFromMount(signal)),
     },
     {
       name: 'logRotation',

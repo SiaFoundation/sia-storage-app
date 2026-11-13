@@ -6,12 +6,13 @@
  * of each file opened or created in the folder, one version per file. It
  * takes a fetched file out of the handoff directory. It fetches a file again
  * when the library reports a new version of one it holds. It removes copies
- * on its own, and answers what a mount adapter asks: list what you hold.
+ * on its own, and answers the two things a mount adapter asks: list what you
+ * hold, hand these files back.
  *
  * Every call into the app goes through `app.provider`, as the extension's
  * calls do, so a test built on this takes the same paths the real one takes.
  */
-import type { MountAdapter, MountChanges } from '@siastorage/core/adapters'
+import type { MountAdapter, MountChanges, ResendResult } from '@siastorage/core/adapters'
 import type { ProviderItem } from '@siastorage/core/types'
 import * as nodeFs from 'fs'
 import * as path from 'path'
@@ -30,6 +31,8 @@ export function createFakeFinder(handoffDir: string) {
   let readableFrom = 0
   /** Ranges read of files not held whole, with how many bytes of each are in. */
   const partial = new Map<string, { bytes: Buffer; got: number; version: string }>()
+  /** Writes a resend started, which arrive on their own as the system's do. */
+  const resends: Promise<unknown>[] = []
   let device: TestApp | null = null
 
   const app = () => {
@@ -54,7 +57,7 @@ export function createFakeFinder(handoffDir: string) {
 
   /**
    * Downloads a file whole and takes it out of the handoff directory. The app
-   * learns that the folder holds it from its next read of the list.
+   * hears that the folder holds it only as a hint to read the list again.
    */
   async function fetch(id: string): Promise<Buffer> {
     const dest = path.join(handoffDir, `fetch-${crypto.randomUUID()}`)
@@ -62,10 +65,21 @@ export function createFakeFinder(handoffDir: string) {
     const bytes = nodeFs.readFileSync(dest)
     nodeFs.rmSync(dest)
     keep(item.id, bytes, item.contentVersion)
+    await app().provider.mountChanged()
     return bytes
   }
 
   const adapter: MountAdapter = {
+    async resend(_mount, stackIds) {
+      const results: Record<string, ResendResult> = {}
+      for (const id of stackIds) {
+        const copy = held.get(id)
+        results[id] = copy ? 'asked' : 'not-hydrated'
+        if (copy) resends.push(app().provider.write(id, stage(copy.bytes)))
+      }
+      return results
+    },
+
     async changes(_mount, cursor): Promise<MountChanges> {
       if (cursor === null || Number(cursor) < readableFrom) {
         return { cursor: String(seq), full: [...held.keys()] }
@@ -127,6 +141,7 @@ export function createFakeFinder(handoffDir: string) {
       if (parts.got >= served.item.size) {
         partial.delete(id)
         keep(id, parts.bytes, parts.version)
+        await app().provider.mountChanged()
       }
       return { bytes, item: served.item }
     },
@@ -169,9 +184,15 @@ export function createFakeFinder(handoffDir: string) {
       return fetched
     },
 
-    /** Removes a copy the way the system does on its own, with no word to the app. */
-    drop(id: string): void {
+    /** Removes a copy the way the system does on its own, with no word to the app but a hint. */
+    async drop(id: string): Promise<void> {
       drop(id)
+      await app().provider.mountChanged()
+    },
+
+    /** Waits for the writes a resend started. */
+    async settle(): Promise<void> {
+      await Promise.all(resends.splice(0))
     },
   }
 }

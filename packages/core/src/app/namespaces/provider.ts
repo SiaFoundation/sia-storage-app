@@ -36,6 +36,7 @@ import type { FileRecord, ThumbSize } from '../../types/files'
 import type { AppService, AppServiceInternal } from '../service'
 import type { TransferMemoryBudget } from '../../services/transferMemoryBudget'
 import type { LocalCopyLock } from '../../services/localCopyLock'
+import type { MountHint } from '../../services/mountSync'
 import type { DownloadPriority } from '../stores'
 import type { DownloadObjectAdapter } from './downloads'
 import { ANCHOR_START, formatAnchor, parseAnchor, type ProviderAnchor } from '../providerAnchor'
@@ -110,6 +111,8 @@ export type ProviderNamespaceDeps = {
   downloadObject: DownloadObjectAdapter
   transferBudget: TransferMemoryBudget
   localCopyLock: LocalCopyLock
+  /** The integration's notice that the mount's files changed, read by the daemon's scheduler. */
+  mountHint: MountHint
 }
 
 /** Transfer flags for a batch of files, resolved in one pass over the library. */
@@ -891,6 +894,29 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     await getService().mountCopies.upsertWhole({ stackId, fileId, bytes, usedAt: Date.now() })
   }
 
+  /**
+   * Keeps bytes the system handed back as the cache copy of `row`, when they
+   * are its bytes and it needs them: it has no cache copy and no object on
+   * the current indexer, so the uploader could not otherwise send it
+   * (`mountRestore.ts`). Resolves true when the file at `stagedUri` was kept.
+   */
+  async function restoreCopy(
+    row: ProviderChangeRow,
+    stagedUri: string,
+    staged: { size: number; hash: string },
+  ): Promise<boolean> {
+    if (row.hash !== staged.hash || !(await mounted()) || !fsIO.adoptFile) return false
+    const service = getService()
+    if ((await service.fs.readMeta(row.id)) !== null) return false
+    const indexerURL = await service.settings.getIndexerURL()
+    if ((await service.localObjects.countForFileOnIndexer(row.id, indexerURL)) > 0) return false
+    await fsIO.adoptFile({ id: row.id, type: row.type }, stagedUri, { hash: false })
+    const now = Date.now()
+    await service.fs.upsertMeta({ fileId: row.id, size: staged.size, addedAt: now, usedAt: now })
+    await service.uploader.enqueueByIds([row.id])
+    return true
+  }
+
   /** Reads one item. Hoisted because other verbs read back through it. */
   async function item(id: string): Promise<ProviderItem | null> {
     const service = getService()
@@ -1106,8 +1132,8 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       if (await mounted()) {
         // Recorded as bytes handed over, not as a whole copy. The system can
         // give up on a fetch after the file was placed for it, so the row
-        // becomes whole only once the system lists the file among those it
-        // holds.
+        // becomes whole, and the cache copy goes, only once the system lists
+        // the file among those it holds.
         await getService().mountCopies.addRange({
           stackId: row.stackId,
           fileId,
@@ -1309,10 +1335,18 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
         throw e
       }
       if (outcome !== 'added') {
-        await fsIO.remove(versionId, replaced.type)
         // Apps often rewrite a file without changing it. A version per such
         // save would upload and bill the same bytes again.
         const current = outcome === 'unchanged' ? await ops.queryProviderItem(db, id) : null
+        const stagedUri = fsIO.uri(versionId, replaced.type)
+        const kept =
+          current !== null &&
+          (await restoreCopy(current, stagedUri, adopted).catch(async (e) => {
+            // As above: nothing else would ever remove the staged bytes.
+            await fsIO.remove(versionId, replaced.type).catch(() => {})
+            throw e
+          }))
+        if (!kept) await fsIO.remove(versionId, replaced.type)
         const unchanged = current ? await item(id) : null
         if (!current || !unchanged) throw new Error(`No file with id ${id}`)
         // The system holds exactly the bytes the current version has.
@@ -1372,6 +1406,10 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       // The system now knows these bytes by the merged file's id.
       if (updated.id !== id) await service.mountCopies.rekey(file.id, updated.id)
       return updated
+    },
+
+    async mountChanged() {
+      deps.mountHint.hint()
     },
 
     async trash(id) {
