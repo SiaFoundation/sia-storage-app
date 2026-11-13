@@ -2,6 +2,29 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.15.1-rc.2 (2026-11-13)
+
+### Fixes
+
+- The app deletes copies of files its library has no record of, such as those an earlier version left behind after clearing local data, once a day while it is open, and Clear local files reports the space it actually freed and finishes much sooner on a large library. `fs.liveFileTypes` looks each id up by primary key, so its time no longer grows with the size of the library. `runOrphanScanner` takes `spareWrittenWithin`, reports `bytesFreed` and skips files being written, `fs.findOrphanedFileIds` takes `writtenSince`, `fs.filesBeingWritten()` lists the ids `writeFileData`, `adoptFile` and `copyFile` are writing, and `fs.removeFileByPath` returns the bytes it removed.
+- Photos that finish uploading during an import are removed by the regular cache cleanup instead of staying on the device for a day, once their thumbnails are made, and scrolling past photos in the library no longer keeps their copies on the phone. Only opening, sharing or saving a file counts as using it. `fs.getFileUri` counts a read as a use only when passed `{ recordUse: true }`, and `fs.evictionCandidates` takes the thumbnail types to wait for.
+- While the phone is charging, the app's background run clears space from cached copies first, then keeps going until imports, the photo library walk, library sync and metadata changes are done, and checks for library changes at least once, instead of stopping as soon as nothing is waiting to upload. Background runs also remove stranded local copies once a day, and stop early when the app cannot reach the network or nothing is moving, instead of holding the phone awake. `imports.activeCopies()` reports the import files being copied and the bytes copied so far, and the sync state counts finished sync-down runs in `syncDownRuns`.
+- A deleted folder no longer stays behind empty or comes back on your other devices. It goes to the trash as one item, and restoring it, or a file trashed from it earlier, puts the files back in the folders they came from, creating them again if needed. Trashing the last file in a folder removes the folder too, except in the Finder folder on the Mac, which keeps it until you delete it.
+- Cache eviction and Clear local files finish when some files cannot be deleted, instead of retrying the same files until they are stopped. `fs.evictionCandidates`, `fs.nonCurrentCachedFiles` and `fs.trashedCachedFiles` take a cursor and return each row's `usedAt`.
+- A file's local copy is no longer removed to save space, and Finder no longer treats it as backed up, until the file is on the indexer you use now, so switching indexers cannot leave a file with no copy the new indexer can get.
+- A photo library import removes the copies of photos it has already uploaded as it goes, so it no longer fills the device and stops to wait for free space.
+- While uploads or sync keep changing the library, the grid's loading spinner clears once the next page arrives, where it could stay stuck until the app restarted. `useFileList` returns `isLoadingMore` and `useLoadMore` takes it in place of `data` and `isValidating`, and list reloads and `invalidateAll()` refreshes each run one at a time, with one more after for changes made meanwhile.
+- The library grid, its counts and the photo viewer load faster in large libraries, for every sort order. `buildLibraryQueryParts` returns `indexedBy` clauses for reads over the whole library, and the name sort no longer moves files without a `nameSortKey` to the end.
+- Backed-up files kept on the phone are removed once they have gone an hour unused instead of a day, so the app frees space sooner.
+- Clearing local data, signing out and `sia reset` delete the device's copies of the library they drop. Before, those copies stayed on the device and no cleanup could find them again. `sia reset` stops without deleting anything when the daemon does not shut down. `downloads.cancelAll()` resolves once every cancelled download has settled.
+- Share Link lists the files being shared, and the files on a link once it is made, by folder and then by name, in the same order on every device.
+- Putting a file in the trash, on its own or by deleting its folder, takes it off your share links, and restoring it no longer shares it again.
+- The status says "Waiting to upload" while files on the device have not uploaded yet, instead of "Up to date" on desktop and "Importing" on mobile. `@siastorage/core/lib/uploadActivity` adds `summarizeUploads` and `filesWaitingToUpload` for building that status.
+- The status says when the account's storage is full and how many files are waiting on it, and how many files could not upload while they wait to be tried again. A file saved while the account is full waits for room instead of failing. `app.uploads.getState()` reports `storageFull`, and `files.query` takes `ids` to limit a query to those rows.
+- A file trashed before it finishes uploading leaves the upload queue and is not uploaded, and neither are its thumbnails. A restored file waits to upload like any other new file.
+- A file that fails to upload is tried again after a delay that grows with each failure, instead of over and over without a pause. A file that can't be read waits up to 30 minutes, a network failure up to 2 minutes, and every file is tried again as soon as the connection comes back.
+- The photo viewer lets you swipe once its list of photos loads after a failed try, where it stayed on the opened photo until the app restarted.
+
 ## 1.15.1-rc.1 (2026-11-05)
 
 ### Fixes

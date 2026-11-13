@@ -1,3 +1,32 @@
+## 0.0.2-rc.2 (2026-11-13)
+
+### Features
+
+- `sia config set cacheMaxBytes` and `sia config set cacheMinAge` change how much the local cache may hold and how long a file must go unused before it can be removed, and the status window shows how much is cached against the limit, with how much of it hasn't uploaded yet and so stays until it does.
+- The files cached on this computer are kept under 4 GB by removing backed-up files that have not been used for an hour, and they download again when opened.
+- The status window has Clear Local Files, which removes this Mac's copies of files that are already backed up and keeps the rest.
+- Sia Storage opens when you log in, so the Finder folder and syncing are back after a restart without opening the app. It is turned on the first time the app has an account, and the Open at login switch in the status window turns it off.
+- The menu bar popover has an Activity tab listing the files added most recently and whether each is uploaded yet, with buttons to show a file in Finder or copy a share link to it in one click, using link settings you can change beside the button.
+- Finder shows each photo and video's own thumbnail in the Sia Storage folder, including files that are not downloaded to the Mac.
+
+### Fixes
+
+- A deleted folder no longer stays behind empty or comes back on your other devices. It goes to the trash as one item, and restoring it, or a file trashed from it earlier, puts the files back in the folders they came from, creating them again if needed. Trashing the last file in a folder removes the folder too, except in the Finder folder on the Mac, which keeps it until you delete it.
+- Finder shows which files are still uploading.
+- The app's window is dark in dark mode and white in light mode, like other Mac windows, instead of a washed-out gray that made everything in it harder to read.
+- Restart installs a downloaded update and reopens the app, instead of sometimes doing nothing. If the install fails, the app says so and Restart can be tried again.
+- The app no longer asks you to sign in again when its background service is still starting or busy, such as right after an update, and a window opened before the service answers shows your library once it does.
+- The background sync process shows as "Sia Storage Sync" in Activity Monitor instead of "bun".
+- An update waiting for a restart no longer goes stale: the app keeps checking for releases and downloads a newer one in the background, so one restart installs the newest version.
+- A file's local copy is no longer removed to save space, and Finder no longer treats it as backed up, until the file is on the indexer you use now, so switching indexers cannot leave a file with no copy the new indexer can get.
+- Opening a file from Finder no longer fails when the cache removes its copy at the same moment, and a download is never cut short by cache cleanup. `fs.removeFile` takes `skipIfLocked` and resolves whether it removed the file.
+- Share Link lists the files being shared, and the files on a link once it is made, by folder and then by name, in the same order on every device.
+- Putting a file in the trash, on its own or by deleting its folder, takes it off your share links, and restoring it no longer shares it again.
+- The status says "Waiting to upload" while files on the device have not uploaded yet, instead of "Up to date" on desktop and "Importing" on mobile. `@siastorage/core/lib/uploadActivity` adds `summarizeUploads` and `filesWaitingToUpload` for building that status.
+- The status says when the account's storage is full and how many files are waiting on it, and how many files could not upload while they wait to be tried again. A file saved while the account is full waits for room instead of failing. `app.uploads.getState()` reports `storageFull`, and `files.query` takes `ids` to limit a query to those rows.
+- A file trashed before it finishes uploading leaves the upload queue and is not uploaded, and neither are its thumbnails. A restored file waits to upload like any other new file.
+- A file that fails to upload is tried again after a delay that grows with each failure, instead of over and over without a pause. A file that can't be read waits up to 30 minutes, a network failure up to 2 minutes, and every file is tried again as soon as the connection comes back.
+
 ## 0.0.2-rc.1 (2026-11-05)
 
 ### Features
