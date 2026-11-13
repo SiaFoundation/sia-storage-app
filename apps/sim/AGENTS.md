@@ -364,15 +364,23 @@ machine. A PR description is different, as described below.
 
 ## CI and attestation
 
-Every PR runs the CLI-device scenarios in CI. The platform suites, iOS and
-Android, run in CI only when the `sim` label is added to a PR or
-on demand, each in its own workflow (`sim-ios.yml`, `sim-android.yml`) that
-`sim.yml` starts. A push while they run cancels them. A labelled run posts each
-platform's result on the commit it tested as its `sim/<platform>` commit
-status, and the label comes off when every platform has ended. Running `sim.yml`
-by hand takes a platform and scenario filters, to try a fix on the runner
-without every suite. Every platform run uploads its report and the sessions it
-kept, and the CLI-device run uploads them when it fails.
+Every PR runs the CLI-device scenarios in CI. The platform suites, iOS,
+Android and macOS, run in CI only when the `sim` label is added to a PR or
+on demand, each in its own workflow (`sim-ios.yml`,
+`sim-android.yml`, `sim-macos.yml`) that `sim.yml` starts. A push while they
+run cancels them. A labelled run posts each platform's result on the commit
+it tested as its `sim/<platform>` commit status, and the label comes off when
+every platform has ended. Running `sim.yml` by hand takes a platform and
+scenario filters, to try a fix on the runner without every suite. Every
+platform run uploads its report and the sessions it kept, and the CLI-device
+run uploads them when it fails. A PR from a fork gets no macOS run, since its
+run has no access to the signing secrets.
+
+The macOS run signs the test app with the team's Developer ID certificate,
+since a runner is never one of the Macs a development profile names, and
+`scripts/macos-ci-setup.ts` grants the runner the privacy permissions sim
+needs and switches the app's Finder folder on, both of which a person does
+once in System Settings on their own Mac.
 
 `bun sim attest <ios|android|macos>` runs that platform's suite on this
 checkout and posts the same status from the local run. It finds the PR from the
@@ -380,8 +388,8 @@ current branch, or takes it as `--pr <number>`, which a checkout on a detached
 HEAD needs. It refuses unless the
 tracked files have no uncommitted changes and local HEAD is the PR's head, and
 it posts nothing when the run is interrupted or skips a scenario. The release
-PR needs `sim/ios` and `sim/android` on its head commit, and `sim/macos` when
-it changes the desktop app's version. Every other PR gets them as not required.
+PR needs every platform's status on its head commit. Every other PR gets them
+as not required.
 
 ## Reporting a fix
 

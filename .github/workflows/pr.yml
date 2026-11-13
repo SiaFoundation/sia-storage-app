@@ -201,11 +201,10 @@ jobs:
           retention-days: 7
 
   # Each platform the apps run on has a sim/<platform> status: ios, android
-  # and macos. On the release PR this job leaves the phone statuses pending,
-  # and macOS's when the PR changes the desktop version, until sim.yml on a
-  # PR labelled sim, or `bun sim attest <platform>`, posts a result for that
-  # commit. It posts every other status as passed, so a rule requiring them
-  # holds back only the release PR.
+  # and macos. On the release PR this job leaves them pending until sim.yml
+  # on a PR labelled sim, or `bun sim attest <platform>`, posts a result for
+  # that commit. On any other PR it posts them as passed, so a rule requiring
+  # them holds back only the release PR.
   sim-status:
     runs-on: ubuntu-latest
     # A fork's token cannot post statuses, so a fork PR gets none from here.
@@ -220,30 +219,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           RELEASE: ${{ github.head_ref == 'release' }}
         run: |
-          post() {
+          # A status already on this commit stays, other than the placeholder
+          # below, so reopening the release PR or running this workflow again
+          # does not put a posted result back to pending.
+          posted=$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/status" \
+            --jq '.statuses[] | select(.description != "Not required for this PR") | .context')
+          for platform in ios android macos; do
+            if [ "$RELEASE" = true ]; then
+              grep -qx "sim/$platform" <<< "$posted" && continue
+              state=pending description="Waiting for a sim run: add the sim label or run bun sim attest $platform"
+            else
+              state=success description='Not required for this PR'
+            fi
             gh api "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
-              -f state="$2" -f context="sim/$1" -f description="$3" > /dev/null
-          }
-          desktop_version() {
-            gh api "repos/$GITHUB_REPOSITORY/contents/apps/desktop/package.json?ref=$1" \
-              -H 'Accept: application/vnd.github.raw+json' | jq -r .version
-          }
-          if [ "$RELEASE" != true ]; then
-            for platform in ios android macos; do post "$platform" success 'Not required for this PR'; done
-            exit 0
-          fi
-          post ios pending 'Waiting for a sim run: add the sim label or run bun sim attest ios'
-          post android pending 'Waiting for a sim run: add the sim label or run bun sim attest android'
-          base=$(desktop_version "$BASE_SHA")
-          head=$(desktop_version "$HEAD_SHA")
-          if [ "$base" != "$head" ]; then
-            post macos pending "Waiting for a sim run of desktop $head: run bun sim attest macos"
-          else
-            post macos success 'Not required: no desktop release in this PR'
-          fi
+              -f state="$state" -f context="sim/$platform" -f description="$description" > /dev/null
+          done
 
   build-cli:
     # Smoke-test the CLI compile on the cheapest runner. Per-platform builds
