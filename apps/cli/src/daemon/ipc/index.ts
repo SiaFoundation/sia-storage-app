@@ -47,6 +47,21 @@ export function buildHandlerMap(
     broadcast ? (_channel, data) => broadcast(data) : undefined,
   )
 
+  // The mount link (`mountLink.ts`). The connection that calls `mount` is
+  // kept as the link, and `mountAnswer` answers one of its requests. The
+  // system can have fetched or dropped files while no integration was
+  // connected, so attaching has the mount's list read again.
+  handlers.set('mount', async (_params, connection) => {
+    app.mountLink.attach(connection)
+    await app.service.provider.mountChanged()
+    return { ok: true }
+  })
+  handlers.set('mountAnswer', async (params) => {
+    const [request, results] = (params as { args?: unknown[] }).args ?? []
+    app.mountLink.answer(String(request), results)
+    return { ok: true }
+  })
+
   return handlers
 }
 
