@@ -1,7 +1,11 @@
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import { createFinderAgent, parseMaterialized } from '../../src/daemon/finderAgent'
+import {
+  createFinderAgent,
+  parseMaterialized,
+  parseResendResults,
+} from '../../src/daemon/finderAgent'
 
 /**
  * Running the app's Finder agent from the daemon. `exec` stands in for
@@ -80,6 +84,20 @@ describe('the Finder agent runner', () => {
       .catch((e: Error) => e)
 
     expect((error as Error).message).toBe('Finder could not list its downloads now')
+  })
+
+  it('reads a resend as asked, not hydrated or failed', () => {
+    expect(
+      parseResendResults(
+        JSON.stringify({
+          results: [
+            { id: 'a', result: 'asked' },
+            { id: 'b', result: 'not-hydrated' },
+            { id: 'c', result: 'noSuchItem' },
+          ],
+        }),
+      ),
+    ).toEqual({ a: 'asked', b: 'not-hydrated', c: 'failed' })
   })
 
   it('rejects when the mount setting names no agent', async () => {

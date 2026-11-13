@@ -6,18 +6,20 @@
  * device on the same account with none. The tests follow a file through both
  * places its bytes can be on the Mac, the cache and the mount, for every way
  * a file arrives: created in Finder, saved again, synced down from the peer,
- * read by ranges. The record under test is `mount_copies`, which says which
- * version of each file the mount holds, whole or in part.
+ * read by ranges. The rule under test is that a version waiting to upload is
+ * always in the cache, and an uploaded version is never kept in both.
  */
 import { createHash } from 'node:crypto'
 import * as nodeFs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { toContentHash } from '@siastorage/core/lib/contentHash'
+import { ThumbSizes } from '@siastorage/core/types'
 import { createEmptyIndexerStorage, type MockIndexerStorage } from '@siastorage/sdk-mock'
+import sharp from 'sharp'
 import { createTestApp, type TestApp } from './app'
 import { createFakeFinder, type FakeFinder } from './fakeFinder'
-import { waitForCondition } from './utils'
+import { generateTestFiles, waitForCondition } from './utils'
 
 const ONE_DAY = 24 * 60 * 60_000
 const LONG_AGO = () => Date.now() - 30 * ONE_DAY
@@ -45,6 +47,7 @@ describe('a device with a Finder folder', () => {
   })
 
   afterEach(async () => {
+    await finder.settle().catch(() => {})
     await mac.shutdown()
     await peer.shutdown()
     nodeFs.rmSync(macHandoff, { recursive: true, force: true })
@@ -85,6 +88,10 @@ describe('a device with a Finder folder', () => {
     const item = await finder.create(null, name, bytes)
     const fileId = await versionOf(mac, item.id)
     await uploaded(mac, item.id)
+    // Finder holds it whole, so the cache copy goes once it is uploaded.
+    await waitForCondition(async () => !(await cached(fileId)), {
+      message: `${name} to lose its cache copy once uploaded`,
+    })
     return { id: item.id, fileId }
   }
 
@@ -104,6 +111,24 @@ describe('a device with a Finder folder', () => {
 
       expect(await mountRow(id)).toMatchObject({ fileId, bytes: bytes.length, whole: true })
       expect((await mac.app.provider.item(id))?.downloaded).toBe(true)
+      expect(await mac.app.cache.bytesOnDevice()).toBe(bytes.length)
+      // Uploaded and whole in Finder, so the cache copy is a second copy.
+      expect(await cached(fileId)).toBe(false)
+    })
+
+    it('keeps the cache copy of a file the system asked for and never took', async () => {
+      const bytes = bytesOf('q')
+      const id = await fromPeer('q.bin', bytes)
+      const dest = path.join(macHandoff, 'fetch-q')
+
+      // Finder cancelled the download, so the file was placed and not taken.
+      await mac.app.provider.fetch(id, dest)
+      nodeFs.rmSync(dest)
+      await mac.app.cache.evict()
+
+      const fileId = await versionOf(mac, id)
+      expect(await cached(fileId)).toBe(true)
+      expect(await mountRow(id)).toMatchObject({ fileId, whole: false })
       expect(await mac.app.cache.bytesOnDevice()).toBe(bytes.length)
     })
 
@@ -131,6 +156,29 @@ describe('a device with a Finder folder', () => {
       const fileId = await versionOf(peer, item.id)
       expect((await peer.app.fs.readMeta(fileId)) !== null).toBe(true)
       expect(await peer.app.mountCopies.read(item.id)).toBeNull()
+    })
+
+    it('removes the cache copy of a file both places held before the device kept one', async () => {
+      const [file] = await mac.addFiles(generateTestFiles(1, { startId: 40, sizeBytes: 100 }))
+      await waitForCondition(
+        async () => (await mac.app.localObjects.getRefsForFile(file.id)).length > 0,
+        { timeout: 30_000, message: 'the file to upload' },
+      )
+      // A file's first version starts its own stack, named by its id.
+      await mac.app.mountCopies.upsertWhole({
+        stackId: file.id,
+        fileId: file.id,
+        bytes: file.size,
+        usedAt: Date.now(),
+      })
+      finder.held.set(file.id, { bytes: Buffer.alloc(file.size), version: file.hash })
+      expect(await cached(file.id)).toBe(true)
+
+      const result = await mac.app.cache.evict()
+
+      expect(await cached(file.id)).toBe(false)
+      // On macOS the two shared disk blocks, so nothing was freed.
+      expect(result?.bytesFreed).toBe(0)
     })
 
     it('forgets what a mount held once the mount is removed', async () => {
@@ -173,10 +221,12 @@ describe('a device with a Finder folder', () => {
       expect(saved.contentVersion).toBe(sha(bytes))
       expect(await versionOf(mac, id)).toBe(fileId)
       expect(await mountRow(id)).toMatchObject({ fileId, whole: true })
+      // An unchanged save of an uploaded file brings nothing back into the cache.
+      expect(await cached(fileId)).toBe(false)
     })
 
     it("records another device's version once Finder has fetched it", async () => {
-      const { id } = await inFinder('h.bin', bytesOf('1'))
+      const { id, fileId: firstId } = await inFinder('h.bin', bytesOf('1'))
       await uploaded(peer, id)
       const next = bytesOf('2', 180)
       const staged = path.join(peerHandoff, 'stage-h2')
@@ -192,6 +242,9 @@ describe('a device with a Finder folder', () => {
 
       expect(finder.held.get(id)?.bytes).toEqual(next)
       expect(await mountRow(id)).toMatchObject({ fileId: secondId, bytes: 180, whole: true })
+      // Both versions are uploaded, so neither is kept in the cache.
+      expect(await cached(firstId)).toBe(false)
+      expect(await cached(secondId)).toBe(false)
     })
 
     it('keeps one record, for the version shown, when a rename merges two files', async () => {
@@ -252,6 +305,23 @@ describe('a device with a Finder folder', () => {
       await mac.app.cache.evict()
 
       expect(await mountRow(id)).toBeNull()
+      // Finder held the only copy, so nothing of the file is left.
+      expect(await mac.app.cache.bytesOnDevice()).toBe(0)
+    })
+
+    it('reads the changes early when the extension says files changed, at most once a minute', async () => {
+      const first = await inFinder('v1.bin', bytesOf('1'))
+      const second = await inFinder('v2.bin', bytesOf('2'))
+      // The first read is a full one and saves the place to read changes from.
+      await mac.app.cache.evict()
+
+      await finder.drop(first.id)
+      await mac.internal.syncMountIfHinted()
+      expect(await mountRow(first.id)).toBeNull()
+
+      await finder.drop(second.id)
+      await mac.internal.syncMountIfHinted()
+      expect(await mountRow(second.id)).not.toBeNull()
     })
 
     it('keeps the record of a file Finder opened again after dropping it', async () => {
@@ -307,6 +377,63 @@ describe('a device with a Finder folder', () => {
       await mac.app.cache.evict()
 
       expect(await mountRow(id)).toBeNull()
+    })
+  })
+
+  describe('after the indexer is changed', () => {
+    it('brings a file only Finder holds back into the cache, and it uploads again', async () => {
+      const bytes = bytesOf('n', 200)
+      const { id, fileId } = await inFinder('af.bin', bytes)
+      mac.setConnected(false)
+      await mac.app.settings.setIndexerURL('https://next.indexer')
+      expect((await mac.app.provider.item(id))?.uploaded).toBe(false)
+
+      await mac.internal.restoreFromMount()
+      await finder.settle()
+
+      // The same version, with no new one made for the bytes that came back.
+      expect(await versionOf(mac, id)).toBe(fileId)
+      expect(await cached(fileId)).toBe(true)
+      expect(await mountRow(id)).toMatchObject({ fileId, whole: true })
+
+      mac.setConnected(true)
+      await uploaded(mac, id)
+      await waitForCondition(async () => !(await cached(fileId)), {
+        message: 'the restored copy to go once uploaded to the new indexer',
+      })
+    })
+
+    it('forgets a file Finder turns out not to hold', async () => {
+      const { id } = await inFinder('ah.bin', bytesOf('h'))
+      finder.held.delete(id)
+      mac.setConnected(false)
+      await mac.app.settings.setIndexerURL('https://next.indexer')
+
+      await mac.internal.restoreFromMount()
+
+      expect(await mountRow(id)).toBeNull()
+    })
+  })
+
+  describe('thumbnails', () => {
+    it('makes a photo added in Finder its thumbnails before its cache copy goes', async () => {
+      const photo = await sharp({
+        create: { width: 640, height: 480, channels: 3, background: { r: 200, g: 80, b: 40 } },
+      })
+        .jpeg()
+        .toBuffer()
+
+      const item = await finder.create(null, 'photo.jpg', photo)
+      const fileId = await versionOf(mac, item.id)
+      await uploaded(mac, item.id)
+      await waitForCondition(async () => !(await cached(fileId)), {
+        timeout: 30_000,
+        message: 'the photo to lose its cache copy',
+      })
+
+      expect((await mac.app.thumbnails.getSizesForFile(fileId)).sort()).toEqual(
+        [...ThumbSizes].sort(),
+      )
     })
   })
 })

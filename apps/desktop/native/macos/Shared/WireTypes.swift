@@ -108,6 +108,7 @@ public enum Channel {
     public static let trash = "ds:provider:trash"
     /// A file's 512px thumbnail, inline as base64. Never a whole file.
     public static let thumbnail = "ds:provider:thumbnail"
+    public static let mountChanged = "ds:provider:mountChanged"
     /// Finder's Share Link action, served by the daemon rather than the facade.
     public static let share = "share"
 }

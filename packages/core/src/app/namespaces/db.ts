@@ -999,6 +999,8 @@ export function buildDbNamespaces(
       wholeStackIds: () => ops.queryWholeMountStackIds(db),
       markWhole: (stackIds, usedAt) => ops.markMountCopiesWhole(db, stackIds, usedAt),
       staleStackIds: () => ops.queryStaleMountStackIds(db),
+      secondCopies: (indexerURL, opts) => ops.querySecondCopies(db, indexerURL, opts),
+      stranded: (indexerURL, limit) => ops.queryStrandedInMount(db, indexerURL, limit),
     },
     library: {
       fileCount: () => ops.queryLibraryFileCount(db),

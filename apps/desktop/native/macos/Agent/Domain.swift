@@ -98,6 +98,7 @@ public enum Agent {
     /// which fails with `NSFileWriteFileExistsError`.
     public static func run(
         _ arguments: [String], registry: DomainRegistry,
+        copies: FinderCopies = SystemFinderCopies(),
         materialized: MaterializedSet = SystemMaterializedSet()
     ) async throws -> AgentResult {
         switch arguments.first {
@@ -124,6 +125,15 @@ public enum Agent {
         case "list":
             return AgentResult(ok: true, domains: try await registry.existing())
 
+        case "resend":
+            guard arguments.count >= 3 else {
+                throw AgentError.usage("resend <domainId> <out> <id>...")
+            }
+            let results = try await Resend.run(
+                domainId: arguments[1], itemIds: Array(arguments.dropFirst(3)), copies: copies)
+            try Resend.json(results).write(to: URL(fileURLWithPath: arguments[2]))
+            return AgentResult(ok: true)
+
         case "materialized":
             guard arguments.count == 3 || arguments.count == 4 else {
                 throw AgentError.usage("materialized <domainId> <out> [anchor]")
@@ -136,7 +146,7 @@ public enum Agent {
 
         default:
             throw AgentError.usage(
-                "register | hide | show | unregister | list | materialized")
+                "register | hide | show | unregister | list | resend | materialized")
         }
     }
 }

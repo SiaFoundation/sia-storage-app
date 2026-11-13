@@ -9,11 +9,12 @@
  * (`provider.fetch`, `fetchRange`, `create`, `write`), and this file corrects
  * them from the system's own account. A file fetched whole is recorded as
  * partial until that account names it, since the system can give up on a
- * fetch after the bytes were placed for it.
+ * fetch after the bytes were placed for it. Its cache copy is removed once
+ * the row is whole.
  *
  * The system's list of what it holds is read through the adapter
- * (`syncMount`): what changed since a saved cursor on every eviction pass,
- * and the whole list once a day.
+ * (`syncMount`): what changed since a saved cursor on every eviction pass and
+ * after a hint, and the whole list once a day.
  *
  * A wrong row is never dangerous. A whole row for a file the mount no longer
  * holds overstates what is on the device until the next full read. Ranges the
@@ -25,7 +26,30 @@
 import { logger } from '@siastorage/logger'
 import type { MountChanges } from '../adapters/mount'
 import type { AppService } from '../app/service'
-import { MOUNT_FULL_READ_INTERVAL } from '../config'
+import { MOUNT_FULL_READ_INTERVAL, MOUNT_HINT_MIN_INTERVAL } from '../config'
+
+/** The integration's notice that the mount's files changed, spaced out into reads. */
+export class MountHint {
+  private hinted = false
+  private takenAt = 0
+
+  hint(): void {
+    this.hinted = true
+  }
+
+  /**
+   * Whether an early read is due at `now`, clearing the hint when it is: a
+   * hint arrived, and the last one was taken at least
+   * `MOUNT_HINT_MIN_INTERVAL` ago. macOS sends its notice for every file an
+   * eviction or a download touches, so reads are spaced out.
+   */
+  take(now: number): boolean {
+    if (!this.hinted || now - this.takenAt < MOUNT_HINT_MIN_INTERVAL) return false
+    this.hinted = false
+    this.takenAt = now
+    return true
+  }
+}
 
 /**
  * Reads the system's account of the mount and applies it. A no-op on a

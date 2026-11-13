@@ -1,7 +1,7 @@
 import type { CacheEvictionResult } from '../services/cacheEviction'
 import type { TransferMemoryBudget } from '../services/transferMemoryBudget'
 import type { Account, Host, ObjectsCursor, SdkAdapter } from '../adapters/sdk'
-import type { Mount, MountChanges } from '../adapters/mount'
+import type { Mount, MountChanges, ResendResult } from '../adapters/mount'
 import type { ThumbnailResult } from '../adapters/thumbnail'
 import type {
   Directory,
@@ -17,6 +17,7 @@ import type {
   ImportSource,
   ImportSummary,
   MountCopy,
+  SecondCopy,
   LibraryQueryParams,
   SyncUpObjectRow,
   Tag,
@@ -1148,7 +1149,9 @@ export interface AppService {
      * Places a file's bytes at `destPath`, downloading them first if absent.
      * `destPath` must sit inside the host's handoff directory; bytes never
      * cross the call itself. A host that can read managed storage directly is
-     * handed the path instead, when such a host exists.
+     * handed the path instead, when such a host exists. On a library with a
+     * mount the cache copy stays until the system reports that it holds the
+     * file.
      */
     fetch(id: string, destPath: string): Promise<ProviderFetchResult>
     /**
@@ -1180,7 +1183,12 @@ export interface AppService {
       kind: ProviderItemKind,
       srcPath?: string,
     ): Promise<ProviderItem>
-    /** Replaces a file's bytes from `srcPath` and queues it for upload. */
+    /**
+     * Replaces a file's bytes from `srcPath` and queues it for upload, as a
+     * new version. Bytes the current version already has make no version,
+     * and are kept as its cache copy when it has none and is not on the
+     * current indexer (`mount.resend`).
+     */
     write(id: string, srcPath: string): Promise<ProviderItem>
     /** Renames and reparents in one call; moves a file's whole version stack. */
     rename(id: string, newParentId: string | null, newName: string): Promise<ProviderItem>
@@ -1209,6 +1217,13 @@ export interface AppService {
      * returns without waiting for downloads in progress, which carry on.
      */
     retryThumbnails(signal?: AbortSignal): Promise<void>
+    /**
+     * The shell's notice that the system wrote files into the mount or
+     * removed them, for a system that does not say which. The daemon reads
+     * the mount's files early on its next check, no sooner than a minute
+     * after its last early read, and once no pass is running.
+     */
+    mountChanged(): Promise<void>
   }
   /**
    * The mount: the folder a file manager shows for this library, where the
@@ -1218,6 +1233,8 @@ export interface AppService {
    * and rejects when the adapter could not run.
    */
   mount: {
+    /** Asks the system to hand back the bytes of the files `stackIds` names, as `provider.write` calls. */
+    resend(stackIds: string[], signal?: AbortSignal): Promise<Record<string, ResendResult> | null>
     /**
      * Reads which files the system holds whole: all of them with no `cursor`,
      * or what changed since it.
@@ -1258,6 +1275,13 @@ export interface AppService {
     markWhole(stackIds: string[], usedAt: number): Promise<void>
     /** Rows for files with no visible version, and ranges of a version no longer shown. */
     staleStackIds(): Promise<string[]>
+    /** Cache copies of versions on `indexerURL` that the mount also holds whole, in id order. */
+    secondCopies(
+      indexerURL: string,
+      opts: { fileIds?: string[]; after: string | null; limit: number },
+    ): Promise<SecondCopy[]>
+    /** Files only the mount holds whose shown version has no object on `indexerURL`. */
+    stranded(indexerURL: string, limit: number): Promise<{ stackId: string; fileId: string }[]>
   }
   /** Download management: queue, track, cancel, and read downloaded files. */
   downloads: {
@@ -1480,6 +1504,19 @@ export interface AppServiceInternal {
    * its single flight, so a request over the socket joins a scheduled pass.
    */
   evictCache(signal?: AbortSignal): Promise<CacheEvictionResult | undefined>
+  /**
+   * Reads the mount's files now, through the same single flight as the
+   * eviction pass, when the shell said files changed, no such read ran
+   * in the last minute and no pass is running. A no-op otherwise, and on
+   * hosts with no mount adapter.
+   */
+  syncMountIfHinted(signal?: AbortSignal): Promise<void>
+  /**
+   * Asks the system to hand back files only the mount holds that have no
+   * object on the current indexer, so they can upload. A no-op on hosts with
+   * no mount adapter.
+   */
+  restoreFromMount(signal?: AbortSignal): Promise<void>
   /**
    * Aborts the eviction pass running now, whoever started it, and resolves
    * once it has stopped. The daemon calls it before closing the database.

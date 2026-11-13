@@ -38,6 +38,11 @@ extension Logger {
         self.debug(
             "\(event, privacy: .public) \(id, privacy: .public): \(error.localizedDescription)")
     }
+
+    /// `attemptFailed` for a failure that names no item.
+    func attemptFailed(_ event: StaticString, _ error: Error) {
+        self.debug("\(event, privacy: .public): \(error.localizedDescription)")
+    }
 }
 
 @objc(FileProviderExtension)
@@ -55,6 +60,12 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
     /// Set once teardown starts, so a reconnect already scheduled gives up
     /// instead of subscribing behind it.
     private var invalidated = false
+    /// Whether a materialized-set hint is waiting to go to the daemon.
+    private let hintPending = LockedBox(false)
+    /// How long hints are gathered before one goes. The system calls
+    /// `materializedItemsDidChange` for every file an eviction or a download
+    /// touches, so a burst of hundreds becomes one call.
+    static let hintDelay: UInt64 = 2_000_000_000
 
     public required init(domain: NSFileProviderDomain) {
         self.domain = domain
@@ -95,6 +106,35 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
             handoff.sweep()
         }
         subscribeToChanges()
+    }
+
+    /// The system's notice that files were written to disk or dropped from
+    /// it, by Finder, a download or an eviction. It carries nothing, so the
+    /// daemon is told to read the materialized set itself, which is how it
+    /// learns which files Finder now holds and which it let go of.
+    /// Completed at once, before the gather below, since the system waits on
+    /// the handler.
+    public func materializedItemsDidChange(completionHandler: @escaping () -> Void) {
+        completionHandler()
+        var schedule = false
+        hintPending.mutate { pending in
+            schedule = !pending
+            pending = true
+        }
+        guard schedule else { return }
+        let rpc = self.rpc
+        let pending = hintPending
+        Task {
+            try? await Task.sleep(nanoseconds: FileProviderExtension.hintDelay)
+            pending.set(false)
+            // A daemon that is down misses nothing: its next pass reads the
+            // set's changes from its saved anchor.
+            do {
+                _ = try await rpc.call(Channel.mountChanged)
+            } catch {
+                fpLog.attemptFailed("materialized hint failed", error)
+            }
+        }
     }
 
     /// Tells the system the library moved, so it re-reads the working set.
