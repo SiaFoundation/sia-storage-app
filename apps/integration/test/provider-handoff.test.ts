@@ -305,7 +305,7 @@ describe('Provider handoff', () => {
       const out = dest('range-out.bin')
       const result = await app.app.provider.fetchRange(file.id, out, 1024, 512)
 
-      expect(result).toEqual({ offset: 1024, bytes: 512 })
+      expect(result).toMatchObject({ offset: 1024, bytes: 512 })
       // The system reads an extent's position from where its bytes sit, so
       // the file runs to the end of the range with a hole in front of it.
       const written = nodeFs.readFileSync(out)
@@ -321,7 +321,7 @@ describe('Provider handoff', () => {
 
       // The shell rounds a request up to the system's alignment, so the last
       // range of a file routinely asks for more than is there.
-      expect(result).toEqual({ offset: 4000, bytes: 96 })
+      expect(result).toMatchObject({ offset: 4000, bytes: 96 })
       const written = nodeFs.readFileSync(out)
       expect(written.length).toBe(4096)
       expect(written.subarray(4000)).toEqual(contents.subarray(4000))
@@ -332,7 +332,7 @@ describe('Provider handoff', () => {
 
       const result = await app.app.provider.fetchRange(file.id, dest('past-out.bin'), 9999, 10)
 
-      expect(result).toEqual({ offset: 4096, bytes: 0 })
+      expect(result).toMatchObject({ offset: 4096, bytes: 0 })
     })
 
     it('refuses a destination outside the handoff directory', async () => {
@@ -341,6 +341,46 @@ describe('Provider handoff', () => {
       await expect(
         app.app.provider.fetchRange(file.id, '/tmp/not-the-handoff-dir.bin', 0, 4),
       ).rejects.toThrow()
+    })
+
+    /** Saves new bytes, twice as long, over an uploaded file and waits for that version to upload. */
+    async function replaced() {
+      const { file } = await uploaded()
+      const before = (await app.app.provider.item(file.id))?.contentVersion
+      const bytes = Buffer.alloc(8192, 'n')
+      nodeFs.writeFileSync(dest('newer-staged.bin'), bytes)
+      await app.app.provider.write(file.id, dest('newer-staged.bin'))
+      await waitForCondition(
+        async () => {
+          const item = await app.app.provider.item(file.id)
+          return !!item?.uploaded && item.contentVersion !== before
+        },
+        { timeout: 30_000, message: 'the new version to upload' },
+      )
+      return { id: file.id, before, bytes }
+    }
+
+    it('refuses a range of a replaced version to a caller that can take no other', async () => {
+      const { id, before } = await replaced()
+
+      await expect(
+        app.app.provider.fetchRange(id, dest('strict.bin'), 0, 16, before, true),
+      ).rejects.toThrow(/no longer available/)
+    })
+
+    it('serves the current version, names it and cuts the range to its size when asked for a replaced one', async () => {
+      const { id, before, bytes } = await replaced()
+      const current = await app.app.provider.item(id)
+
+      // Past the end of both versions, as a request rounded up to the
+      // system's alignment is.
+      const out = dest('current.bin')
+      const result = await app.app.provider.fetchRange(id, out, 0, 12288, before)
+
+      expect(current?.contentVersion).not.toBe(before)
+      expect(result.item.contentVersion).toBe(current?.contentVersion)
+      expect(result).toMatchObject({ offset: 0, bytes: bytes.length })
+      expect(nodeFs.readFileSync(out).subarray(0, bytes.length)).toEqual(bytes)
     })
   })
 

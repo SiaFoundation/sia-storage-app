@@ -175,7 +175,7 @@ describe('Saving a file through the provider', () => {
       await waitForContent(A, id, v2)
 
       const dest = path.join(handoff, `range-${++staged}`)
-      expect(await A.app.provider.fetchRange(id, dest, 0, v2.length)).toEqual({
+      expect(await A.app.provider.fetchRange(id, dest, 0, v2.length)).toMatchObject({
         offset: 0,
         bytes: v2.length,
       })
