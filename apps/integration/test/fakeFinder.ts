@@ -6,13 +6,18 @@
  * of each file opened or created in the folder, one version per file. It
  * takes a fetched file out of the handoff directory. It fetches a file again
  * when the library reports a new version of one it holds. It removes copies
- * on its own, and answers the two things a mount adapter asks: list what you
- * hold, hand these files back.
+ * on its own, and answers the three things a mount adapter asks: remove these
+ * copies, list what you hold, hand these files back.
  *
  * Every call into the app goes through `app.provider`, as the extension's
  * calls do, so a test built on this takes the same paths the real one takes.
  */
-import type { MountAdapter, MountChanges, ResendResult } from '@siastorage/core/adapters'
+import type {
+  DehydrateResult,
+  MountAdapter,
+  MountChanges,
+  ResendResult,
+} from '@siastorage/core/adapters'
 import type { ProviderItem } from '@siastorage/core/types'
 import * as nodeFs from 'fs'
 import * as path from 'path'
@@ -29,6 +34,10 @@ export function createFakeFinder(handoffDir: string) {
   let seq = 0
   /** Cursors older than this are refused, as macOS refuses an expired anchor. */
   let readableFrom = 0
+  /** Every id a dehydrate asked about, in order. */
+  const asked: string[] = []
+  /** What a dehydrate answers for an id instead of removing its copy. */
+  const answers = new Map<string, DehydrateResult>()
   /** Ranges read of files not held whole, with how many bytes of each are in. */
   const partial = new Map<string, { bytes: Buffer; got: number; version: string }>()
   /** Writes a resend started, which arrive on their own as the system's do. */
@@ -70,6 +79,17 @@ export function createFakeFinder(handoffDir: string) {
   }
 
   const adapter: MountAdapter = {
+    async dehydrate(mount, stackIds) {
+      if (mount.id !== MOUNT.id) throw new Error('no mount named that is registered')
+      asked.push(...stackIds)
+      const results: Record<string, DehydrateResult> = {}
+      for (const id of stackIds) {
+        results[id] = answers.get(id) ?? 'done'
+        if (results[id] === 'done') drop(id)
+      }
+      return results
+    },
+
     async resend(_mount, stackIds) {
       const results: Record<string, ResendResult> = {}
       for (const id of stackIds) {
@@ -96,6 +116,8 @@ export function createFakeFinder(handoffDir: string) {
   return {
     adapter,
     held,
+    asked,
+    answers,
 
     /** Has the next read of changes from any cursor saved so far answer with the full list. */
     expireCursor(): void {
@@ -110,11 +132,14 @@ export function createFakeFinder(handoffDir: string) {
 
     /**
      * Opens a file as a user does. One the folder holds is read from its own
-     * copy, which the app does not hear of. Any other is downloaded whole
-     * first.
+     * copy, which the app hears of only as a new last used date. Any other
+     * is downloaded whole first.
      */
     async open(id: string): Promise<Buffer> {
-      return held.get(id)?.bytes ?? fetch(id)
+      const copy = held.get(id)
+      if (!copy) return fetch(id)
+      await app().provider.touch([id])
+      return copy.bytes
     },
 
     /** Reads one range of a file the folder does not hold whole, as a video seek does. */

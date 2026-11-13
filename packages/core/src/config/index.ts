@@ -208,6 +208,11 @@ export const FS_EVICTABLE_MIN_AGE = minutesInMs(60) // 1 hour
 export const USED_AT_UPDATE_INTERVAL = minutesInMs(5)
 // How long eviction keeps an uploaded copy whose thumbnails are not made yet, from when the copy was added.
 export const FS_EVICTION_THUMBNAIL_WAIT = daysInMs(1) // 1 day
+// The most files one call to the mount adapter dehydrates. Large enough that
+// an adapter working on many at once, such as the macOS Finder agent, keeps
+// them in flight for most of a call, and small enough that a call ends well
+// inside the adapter's own timeout, which loses every result in the call.
+export const MOUNT_DEHYDRATE_BATCH = 1000
 // How often at most the daemon reads the mount's files early, when the
 // integration says files were written into the mount or removed from it.
 export const MOUNT_HINT_MIN_INTERVAL = minutesInMs(1)

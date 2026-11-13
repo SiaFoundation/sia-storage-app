@@ -1,7 +1,7 @@
 export type { SdkAuthAdapters } from './auth'
 export type { CryptoAdapter } from './crypto'
 export type { DatabaseAdapter, SQLParam, SQLRunResult } from './db'
-export type { Mount, MountAdapter, MountChanges, ResendResult } from './mount'
+export type { DehydrateResult, Mount, MountAdapter, MountChanges, ResendResult } from './mount'
 export type { Reader, Writer } from './fs'
 export type {
   Account,

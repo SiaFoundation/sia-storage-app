@@ -229,21 +229,26 @@ bun sim device expect phone --label Menu
   `download`, `config`
 - Check: `call <device> downloads.getState`; `call <device> cache.evict` runs an
   eviction pass now, and `cache.clear` removes every backed-up copy, as Clear
-  Local Files does; tables `fs`
+  Local Files does. The window starts it with `cache.startClear` and follows
+  `cache.clearState`; tables `fs`
 - Finder: on the desktop app a file is kept in one place once it is uploaded.
   Table `mount_copies` records what Finder holds, by the version it holds, and
   the daemon removes its cache copy of an uploaded file Finder holds whole
   (`tidyCopies`). The pass reads what the system removed from Finder
-  (`syncMount`, setting `mountCursor`) through the agent the app names in
-  setting `mount`, and `cache.bytesOnDevice` counts what both places hold.
-  `isCloudOnly` shows Finder's copy is gone. After the indexer is changed, a
-  file only Finder holds comes back into the cache to upload (`mount.resend`).
+  (`syncMount`, setting `mountCursor`), counts Finder's bytes against the limit
+  (`cache.bytesOnDevice`) and has Finder drop the least recently used through
+  the agent the app names in setting `mount` (`mount.dehydrate`).
+  `isCloudOnly` shows Finder's copy is gone, and `finderEvict` drops one the
+  way the system does on its own. Opening a file in an app moves its last use
+  forward (`provider.touch`). After the indexer is changed, a file only
+  Finder holds comes back into the cache to upload (`mount.resend`).
 - Tests: scenarios `mobile/clear-local-files-keeps-unuploaded`,
   `mobile/stray-copy-removed-on-resume`,
   `sync/converge-and-download`, `mobile/tapped-download-arrives`,
   `sync/small-downloads-beside-large`, `finder/cache-limit-evicts`,
   `finder/cache-limit-keeps-unuploaded`, `finder/cache-limit-concurrent-opens`,
-  `desktop/cache-limit-finder-keeps-copies`, `desktop/clear-local-files`,
+  `desktop/cache-limit-frees-finder-copies`, `desktop/finder-drop-leaves-no-copy`,
+  `desktop/clear-local-files`, `desktop/finder-open-counts-as-use`,
   `desktop/indexer-change-restores-from-finder`; integration `downloads`, `finder-mount`,
   `fs-eviction`, `fs-adopt`, `fs-orphan`, `size-reconcile`
 - Network: `net latency` adds a delay to every call and `net download-rate`

@@ -32,6 +32,20 @@ export type MountCopy = {
 
 type MountCopyRow = Omit<MountCopy, 'whole'> & { whole: number }
 
+/** A mount copy the eviction pass may ask the system to remove. */
+export type MountCandidate = {
+  stackId: string
+  /** The version the mount holds, which the row was recorded with. */
+  fileId: string
+  /** The version the file manager shows now, which is what must be on the indexer. */
+  shownId: string
+  size: number
+  usedAt: number
+}
+
+/** Where a pass stopped reading mount candidates, ordered by (usedAt, stackId). */
+export type MountCursor = { usedAt: number; stackId: string }
+
 function toCopy(row: MountCopyRow): MountCopy {
   return { ...row, whole: row.whole === 1 }
 }
@@ -238,6 +252,42 @@ export async function queryStaleMountStackIds(db: DatabaseAdapter): Promise<stri
      )`,
   )
   return rows.map((r) => r.stackId)
+}
+
+/**
+ * Mount copies the eviction pass may ask the system to remove, least
+ * recently used first. A copy may go when the version the file manager shows
+ * for its stack is not lost and has an object on `indexerURL`. Without that
+ * object the mount's copy may be the only one an upload to this indexer can
+ * be made from. A version the cache also holds is left out, as it is from
+ * `queryMountOnlyBytes`: removing the mount's copy of it frees nothing while
+ * the cache copy shares its disk blocks.
+ */
+export async function queryMountCandidates(
+  db: DatabaseAdapter,
+  indexerURL: string,
+  thresholdUsedAt: number,
+  after: MountCursor | null,
+  limit: number,
+): Promise<MountCandidate[]> {
+  const cursor = after ? 'AND (m.usedAt, m.stackId) > (?, ?)' : ''
+  const params = after ? [after.usedAt, after.stackId] : []
+  return db.getAllAsync<MountCandidate>(
+    `SELECT m.stackId, m.fileId, f.id AS shownId, m.bytes AS size, m.usedAt FROM mount_copies m
+     CROSS JOIN files f INDEXED BY idx_files_stackId ON f.stackId = m.stackId
+     WHERE m.usedAt <= ?
+       AND ${buildRecordFilter('f')} AND f.lostReason IS NULL
+       AND ${shownRowCondition('f')}
+       AND EXISTS (SELECT 1 FROM objects o WHERE o.fileId = f.id AND o.indexerURL = ?)
+       AND NOT EXISTS (SELECT 1 FROM fs WHERE fs.fileId = m.fileId)
+       ${cursor}
+     ORDER BY m.usedAt ASC, m.stackId ASC
+     LIMIT ?`,
+    thresholdUsedAt,
+    indexerURL,
+    ...params,
+    limit,
+  )
 }
 
 export type SecondCopy = { fileId: string; type: string; addedAt: number }

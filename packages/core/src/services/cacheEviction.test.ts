@@ -278,4 +278,34 @@ describe('evictionRunner', () => {
     expect(await second).toBe(await first)
     expect(passes.started).toHaveLength(1)
   })
+
+  it('shows a clear as running from when it is asked for, and counts a joined clear once', async () => {
+    const passes = heldPasses()
+    const runner = evictionRunner(passes.run, async () => SCHEDULED)
+
+    const scheduled = runner.evict()
+    const first = runner.clear()
+    const second = runner.clear()
+    // Still waiting behind the scheduled pass.
+    expect(runner.clearState()).toEqual({ running: true, finished: 0, lastBytesFreed: null })
+    await passes.releaseNext()
+    await scheduled
+    await passes.releaseNext()
+    await Promise.all([first, second])
+
+    expect(runner.clearState()).toEqual({ running: false, finished: 1, lastBytesFreed: 0 })
+  })
+
+  it('reports a clear that failed as finished with nothing freed', async () => {
+    const runner = evictionRunner(
+      async () => {
+        throw new Error('disk gone')
+      },
+      async () => SCHEDULED,
+    )
+
+    await expect(runner.clear()).rejects.toThrow('disk gone')
+
+    expect(runner.clearState()).toEqual({ running: false, finished: 1, lastBytesFreed: null })
+  })
 })

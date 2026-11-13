@@ -165,7 +165,7 @@ final class AgentTests: XCTestCase {
             _ = try await Agent.run(["mount"], registry: registry)
             XCTFail("expected a usage error")
         } catch let error as AgentError {
-            XCTAssertEqual(error, .usage("register | hide | show | unregister | list | resend | materialized"))
+            XCTAssertEqual(error, .usage("register | hide | show | unregister | list | evict | resend | materialized"))
         } catch {
             XCTFail("expected a usage error, got \(error)")
         }
@@ -226,7 +226,93 @@ private struct TableCopies: FinderCopies {
 
 private struct TableDomain: FinderDomainCopies, @unchecked Sendable {
     let answers: [String: Error]
+    func evict(itemId: String) async -> Error? { answers[itemId] }
     func resend(itemId: String) async -> Error? { answers[itemId] }
+}
+
+/// Answers every item after a short wait, counting how many are in flight.
+private final class SlowCopies: FinderCopies, FinderDomainCopies, @unchecked Sendable {
+    private let lock = NSLock()
+    private var inFlight = 0
+    private(set) var peak = 0
+
+    func open(domainId: String) async throws -> FinderDomainCopies { self }
+
+    func evict(itemId: String) async -> Error? {
+        lock.withLock {
+            inFlight += 1
+            peak = max(peak, inFlight)
+        }
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        lock.withLock { inFlight -= 1 }
+        return nil
+    }
+
+    func resend(itemId: String) async -> Error? { nil }
+}
+
+final class EvictTests: XCTestCase {
+    func testRunsTheConcurrencyLimitAtOnceAndAnswersEveryItem() async throws {
+        let copies = SlowCopies()
+        let ids = (0..<(Evict.concurrency * 3)).map { "item-\($0)" }
+
+        let results = try await Evict.run(domainId: "sia-dev", itemIds: ids, copies: copies)
+
+        XCTAssertEqual(results.count, ids.count)
+        XCTAssertEqual(copies.peak, Evict.concurrency)
+    }
+
+    func testEachSystemErrorMapsToTheResultTheDaemonActsOn() {
+        let cases: [(Error?, EvictResult)] = [
+            (nil, .evicted),
+            (NSError(domain: NSFileProviderErrorDomain, code: NSFileProviderError.noSuchItem.rawValue), .evicted),
+            (NSError(domain: NSFileProviderErrorDomain, code: NSFileProviderError.nonEvictable.rawValue), .refused),
+            (NSError(domain: NSFileProviderErrorDomain, code: NSFileProviderError.unsyncedEdits.rawValue), .unsynced),
+            (NSError(domain: NSCocoaErrorDomain, code: NSFileWriteNoPermissionError), .failed),
+            (NSError(domain: NSPOSIXErrorDomain, code: Int(EBUSY)), .busy),
+            (NSError(domain: NSPOSIXErrorDomain, code: Int(EMLINK)), .linked),
+            (NSError(domain: NSPOSIXErrorDomain, code: Int(EIO)), .failed),
+        ]
+        for (error, expected) in cases {
+            XCTAssertEqual(EvictResult(error), expected, "\(String(describing: error))")
+        }
+    }
+
+    func testTheEvictVerbWritesOneResultPerItemToTheGivenFile() async throws {
+        let out = FileManager.default.temporaryDirectory
+            .appendingPathComponent("evict-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: out) }
+        let copies = TableCopies(
+            domainId: "sia-dev",
+            answers: ["open": NSError(domain: NSPOSIXErrorDomain, code: Int(EBUSY))])
+        let ids = (0..<9).map { "item-\($0)" } + ["open"]
+
+        let result = try await Agent.run(
+            ["evict", "sia-dev", out.path] + ids, registry: RecordingRegistry(), copies: copies)
+
+        XCTAssertTrue(result.ok)
+        let parsed = try JSONSerialization.jsonObject(with: Data(contentsOf: out)) as? [String: Any]
+        let entries = parsed?["results"] as? [[String: String]] ?? []
+        let byId = Dictionary(uniqueKeysWithValues: entries.map { ($0["id"]!, $0["result"]!) })
+        XCTAssertEqual(byId.count, 10)
+        XCTAssertEqual(byId["open"], "busy")
+        XCTAssertEqual(byId["item-0"], "evicted")
+    }
+
+    func testAnUnknownDomainFailsTheWholeCallAndWritesNothing() async throws {
+        let out = FileManager.default.temporaryDirectory
+            .appendingPathComponent("evict-\(UUID().uuidString).json")
+        let copies = TableCopies(domainId: "sia-dev", answers: [:])
+
+        do {
+            _ = try await Agent.run(
+                ["evict", "other", out.path, "item"], registry: RecordingRegistry(), copies: copies)
+            XCTFail("expected the call to fail")
+        } catch let error as AgentError {
+            XCTAssertEqual(error, .noSuchDomain("other"))
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: out.path))
+    }
 }
 
 final class ResendTests: XCTestCase {

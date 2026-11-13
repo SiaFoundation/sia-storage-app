@@ -19,9 +19,9 @@
  * A wrong row is never dangerous. A whole row for a file the mount no longer
  * holds overstates what is on the device until the next full read. Ranges the
  * system dropped on its own are named by no read, so their row stays until
- * the file's version changes. A missing row understates the device until the
- * next read adds it. Whether bytes may be removed rests on the `objects`
- * table.
+ * the file's version changes or a dehydrate of it answers done. A missing row
+ * understates the device until the next read adds it. Whether bytes may be
+ * removed rests on the `objects` table.
  */
 import { logger } from '@siastorage/logger'
 import type { MountChanges } from '../adapters/mount'

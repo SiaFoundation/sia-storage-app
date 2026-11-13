@@ -1,7 +1,7 @@
-import type { CacheEvictionResult } from '../services/cacheEviction'
+import type { CacheEvictionResult, ClearState } from '../services/cacheEviction'
 import type { TransferMemoryBudget } from '../services/transferMemoryBudget'
 import type { Account, Host, ObjectsCursor, SdkAdapter } from '../adapters/sdk'
-import type { Mount, MountChanges, ResendResult } from '../adapters/mount'
+import type { DehydrateResult, Mount, MountChanges, ResendResult } from '../adapters/mount'
 import type { ThumbnailResult } from '../adapters/thumbnail'
 import type {
   Directory,
@@ -16,7 +16,9 @@ import type {
   ImportRow,
   ImportSource,
   ImportSummary,
+  MountCandidate,
   MountCopy,
+  MountCursor,
   SecondCopy,
   LibraryQueryParams,
   SyncUpObjectRow,
@@ -1224,6 +1226,12 @@ export interface AppService {
      * after its last early read, and once no pass is running.
      */
     mountChanged(): Promise<void>
+    /**
+     * Records that the user opened these files in the mount now. The system
+     * reads its own copy without asking this device, so the eviction pass
+     * would otherwise rank a file opened daily by when it was last downloaded.
+     */
+    touch(stackIds: string[]): Promise<void>
   }
   /**
    * The mount: the folder a file manager shows for this library, where the
@@ -1233,6 +1241,15 @@ export interface AppService {
    * and rejects when the adapter could not run.
    */
   mount: {
+    /**
+     * Asks the system to remove its copies of the files `stackIds` names, at
+     * most `MOUNT_DEHYDRATE_BATCH` of them, and returns what happened to
+     * each. A file with no answer was not removed as far as this side knows.
+     */
+    dehydrate(
+      stackIds: string[],
+      signal?: AbortSignal,
+    ): Promise<Record<string, DehydrateResult> | null>
     /** Asks the system to hand back the bytes of the files `stackIds` names, as `provider.write` calls. */
     resend(stackIds: string[], signal?: AbortSignal): Promise<Record<string, ResendResult> | null>
     /**
@@ -1275,6 +1292,13 @@ export interface AppService {
     markWhole(stackIds: string[], usedAt: number): Promise<void>
     /** Rows for files with no visible version, and ranges of a version no longer shown. */
     staleStackIds(): Promise<string[]>
+    /** Mount copies the system may be asked to remove, least recently used first. */
+    candidates(
+      indexerURL: string,
+      thresholdUsedAt: number,
+      after: MountCursor | null,
+      limit: number,
+    ): Promise<MountCandidate[]>
     /** Cache copies of versions on `indexerURL` that the mount also holds whole, in id order. */
     secondCopies(
       indexerURL: string,
@@ -1343,6 +1367,15 @@ export interface AppService {
      * running at the time finishes first.
      */
     clear(): Promise<CacheEvictionResult | undefined>
+    /**
+     * Starts `clear` without waiting for it, for a window that follows it
+     * through `clearState`, and returns that state as it stands once the
+     * clear is asked for, already running. A clear can take minutes when the
+     * mount holds copies of many files. A failure is logged.
+     */
+    startClear(): Promise<ClearState>
+    /** Whether a clear is running, and what the last one to finish freed. */
+    clearState(): Promise<ClearState>
     /**
      * Bytes of this library's files on this device: the cache, plus what the
      * mount holds of versions with no copy in the cache.
