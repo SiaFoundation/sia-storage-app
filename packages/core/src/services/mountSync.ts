@@ -14,7 +14,8 @@
  *
  * The system's list of what it holds is read through the adapter
  * (`syncMount`): what changed since a saved cursor on every eviction pass and
- * after a hint, and the whole list once a day.
+ * after a hint, and the whole list once a day. An adapter whose system keeps
+ * no record of changes, as on Windows, answers every read with the whole list.
  *
  * A wrong row is never dangerous. A whole row for a file the mount no longer
  * holds overstates what is on the device until the next full read. Ranges the
@@ -117,8 +118,8 @@ export async function syncMount(app: AppService, signal?: AbortSignal): Promise<
 
 /**
  * Asks the adapter for the mount's files, whole or since `cursor`. Undefined
- * when the adapter could not run, which leaves the saved cursor for next
- * time.
+ * when the adapter could not run or has nothing to read now, which leaves the
+ * saved cursor for next time.
  */
 async function read(
   app: AppService,

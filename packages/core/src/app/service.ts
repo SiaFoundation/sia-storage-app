@@ -1291,7 +1291,8 @@ export interface AppService {
     resend(stackIds: string[], signal?: AbortSignal): Promise<Record<string, ResendResult> | null>
     /**
      * Reads which files the system holds whole: all of them with no `cursor`,
-     * or what changed since it.
+     * or what changed since it. Null also when the adapter cannot read the
+     * mount now.
      */
     changes(cursor: string | null, signal?: AbortSignal): Promise<MountChanges | null>
   }
