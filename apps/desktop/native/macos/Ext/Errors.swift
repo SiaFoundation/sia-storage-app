@@ -65,6 +65,11 @@ func mapRemoteMessage(_ message: String) -> NSError {
             domain: NSCocoaErrorDomain, code: NSFileWriteNoPermissionError,
             userInfo: [NSLocalizedDescriptionKey: "Sia Storage could not write this file."])
     }
+    if lower.contains("no longer available") {
+        // A range read that named a version another device has since
+        // replaced. The system asks again for the new one.
+        return fpError(.versionNoLongerAvailable, "This file changed while it was being read.")
+    }
     if lower.contains("version mismatch") {
         return fpError(.serverUnreachable, message)
     }

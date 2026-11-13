@@ -139,6 +139,11 @@ export type ProviderFetchResult = {
 export type ProviderRangeResult = {
   offset: number
   bytes: number
+  /**
+   * The version these bytes belong to, which is the current one and may be
+   * newer than the one the system asked for.
+   */
+  item: ProviderItem
 }
 
 /**

@@ -85,6 +85,9 @@ public enum Container {
 public struct ProviderRangeResult: Decodable {
     public let offset: Int64
     public let bytes: Int64
+    /// The version the bytes belong to. It is the current one, which can be
+    /// newer than the version the system asked for.
+    public let item: ProviderItem
 }
 
 /// Channel names, kept in one place so a typo is a compile error rather than a
