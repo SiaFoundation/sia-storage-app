@@ -179,6 +179,13 @@ final class ErrorMappingTests: XCTestCase {
         XCTAssertEqual(mapped.code, NSFileProviderError.noSuchItem.rawValue)
     }
 
+    func testARangeOfAReplacedVersionTellsTheSystemToAskAgain() {
+        let mapped = mapRemoteMessage("That version of the file is no longer available")
+
+        XCTAssertEqual(mapped.domain, NSFileProviderErrorDomain)
+        XCTAssertEqual(mapped.code, NSFileProviderError.versionNoLongerAvailable.rawValue)
+    }
+
     func testTheAlertForARejectedPathDoesNotNameThePath() {
         let error = mapError(RpcError.remote("Handoff path is outside /Users/someone/x"))
 

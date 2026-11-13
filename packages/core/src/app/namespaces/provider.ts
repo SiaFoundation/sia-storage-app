@@ -1095,9 +1095,18 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       return { bytes, item: fetched }
     },
 
-    async fetchRange(id, destPath, offset, length) {
+    async fetchRange(id, destPath, offset, length, version, strict) {
       const dest = requireHandoffPath(destPath)
       const file = await currentRow(id)
+      // A caller that will discard any other version is refused, so it asks
+      // again once it has learned of the new one. Otherwise the current
+      // version is served, and the item returned names it. A file with no
+      // hash has no content version to compare.
+      if (strict && version !== undefined && file.hash !== '' && version !== file.hash) {
+        throw new Error('That version of the file is no longer available')
+      }
+      const served = await versionItem(file.id)
+      if (!served) throw new Error(`No file with id ${id}`)
       if (!downloadObject.downloadRangeToPath) {
         throw new Error('This host cannot fetch a byte range')
       }
@@ -1111,7 +1120,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       // file has. Clamping here is what keeps the served extent truthful.
       const start = Math.max(0, Math.min(offset, file.size))
       const want = Math.max(0, Math.min(length, file.size - start))
-      if (want === 0) return { offset: start, bytes: 0 }
+      if (want === 0) return { offset: start, bytes: 0, item: served }
 
       // Finder fetches several ranges at once, outside the download slots,
       // so each holds its read-ahead against the others while it runs.
@@ -1139,7 +1148,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
         served: `${start}+${bytes}`,
         fileSize: file.size,
       })
-      return { offset: start, bytes }
+      return { offset: start, bytes, item: served }
     },
 
     async progress(id) {
