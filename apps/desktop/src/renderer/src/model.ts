@@ -311,7 +311,7 @@ export function activityDetail(s: Status): string | null {
     case 'disconnected':
       return s.connectionError
     case 'mount-error':
-      return 'macOS could not add the folder'
+      return `${terms.system} could not add the folder`
     case 'mount-absent':
       return `The folder is not in ${terms.fileManager}`
     // The library's count, since every save of one document while full is a
@@ -358,7 +358,7 @@ export function activityHelp(s: Status): string {
     case 'mounting':
       return `Adding the Sia Storage folder to ${terms.fileManager}.`
     case 'preparing':
-      return 'macOS is listing your folders, so that they open without a wait.'
+      return `${terms.system} is listing your folders, so that they open without a wait.`
     case 'ok':
       return 'Nothing is waiting to upload or sync.'
   }
@@ -466,7 +466,7 @@ function finderStep(s: Status, finderName: string): SetupStep {
         ...step,
         label: `Adding ${finderName} to ${terms.fileManager}`,
         state: 'failed',
-        detail: 'The folder could not be registered with macOS',
+        detail: `The folder could not be registered with ${terms.system}`,
       }
     default:
       return { ...step, label: `Adding ${finderName} to ${terms.fileManager}`, state: 'active' }

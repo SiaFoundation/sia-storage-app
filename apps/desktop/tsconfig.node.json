@@ -16,6 +16,7 @@
     "src/shared/**/*.ts",
     "src/main/**/*.ts",
     "src/preload/**/*.ts",
+    "native/windows/provider/**/*.ts",
     "electron.vite.config.ts"
   ]
 }

@@ -14,6 +14,7 @@ import { openLogs as openDarwinLogs } from './darwinLogs'
 import { standardChrome } from './standardChrome'
 import { openLogs as openStandardLogs } from './standardLogs'
 import { createUnmountedIntegration } from './unmounted'
+import { createWindowsIntegration } from './win32'
 import { type PlatformTerms, platformTerms } from '../../shared/platformTerms'
 import type { PlatformIntegration, WindowChrome } from './types'
 
@@ -21,6 +22,7 @@ export type { PlatformIntegration, ShellConfig, ShellState, WindowChrome } from 
 
 export function createPlatformIntegration(): PlatformIntegration {
   if (process.platform === 'darwin') return createDarwinIntegration()
+  if (process.platform === 'win32') return createWindowsIntegration()
   return createUnmountedIntegration()
 }
 

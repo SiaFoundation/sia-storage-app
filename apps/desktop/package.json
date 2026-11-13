@@ -13,12 +13,13 @@
     "start": "env -u ELECTRON_RUN_AS_NODE electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.build.json",
     "lint": "oxlint . && oxfmt --check .",
-    "test": "bun test --path-ignore-patterns='**/updates.test.ts' --path-ignore-patterns='**/windows.test.ts' --path-ignore-patterns='**/standardChrome.test.ts' && bun test ./src/main/updates.test.ts && bun test ./src/main/windows.test.ts && bun test ./src/main/platform/standardChrome.test.ts"
+    "test": "bun test --path-ignore-patterns='**/updates.test.ts' --path-ignore-patterns='**/windows.test.ts' --path-ignore-patterns='**/standardChrome.test.ts' --path-ignore-patterns='**/win32.test.ts' && bun test ./src/main/updates.test.ts && bun test ./src/main/windows.test.ts && bun test ./src/main/platform/standardChrome.test.ts && bun test ./src/main/platform/win32.test.ts"
   },
   "dependencies": {
     "@scure/bip39": "2.4.0",
     "@siastorage/core": "workspace:*",
     "@siastorage/logger": "workspace:*",
+    "@siastorage/node-adapters": "workspace:*",
     "qrcode.react": "4.2.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
