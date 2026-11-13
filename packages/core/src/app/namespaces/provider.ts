@@ -212,17 +212,16 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     const uploading = flags.uploading.get(row.id)
     const downloading = flags.downloading.get(row.id)
     const uploaded = flags.uploaded.has(row.id)
-    const downloaded = (row.fsExists ?? 0) === 1
+    const downloaded = (row.onDevice ?? 0) === 1
     // Finder forgets a thumbnail it failed to get only when the file's
     // modification date changes: a new metadata version alone does not make
     // it ask again. A cloud-only file whose 512px thumbnail is on this device
     // reports its date one second later, which flips once, when the thumbnail
     // lands, and the fs trigger re-reports the file then. A whole second,
     // because the date is compared to the second, so a smaller nudge moves it
-    // only when it happens to cross one. A file whose bytes the daemon holds
-    // never carries it, so downloading a file does not move its date. Finder
-    // can keep its own copy after the daemon evicts one, and that copy's date
-    // then moves by the second the next time the file is re-reported.
+    // only when it happens to cross one. A file whose bytes are on this
+    // device, in the cache or whole in the mount, never carries it, so
+    // downloading a file does not move its date.
     const thumbnailNudge = !downloaded && flags.thumbnailLocal.has(row.id) ? 1000 : 0
     return {
       // The file's stackId, not the row id: a save or another device's version
@@ -828,7 +827,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     const row = await ops.queryProviderItem(db, id)
     // Gone, replaced by a version Finder asks about afresh, or downloaded, which
     // Finder thumbnails itself.
-    if (!row || row.id !== entry.fileId || (row.fsExists ?? 0) === 1) {
+    if (!row || row.id !== entry.fileId || (row.onDevice ?? 0) === 1) {
       failed.delete(id)
       return
     }
@@ -875,6 +874,21 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     return deps.localCopyLock.run(thumb.id, async () =>
       (await thumbnailIsLocal(thumb)) ? readFile(thumb) : null,
     )
+  }
+
+  /** Whether this library is shown in a mount, where the system keeps its own copies. */
+  async function mounted(): Promise<boolean> {
+    return (await getService().settings.getMount()) !== null
+  }
+
+  /**
+   * Records that the system holds the version `fileId` whole under
+   * `stackId`, after a create or a save: the bytes it handed over are a
+   * snapshot of the file it keeps in the mount.
+   */
+  async function recordInMount(stackId: string, fileId: string, bytes: number): Promise<void> {
+    if (!(await mounted())) return
+    await getService().mountCopies.upsertWhole({ stackId, fileId, bytes, usedAt: Date.now() })
   }
 
   /** Reads one item. Hoisted because other verbs read back through it. */
@@ -1086,8 +1100,22 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
 
     async fetch(id, destPath) {
       const dest = requireHandoffPath(destPath)
-      const fileId = (await currentRow(id)).id
+      const row = await currentRow(id)
+      const fileId = row.id
       const bytes = await exportLocal(fileId, dest)
+      if (await mounted()) {
+        // Recorded as bytes handed over, not as a whole copy. The system can
+        // give up on a fetch after the file was placed for it, so the row
+        // becomes whole only once the system lists the file among those it
+        // holds.
+        await getService().mountCopies.addRange({
+          stackId: row.stackId,
+          fileId,
+          fileSize: row.size,
+          bytes: row.size,
+          usedAt: Date.now(),
+        })
+      }
       // A download can take minutes, and a newer version synced in meanwhile
       // would otherwise label these bytes, so the OS would keep them as it.
       const fetched = await versionItem(fileId)
@@ -1098,6 +1126,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     async fetchRange(id, destPath, offset, length, version, strict) {
       const dest = requireHandoffPath(destPath)
       const file = await currentRow(id)
+      const service = getService()
       // A caller that will discard any other version is refused, so it asks
       // again once it has learned of the new one. Otherwise the current
       // version is served, and the item returned names it. A file with no
@@ -1139,6 +1168,17 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
         })
       } finally {
         reservation.release()
+      }
+      // macOS never lists a partly read file among the files it holds, so
+      // these ranges are the only record that the bytes are on this device.
+      if (await mounted()) {
+        await service.mountCopies.addRange({
+          stackId: file.stackId,
+          fileId: file.id,
+          fileSize: file.size,
+          bytes,
+          usedAt: Date.now(),
+        })
       }
       // The shell reports this back as the range the system can now read. A
       // wrong one is invisible until a file reads short, so it is logged.
@@ -1237,6 +1277,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       // version, and the item is the one that file already was.
       const created = await itemForRow(id)
       if (!created) throw new Error(`Created file ${id} could not be read back`)
+      await recordInMount(created.id, id, adopted.size)
       return created
     },
 
@@ -1271,8 +1312,12 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
         await fsIO.remove(versionId, replaced.type)
         // Apps often rewrite a file without changing it. A version per such
         // save would upload and bill the same bytes again.
-        const unchanged = outcome === 'unchanged' ? await item(id) : null
-        if (!unchanged) throw new Error(`No file with id ${id}`)
+        const current = outcome === 'unchanged' ? await ops.queryProviderItem(db, id) : null
+        const unchanged = current ? await item(id) : null
+        if (!current || !unchanged) throw new Error(`No file with id ${id}`)
+        // The system holds exactly the bytes the current version has.
+        if (current.hash === adopted.hash)
+          await recordInMount(unchanged.id, current.id, current.size)
         return unchanged
       }
       await service.uploader.enqueueByIds([versionId])
@@ -1287,6 +1332,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
 
       const updated = await versionItem(versionId)
       if (!updated) throw new Error(`No file with id ${id}`)
+      await recordInMount(updated.id, versionId, adopted.size)
       return updated
     },
 
@@ -1323,6 +1369,8 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       // file may be the other one's item.
       const updated = await itemForRow(file.id)
       if (!updated) throw new Error(`No file with id ${id}`)
+      // The system now knows these bytes by the merged file's id.
+      if (updated.id !== id) await service.mountCopies.rekey(file.id, updated.id)
       return updated
     },
 
@@ -1342,6 +1390,8 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       // must never be unrecoverable.
       const file = await ops.queryProviderItem(db, id)
       if (file) await service.files.trashFile(file.id, { keepFolder: true })
+      // The system removes its copy of a file it deleted.
+      await service.mountCopies.delete([id])
     },
   }
 }

@@ -12,6 +12,7 @@ import { migration_20261028_120000_objects_feed_per_indexer } from './20261028_1
 import { migration_20261029_120000_trash_remembers_folder } from './20261029_120000_trash_remembers_folder'
 import { migration_20261102_120000_share_link_detaching } from './20261102_120000_share_link_detaching'
 import { migration_20261103_120000_thumbnail_feed_stamps } from './20261103_120000_thumbnail_feed_stamps'
+import { migration_20261112_120000_mount_copies } from './20261112_120000_mount_copies'
 
 export const coreMigrations: Migration[] = [
   migration_0001_init_schema,
@@ -27,6 +28,7 @@ export const coreMigrations: Migration[] = [
   migration_20261029_120000_trash_remembers_folder,
   migration_20261102_120000_share_link_detaching,
   migration_20261103_120000_thumbnail_feed_stamps,
+  migration_20261112_120000_mount_copies,
 ]
 
 export function sortMigrations(migrations: Migration[]): Migration[] {

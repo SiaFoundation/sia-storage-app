@@ -1,3 +1,5 @@
+import type { Mount } from '../../adapters/mount'
+import type { MountCursorState } from '../../types/provider'
 import type { StorageAdapter } from '../../adapters/storage'
 import {
   DEFAULT_INDEXER_URL,
@@ -10,6 +12,8 @@ import { uniqueId } from '../../lib/uniqueId'
 import type { AppCaches, AppService } from '../service'
 
 const CACHE_NO_LIMIT = 'off'
+const MOUNT_KEY = 'mount'
+const MOUNT_CURSOR_KEY = 'mountCursor'
 
 /**
  * Builds the settings namespace: typed getters/setters backed by key-value storage.
@@ -18,13 +22,48 @@ const CACHE_NO_LIMIT = 'off'
  * a file counts as uploaded is relative to it, and the file browser has to
  * re-read every file's upload state. If it throws, the previous URL is stored
  * again and the error is rethrown.
+ *
+ * `onMountRemoved` runs when the mount is cleared or replaced by another, to
+ * delete the record of what the previous one held, which lives in the
+ * database rather than in key-value storage.
  */
 export function buildSettingsNamespace(
   storage: StorageAdapter,
   caches: AppCaches,
   onIndexerURLChanged: () => Promise<void> = async () => {},
   cacheMinAgeMs: number = FS_EVICTABLE_MIN_AGE,
+  onMountRemoved: () => Promise<void> = async () => {},
 ): AppService['settings'] {
+  async function readMount(): Promise<Mount | null> {
+    const raw = await storage.getItem(MOUNT_KEY)
+    if (!raw) return null
+    try {
+      const value = JSON.parse(raw) as Partial<Mount>
+      if (typeof value.id === 'string' && value.id !== '') {
+        return typeof value.adapterConfig === 'string'
+          ? { id: value.id, adapterConfig: value.adapterConfig }
+          : { id: value.id }
+      }
+    } catch {}
+    return null
+  }
+
+  async function readMountCursor(): Promise<MountCursorState | null> {
+    const raw = await storage.getItem(MOUNT_CURSOR_KEY)
+    if (!raw) return null
+    try {
+      const v = JSON.parse(raw) as Partial<MountCursorState>
+      if (
+        typeof v.mountId === 'string' &&
+        typeof v.cursor === 'string' &&
+        typeof v.fullAt === 'number'
+      ) {
+        return { mountId: v.mountId, cursor: v.cursor, fullAt: v.fullAt }
+      }
+    } catch {}
+    return null
+  }
+
   async function getBool(key: string, defaultValue: boolean): Promise<boolean> {
     const raw = await storage.getItem(key)
     return raw === null ? defaultValue : raw === 'true'
@@ -110,6 +149,24 @@ export function buildSettingsNamespace(
         throw new Error(`Cache minimum age must be milliseconds of 0 or more, got ${v}`)
       }
       await setNum('cacheMinAge', Math.floor(v))
+    },
+    getMount: readMount,
+    setMount: async (v) => {
+      if (v !== null && !v.id) throw new Error('A mount needs an identifier')
+      const previous = await readMount()
+      if (v === null) await storage.deleteItem(MOUNT_KEY)
+      else await storage.setItem(MOUNT_KEY, JSON.stringify(v))
+      // What another mount held says nothing about this one, and a library
+      // with no mount holds nothing there.
+      if (previous && previous.id !== v?.id) {
+        await storage.deleteItem(MOUNT_CURSOR_KEY)
+        await onMountRemoved()
+      }
+    },
+    getMountCursor: readMountCursor,
+    setMountCursor: async (v) => {
+      if (v === null) await storage.deleteItem(MOUNT_CURSOR_KEY)
+      else await storage.setItem(MOUNT_CURSOR_KEY, JSON.stringify(v))
     },
     getLogLevel: () => getStr('logLevel', 'debug'),
     setLogLevel: (v) => setStr('logLevel', v),

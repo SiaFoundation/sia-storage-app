@@ -8,6 +8,7 @@
  * call identically, so nothing here knows what a File Provider is.
  */
 
+import type { Mount } from '@siastorage/core/adapters'
 import type { DesktopConfig } from '../config'
 
 /**
@@ -61,4 +62,12 @@ export interface PlatformIntegration {
   status(): ShellState
   /** Where the OS mounted us, for "open in file manager". Null until mounted. */
   mountPath(): string | null
+  /**
+   * The registered mount, with what the daemon's adapter needs to reach the
+   * system about it, once `start` has registered it. On macOS that is the
+   * path of the program the daemon runs to act on the Finder domain. Null
+   * when this build cannot reach the system about a mount or nothing is
+   * registered.
+   */
+  mount(): Mount | null
 }

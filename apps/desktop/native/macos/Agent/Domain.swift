@@ -96,9 +96,10 @@ public enum Agent {
     /// the mount from any state this program leaves. Removing first would discard
     /// the domain's downloaded files and race the cleanup of its disk location,
     /// which fails with `NSFileWriteFileExistsError`.
-    public static func run(_ arguments: [String], registry: DomainRegistry) async throws
-        -> AgentResult
-    {
+    public static func run(
+        _ arguments: [String], registry: DomainRegistry,
+        materialized: MaterializedSet = SystemMaterializedSet()
+    ) async throws -> AgentResult {
         switch arguments.first {
         case "register":
             guard arguments.count == 3 else {
@@ -123,8 +124,19 @@ public enum Agent {
         case "list":
             return AgentResult(ok: true, domains: try await registry.existing())
 
+        case "materialized":
+            guard arguments.count == 3 || arguments.count == 4 else {
+                throw AgentError.usage("materialized <domainId> <out> [anchor]")
+            }
+            let result = try await Materialized.run(
+                domainId: arguments[1], anchor: arguments.count == 4 ? arguments[3] : nil,
+                set: materialized)
+            try JSONEncoder().encode(result).write(to: URL(fileURLWithPath: arguments[2]))
+            return AgentResult(ok: true)
+
         default:
-            throw AgentError.usage("register | hide | show | unregister | list")
+            throw AgentError.usage(
+                "register | hide | show | unregister | list | materialized")
         }
     }
 }

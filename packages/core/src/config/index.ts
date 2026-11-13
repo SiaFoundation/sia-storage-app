@@ -208,6 +208,10 @@ export const FS_EVICTABLE_MIN_AGE = minutesInMs(60) // 1 hour
 export const USED_AT_UPDATE_INTERVAL = minutesInMs(5)
 // How long eviction keeps an uploaded copy whose thumbnails are not made yet, from when the copy was added.
 export const FS_EVICTION_THUMBNAIL_WAIT = daysInMs(1) // 1 day
+// How often the mount's files are read whole. A read of changes misses
+// nothing the system reports, so this only corrects a record the two have
+// drifted apart on, such as a file handed over that the system never took.
+export const MOUNT_FULL_READ_INTERVAL = daysInMs(1)
 // Age threshold for evicting superseded file versions.
 export const FS_EVICTABLE_MIN_AGE_NON_CURRENT = minutesInMs(60) // 1 hour
 // Sync up metadata interval.

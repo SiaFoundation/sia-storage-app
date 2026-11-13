@@ -22,7 +22,7 @@ import { log } from './log'
 import { createLoginItem, enabledByDefault, type LoginItem } from './loginItem'
 import { createPlatformIntegration } from './platform'
 import type { StopOptions } from './platform/types'
-import { DaemonStream } from './rpc'
+import { call, DaemonStream } from './rpc'
 import { receiveShareRequest } from './share'
 import { createTray, destroyTray } from './tray'
 import { startUpdates } from './updates'
@@ -101,6 +101,22 @@ if (!app.requestSingleInstanceLock()) {
   let changes: DaemonStream | null = null
   let spawn: DaemonSpawn | null = null
   let quitting: Promise<void> | null = null
+
+  /**
+   * Tells the daemon which mount its library is shown in, and what its
+   * adapter needs to reach the system about it, once the mount comes up and
+   * on every connect after. A call that fails keeps the last one recorded.
+   * Without it the daemon keeps no record of what the file manager holds.
+   */
+  async function recordMount(): Promise<void> {
+    const mount = platform.mount()
+    if (!mount) return
+    try {
+      await call('ds:settings:setMount', [mount])
+    } catch (e) {
+      log.error('mount', 'mount_not_recorded', { error: e as Error })
+    }
+  }
 
   // Both can arrive before `whenReady` resolves, and a BrowserWindow built then
   // throws, so each waits rather than assuming the app is already up.
@@ -316,6 +332,7 @@ if (!app.requestSingleInstanceLock()) {
           displayName: config.displayName,
         })
         log.info('mount', 'state', { state: platform.status() })
+        await recordMount()
       } catch (e) {
         // A missing shell is not fatal: the tray and the window still work, and
         // the status surface reads the mount state itself through `shellStatus`.
@@ -348,6 +365,10 @@ if (!app.requestSingleInstanceLock()) {
           // answer, and a daemon that came up before the stream first tried it
           // shows no drop.
           broadcast('change', { event: 'change', scope: 'connection' })
+          // Again on every connect: at launch the daemon can still be
+          // migrating after an update and miss the first call, and a daemon
+          // restarted under a new library has none recorded.
+          void recordMount()
         },
         (fileIds) => void app.whenReady().then(() => receiveShareRequest(fileIds)),
       )

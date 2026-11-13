@@ -10,6 +10,7 @@ import { app } from 'electron'
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { desktopConfig } from '../config'
 
 const AGENT_NAME = 'SiaDomainAgent'
 /** Bounds a stuck helper so it cannot hold up startup or quit. */
@@ -27,6 +28,16 @@ export type AgentResult = {
 export function agentPath(): string {
   const contents = dirname(dirname(app.getAppPath()))
   return join(contents, 'Helpers', `${AGENT_NAME}.app`, 'Contents', 'MacOS', AGENT_NAME)
+}
+
+/**
+ * The same program installed bare beside the app's executable, where the
+ * system lets it act on the app's domain. The daemon runs this one. Null in
+ * a checkout, whose config names none.
+ */
+export function finderAgentPath(): string | null {
+  const name = desktopConfig().finderAgent
+  return name ? join(dirname(dirname(app.getAppPath())), 'MacOS', name) : null
 }
 
 /**

@@ -230,13 +230,17 @@ bun sim device expect phone --label Menu
 - Check: `call <device> downloads.getState`; `call <device> cache.evict` runs an
   eviction pass now, and `cache.clear` removes every backed-up copy, as Clear
   Local Files does; tables `fs`
+- Finder: on the desktop app, table `mount_copies` records what Finder holds,
+  by the version it holds. The pass reads what the system removed from Finder
+  (`syncMount`, setting `mountCursor`) through the agent the app names in
+  setting `mount`, and `cache.bytesOnDevice` counts what both places hold.
 - Tests: scenarios `mobile/clear-local-files-keeps-unuploaded`,
   `mobile/stray-copy-removed-on-resume`,
   `sync/converge-and-download`, `mobile/tapped-download-arrives`,
   `sync/small-downloads-beside-large`, `finder/cache-limit-evicts`,
   `finder/cache-limit-keeps-unuploaded`, `finder/cache-limit-concurrent-opens`,
   `desktop/cache-limit-finder-keeps-copies`, `desktop/clear-local-files`;
-  integration `downloads`,
+  integration `downloads`, `finder-mount`,
   `fs-eviction`, `fs-adopt`, `fs-orphan`, `size-reconcile`
 - Network: `net latency` adds a delay to every call and `net download-rate`
   shares one download speed between every download, the two costs that decide
