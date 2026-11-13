@@ -180,3 +180,13 @@ export type MountCursorState = {
   /** When the mount's files were last read whole. */
   fullAt: number
 }
+
+/**
+ * Files the system now holds whole in the mount, or no longer holds, named by
+ * the ids it knows them by. Sent by an integration the system tells about
+ * each file, such as a Windows sync root.
+ */
+export type MountReport = {
+  hydrated?: string[]
+  dehydrated?: string[]
+}

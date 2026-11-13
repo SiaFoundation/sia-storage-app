@@ -158,7 +158,16 @@ async function dehydrate(
     done.map((copy) => copy.stackId),
     callStart + 1,
   )
-  return done.filter((copy) => deleted.some((row) => row.stackId === copy.stackId))
+  // A row already gone was removed by the integration's own report of the
+  // same removal, which can arrive before its answer, and still counts.
+  const removed: MountCandidate[] = []
+  for (const copy of done) {
+    const gone =
+      deleted.some((row) => row.stackId === copy.stackId) ||
+      (await app.mountCopies.read(copy.stackId)) === null
+    if (gone) removed.push(copy)
+  }
+  return removed
 }
 
 /**

@@ -242,11 +242,17 @@ bun sim device expect phone --label Menu
   way the system does on its own. Opening a file in an app moves its last use
   forward (`provider.touch`). After the indexer is changed, a file only
   Finder holds comes back into the cache to upload (`mount.resend`).
+- Folder on a CLI device: `mount()` in a scenario stands in for a file
+  manager's folder, with real files in the device's `mount` directory. It
+  holds the daemon's mount link open as a Windows sync root provider does,
+  answers `dehydrate`, and reports what it took and removed with
+  `provider.mountReport`.
 - Tests: scenarios `mobile/clear-local-files-keeps-unuploaded`,
   `mobile/stray-copy-removed-on-resume`,
   `sync/converge-and-download`, `mobile/tapped-download-arrives`,
   `sync/small-downloads-beside-large`, `finder/cache-limit-evicts`,
   `finder/cache-limit-keeps-unuploaded`, `finder/cache-limit-concurrent-opens`,
+  `finder/mount-cache-limit`,
   `desktop/cache-limit-frees-finder-copies`, `desktop/finder-drop-leaves-no-copy`,
   `desktop/clear-local-files`, `desktop/finder-open-counts-as-use`,
   `desktop/indexer-change-restores-from-finder`; integration `downloads`, `finder-mount`,

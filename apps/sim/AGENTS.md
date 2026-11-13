@@ -257,9 +257,18 @@ The kill itself needs a real phone.
 A scenario is a file in `scenarios/` ending `.scenario.ts`. It declares its
 devices as `cli`, `phone`, `desktop` or `desktop-signed-out`, runs steps, and
 records checks. Each device arrives typed by its kind, so a `cli` device has
-`cli()` and `stage()`, a `phone` has `ui()` and `importFiles()`, and a `desktop`
+`cli()`, `stage()` and `mount()`, a `phone` has `ui()` and `importFiles()`, and a `desktop`
 device has `finderList()`, `finderRead()`, `finderWrite()`, `finderRename()`,
 `finderRemove()`, `isCloudOnly()` and `extensionLog()`.
+
+A `cli` device's `mount()` stands in for a file manager's folder, which a
+daemon alone does not have. It keeps a copy of each file opened or created
+through it as a real file under the device's directory, and reaches the daemon
+the way a Windows sync root provider does. It holds the daemon's mount link
+open, answers its requests to remove a copy, and reports each file it takes
+or removes. `attach()` registers it, and it lasts for the
+scenario's process, so a session driven from separate commands has none.
+Finder itself is a `desktop` device.
 
 A desktop device's `ui()` drives the app's two windows. Both show the same
 status, so a step names the one it means: `ui().window('main')` or

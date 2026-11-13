@@ -394,6 +394,51 @@ describe('a device with a Finder folder', () => {
     })
   })
 
+  describe('an integration that reports each file', () => {
+    it('records a reported file as whole and removes its cache copy', async () => {
+      const id = await fromPeer('p1.bin', bytesOf('p'))
+      await finder.open(id)
+      const fileId = await versionOf(mac, id)
+      expect(await cached(fileId)).toBe(true)
+
+      await mac.app.provider.mountReport({ hydrated: [id] })
+
+      expect(await mountRow(id)).toMatchObject({ fileId, whole: true })
+      expect(await cached(fileId)).toBe(false)
+    })
+
+    it('keeps the record on the version the folder holds when a newer one arrives before the report', async () => {
+      const { id, fileId: firstId } = await inFinder('p4.bin', bytesOf('1'))
+      await uploaded(peer, id)
+      const next = bytesOf('2', 180)
+      const staged = path.join(peerHandoff, 'stage-p4')
+      nodeFs.writeFileSync(staged, next)
+      await peer.app.provider.write(id, staged)
+      await uploaded(mac, id, next)
+
+      await mac.app.provider.mountReport({ hydrated: [id] })
+
+      expect((await mountRow(id))?.fileId).toBe(firstId)
+    })
+
+    it('forgets a file reported as removed', async () => {
+      const { id } = await inFinder('p2.bin', bytesOf('p', 250))
+
+      await mac.app.provider.mountReport({ dehydrated: [id] })
+
+      expect(await mountRow(id)).toBeNull()
+      expect(await mac.app.cache.bytesOnDevice()).toBe(0)
+    })
+
+    it('records nothing on a device with no mount', async () => {
+      const id = await fromPeer('p3.bin', bytesOf('p'))
+
+      await peer.app.provider.mountReport({ hydrated: [id] })
+
+      expect(await peer.app.mountCopies.read(id)).toBeNull()
+    })
+  })
+
   describe('the cache limit', () => {
     it('frees the least recently used copies from both places', async () => {
       await noMinimumAge()
@@ -422,6 +467,26 @@ describe('a device with a Finder folder', () => {
       expect(finder.held.has(newest.id)).toBe(true)
       expect(result).toMatchObject({ evicted: 2, bytesFreed: 200 })
       expect(await mac.app.cache.bytesOnDevice()).toBe(100)
+    })
+
+    it('counts a removal the integration reported before it answered', async () => {
+      await noMinimumAge()
+      const oldest = await inFinder('yr1.bin', bytesOf('1'))
+      const newest = await inFinder('yr2.bin', bytesOf('2'))
+      await mac.app.mountCopies.touch([oldest.id], LONG_AGO())
+      const dehydrate = finder.adapter.dehydrate
+      finder.adapter.dehydrate = async (mount, stackIds, signal) => {
+        const answers = await dehydrate(mount, stackIds, signal)
+        await mac.app.provider.mountReport({ dehydrated: stackIds })
+        return answers
+      }
+
+      await mac.app.settings.setCacheMaxBytes(100)
+      const result = await mac.app.cache.evict()
+
+      expect(finder.asked).toEqual([oldest.id])
+      expect(finder.held.has(newest.id)).toBe(true)
+      expect(result).toMatchObject({ evicted: 1, bytesFreed: 100 })
     })
 
     it('asks Finder about no file it does not need to free', async () => {
