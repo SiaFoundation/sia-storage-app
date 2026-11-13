@@ -8,7 +8,7 @@
  */
 
 import { Menu } from 'electron'
-import { openLogs } from './logs'
+import { openLogs } from './platform'
 import { updateMenuItems } from './updates'
 import { holdPopover } from './windows'
 

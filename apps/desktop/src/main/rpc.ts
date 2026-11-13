@@ -10,10 +10,37 @@
  */
 
 import type { CacheMethod, IpcMessage } from '@siastorage/core/app'
+import { authenticateServer, clientEndpoint } from '@siastorage/core/lib/ipcEndpoint'
 import type { ChangeEvent } from '@siastorage/core/types'
+import { readFileSync } from 'node:fs'
 import { connect, type Socket } from 'node:net'
 import { log } from './log'
 import { daemonSocketPath } from './paths'
+
+/**
+ * Connects to the daemon, and on Windows has it prove it is the daemon before
+ * anything is sent (see ipcEndpoint.ts in core). `ready` runs once the socket
+ * may be written to. A server that fails the proof is dropped, which closes
+ * the socket.
+ */
+function connectDaemon(ready: () => void): Socket {
+  const { address, secret } = clientEndpoint(daemonSocketPath(), (path) => {
+    try {
+      return readFileSync(path, 'utf8')
+    } catch {
+      return null
+    }
+  })
+  const socket = connect(address)
+  socket.on('connect', () => {
+    if (!secret) return ready()
+    authenticateServer(socket, secret).then(ready, (e: Error) => {
+      log.error('daemon', 'pipe_not_daemon', { error: e })
+      socket.destroy()
+    })
+  })
+  return socket
+}
 
 /** A `Record` keyed by the union, so adding a method fails to compile here. */
 const CACHE_METHODS: Record<CacheMethod, true> = {
@@ -68,7 +95,14 @@ let nextId = 0
 
 export function call(method: string, args: unknown[] = [], timeoutMs = 15_000): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    const socket = connect(daemonSocketPath())
+    // On Windows the first line back answers the hello, which the reply
+    // handler below must not take for this call's result.
+    let sent = false
+    const socket = connectDaemon(() => {
+      sent = true
+      const id = `d${(nextId += 1)}`
+      socket.write(`${JSON.stringify({ id, method, params: { args } })}\n`)
+    })
     let buffer = ''
     let settled = false
 
@@ -83,11 +117,8 @@ export function call(method: string, args: unknown[] = [], timeoutMs = 15_000): 
 
     const timer = setTimeout(() => finish(new RpcError(`${method} timed out`)), timeoutMs)
 
-    socket.on('connect', () => {
-      const id = `d${(nextId += 1)}`
-      socket.write(`${JSON.stringify({ id, method, params: { args } })}\n`)
-    })
     socket.on('data', (chunk) => {
+      if (!sent) return
       buffer += chunk.toString('utf8')
       const newline = buffer.indexOf('\n')
       if (newline === -1) return
@@ -138,15 +169,17 @@ export class DaemonStream {
     // One connection, as the class promises: a second start would otherwise
     // leave the first open and duplicate every event.
     this.socket?.destroy()
-    const socket = connect(daemonSocketPath())
-    this.socket = socket
-    let buffer = ''
-
-    socket.on('connect', () => {
+    let subscribed = false
+    const socket = connectDaemon(() => {
+      subscribed = true
       socket.write(`${JSON.stringify({ id: 'subscribe', method: 'subscribe' })}\n`)
       this.onUp()
     })
+    this.socket = socket
+    let buffer = ''
+
     socket.on('data', (chunk) => {
+      if (!subscribed) return
       buffer += chunk.toString('utf8')
       let newline = buffer.indexOf('\n')
       while (newline !== -1) {

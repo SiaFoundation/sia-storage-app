@@ -20,7 +20,8 @@ import { forcedResetPending } from './forcedReset'
 import { confirmSignOut, warnWipeBlocked, wipeLibrary } from './signout'
 import { log } from './log'
 import { createLoginItem, enabledByDefault, type LoginItem } from './loginItem'
-import { createPlatformIntegration } from './platform'
+import { endpointMarker } from '@siastorage/core/lib/ipcEndpoint'
+import { createPlatformIntegration, loginItemSettingsUrl } from './platform'
 import type { StopOptions } from './platform/types'
 import { call, DaemonStream } from './rpc'
 import { receiveShareRequest } from './share'
@@ -36,22 +37,21 @@ import { beginQuit, broadcast, showMainWindow } from './windows'
  */
 const BUNDLED = dirname(app.getAppPath())
 
-/** Where System Settings lists the apps that open at login. */
-const LOGIN_ITEMS_SETTINGS = 'x-apple.systempreferences:com.apple.LoginItems-Settings.extension'
-
 /**
  * Null in a run from source, which would register Electron's own binary
- * rather than an app bundle.
+ * rather than an app bundle, and on a platform that names no settings page
+ * for login items.
  */
 function createAppLoginItem(): LoginItem | null {
-  if (!app.isPackaged || process.platform !== 'darwin') return null
+  const settingsUrl = loginItemSettingsUrl()
+  if (!app.isPackaged || !settingsUrl) return null
   return createLoginItem({
     system: {
       status: () => app.getLoginItemSettings().status,
       set: (on) => app.setLoginItemSettings({ openAtLogin: on }),
       openSettings: () =>
         void shell
-          .openExternal(LOGIN_ITEMS_SETTINGS)
+          .openExternal(settingsUrl)
           .catch((e) => log.error('login_item', 'settings_not_opened', { error: e as Error })),
     },
     enableByDefault: enabledByDefault(buildVariant()),
@@ -286,7 +286,7 @@ if (!app.requestSingleInstanceLock()) {
       // A source build and an installed one each pick these for themselves, so
       // a mismatch here is how the extension ends up served by the wrong daemon.
       log.info('app', 'library', { path: dataDir() })
-      log.info('app', 'serving_extension', { container: dirname(shellSocket) })
+      if (shellSocket) log.info('app', 'serving_extension', { container: dirname(shellSocket) })
       // Before the reset check below: a daemon from another build is stopped
       // here, and the bundled one that replaces it is what may rebuild.
       await daemon.reconcile(expectedDaemonBuild(config), confirmRestartDaemon)
@@ -301,7 +301,7 @@ if (!app.requestSingleInstanceLock()) {
         const discarded = await platform.discard(config.domainId)
         log.info('app', 'forced_reset', { folderDiscarded: discarded })
       }
-      const hadSocket = existsSync(shellSocket)
+      const hadSocket = shellSocket !== undefined && existsSync(endpointMarker(shellSocket))
       const attached = await daemon.attach(spawn)
       log.info('daemon', 'attached', { state: attached, owned: daemon.owned })
       // A socket file is normal on relaunch, when the daemon from the last
