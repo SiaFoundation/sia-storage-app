@@ -1,3 +1,4 @@
+import FileProvider
 import XCTest
 
 @testable import SiaDomainAgent
@@ -164,7 +165,7 @@ final class AgentTests: XCTestCase {
             _ = try await Agent.run(["mount"], registry: registry)
             XCTFail("expected a usage error")
         } catch let error as AgentError {
-            XCTAssertEqual(error, .usage("register | hide | show | unregister | list"))
+            XCTAssertEqual(error, .usage("register | hide | show | unregister | list | materialized"))
         } catch {
             XCTFail("expected a usage error, got \(error)")
         }
@@ -209,5 +210,73 @@ final class AgentTests: XCTestCase {
         let parsed = try JSONSerialization.jsonObject(with: Data(result.json.utf8))
         let preserved = (parsed as? [String: Any])?["preserved"] as? String
         XCTAssertEqual(preserved, #"/Volumes/od\d/a"b"#)
+    }
+}
+
+/// Answers from fixed lists, and expires any anchor but `fresh`.
+private struct TableSet: MaterializedSet {
+    var ids: [String] = []
+    var updated: [String] = []
+    var deleted: [String] = []
+    var fresh = Data("fresh".utf8)
+
+    func all(domainId: String) async throws -> (ids: [String], anchor: Data) {
+        (ids, Data("after-walk".utf8))
+    }
+
+    func changes(domainId: String, since anchor: Data) async throws -> (
+        updated: [String], deleted: [String], anchor: Data
+    ) {
+        guard anchor == fresh else { throw MaterializedError.expired }
+        return (updated, deleted, Data("after-changes".utf8))
+    }
+}
+
+final class MaterializedTests: XCTestCase {
+    private func run(_ anchor: String?, _ set: TableSet) async throws -> [String: Any] {
+        let out = FileManager.default.temporaryDirectory
+            .appendingPathComponent("materialized-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: out) }
+        let args = ["materialized", "sia-dev", out.path] + (anchor.map { [$0] } ?? [])
+        _ = try await Agent.run(args, registry: RecordingRegistry(), materialized: set)
+        return try JSONSerialization.jsonObject(with: Data(contentsOf: out)) as! [String: Any]
+    }
+
+    func testAFullWalkListsFilesOnlyAndTheAnchorToReadFrom() async throws {
+        let set = TableSet(ids: [
+            NSFileProviderItemIdentifier.rootContainer.rawValue, "dir:photos", "a", "b",
+            NSFileProviderItemIdentifier.trashContainer.rawValue,
+        ])
+
+        let result = try await run(nil, set)
+
+        XCTAssertEqual(result["full"] as? [String], ["a", "b"])
+        XCTAssertEqual(result["anchor"] as? String, Data("after-walk".utf8).base64EncodedString())
+        XCTAssertNil(result["removed"])
+    }
+
+    func testAChangeReadReportsAddedAndRemovedFiles() async throws {
+        let set = TableSet(updated: ["a", "dir:x"], deleted: ["b"])
+
+        let result = try await run(Data("fresh".utf8).base64EncodedString(), set)
+
+        XCTAssertEqual(result["added"] as? [String], ["a"])
+        XCTAssertEqual(result["removed"] as? [String], ["b"])
+        XCTAssertNil(result["full"])
+    }
+
+    func testAnUnreadableAnchorFallsBackToAFullWalk() async throws {
+        let result = try await run("not base64 !", TableSet(ids: ["a"]))
+
+        XCTAssertEqual(result["full"] as? [String], ["a"])
+    }
+
+    func testAnExpiredAnchorFallsBackToAFullWalk() async throws {
+        let set = TableSet(ids: ["a"], deleted: ["b"])
+
+        let result = try await run(Data("stale".utf8).base64EncodedString(), set)
+
+        XCTAssertEqual(result["full"] as? [String], ["a"])
+        XCTAssertNil(result["removed"])
     }
 }

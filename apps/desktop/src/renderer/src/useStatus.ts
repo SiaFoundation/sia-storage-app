@@ -197,13 +197,14 @@ function useNotBackedUpBytes() {
 }
 
 /**
- * Bytes in the daemon's cache, the cap it is held to, and the size of the
- * copies in it not backed up yet. Nothing invalidates a key when
- * a download lands, so the size also refreshes on a timer.
+ * Bytes of the library's files on this computer, which is the daemon's cache
+ * plus what the file manager's folder holds on its own, the cap the cache is
+ * held to, and the size of the copies not backed up yet. Nothing invalidates
+ * a key when a download lands, so the size also refreshes on a timer.
  */
 export function useLocalCache(): LocalCache {
   const app = useApp()
-  const bytes = useSWR(app.caches.library.key('localCacheBytes'), () => app.fs.calcTotalSize(), {
+  const bytes = useSWR(app.caches.library.key('localCacheBytes'), () => app.cache.bytesOnDevice(), {
     refreshInterval: 30_000,
   })
   const maxBytes = useSWR(app.caches.settings.key('cacheMaxBytes'), () =>

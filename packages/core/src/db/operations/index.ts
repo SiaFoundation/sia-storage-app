@@ -195,6 +195,7 @@ export {
   type SortDir,
   UNFILED_DIRECTORY_ID,
 } from './library'
+export * from './mountCopies'
 export * from './providerChanges'
 export {
   clearObjectIfUnchanged,

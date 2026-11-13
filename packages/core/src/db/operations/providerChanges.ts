@@ -42,11 +42,36 @@ export type ProviderChangeRows = {
   hasMore: boolean
 }
 
+/**
+ * SQL that is 1 when the version `f` names is on this device: a copy in the
+ * cache, or the mount holding it whole. Used with `fs` left-joined on the
+ * version's id.
+ */
+const ON_DEVICE = `(fs.fileId IS NOT NULL OR EXISTS (
+  SELECT 1 FROM mount_copies mc WHERE mc.fileId = f.id AND mc.whole = 1
+))`
+
 export type ProviderChangeRow = FileRecordRow & {
   stackId: string
-  fsExists: number
+  /** 1 when this version is in the cache or whole in the mount. */
+  onDevice: number
   directoryId: string | null
   feedSeq: number
+}
+
+/**
+ * SQL that holds when the row `alias` names is the one the file manager shows for
+ * its stack, picked as `queryProviderItem` picks it. A query that removes or
+ * counts a copy in the mount uses this, so it acts on the same row the file
+ * manager shows.
+ */
+export function shownRowCondition(alias: string): string {
+  return `${alias}.id = (
+    SELECT s.id FROM files s
+    WHERE s.stackId = ${alias}.stackId AND ${buildRecordFilter('s')}
+    ORDER BY s.updatedAt DESC, s.id DESC
+    LIMIT 1
+  )`
 }
 
 /**
@@ -54,13 +79,14 @@ export type ProviderChangeRow = FileRecordRow & {
  * when no visible file carries it: trashed, tombstoned, or merged into
  * another. Newest first: a batch insert leaves a new version current beside
  * the old one until its transaction recalculates the stack.
+ * `shownRowCondition` picks the same row, so the two change together.
  */
 export async function queryProviderItem(
   db: DatabaseAdapter,
   stackId: string,
 ): Promise<ProviderChangeRow | null> {
   const row = await db.getFirstAsync<ProviderChangeRow>(
-    `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq, (fs.fileId IS NOT NULL) AS fsExists
+    `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq, ${ON_DEVICE} AS onDevice
      FROM files f
      LEFT JOIN fs ON fs.fileId = f.id
      WHERE f.stackId = ? AND ${VISIBLE}
@@ -77,7 +103,7 @@ export async function queryProviderRow(
   rowId: string,
 ): Promise<ProviderChangeRow | null> {
   const row = await db.getFirstAsync<ProviderChangeRow>(
-    `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq, (fs.fileId IS NOT NULL) AS fsExists
+    `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq, ${ON_DEVICE} AS onDevice
      FROM files f
      LEFT JOIN fs ON fs.fileId = f.id
      WHERE f.id = ? AND f.kind = 'file'`,
@@ -122,7 +148,7 @@ export async function queryProviderChanges(
   // inside it is still visible is a property of the row.
   const rows = await db.getAllAsync<ProviderChangeRow & { visible: number }>(
     `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq,
-            (fs.fileId IS NOT NULL) AS fsExists,
+            ${ON_DEVICE} AS onDevice,
             (${VISIBLE}) AS visible
      FROM files f
      LEFT JOIN fs ON fs.fileId = f.id
@@ -273,7 +299,7 @@ export async function queryProviderRowsByStackIds(
   const ph = stackIds.map(() => '?').join(',')
   return db.getAllAsync(
     `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq,
-            (fs.fileId IS NOT NULL) AS fsExists
+            ${ON_DEVICE} AS onDevice
      FROM files f INDEXED BY idx_files_stackId
      LEFT JOIN fs ON fs.fileId = f.id
      WHERE f.stackId IN (${ph}) AND ${VISIBLE}`,
@@ -299,7 +325,7 @@ export async function queryProviderFolderFiles(
   const cursorParams = after === null ? [] : [after.nameSortKey, after.nameSortKey, after.id]
   return db.getAllAsync(
     `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq, f.nameSortKey,
-            (fs.fileId IS NOT NULL) AS fsExists
+            ${ON_DEVICE} AS onDevice
      FROM files f
      LEFT JOIN fs ON fs.fileId = f.id
      WHERE ${scope} AND ${VISIBLE} ${cursorCond}

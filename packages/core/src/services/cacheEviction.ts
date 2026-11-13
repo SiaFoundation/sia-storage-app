@@ -7,6 +7,7 @@ import {
   FS_EVICTION_THUMBNAIL_WAIT,
   FS_MAX_BYTES,
 } from '../config'
+import { syncMount } from './mountSync'
 
 export type CacheEvictionConfig = {
   maxBytes?: number
@@ -146,6 +147,10 @@ export function evictionRunner(
  *   3. LRU loop: oldest uploaded files past `minAge`, only while over `maxBytes`,
  *      skipping a file whose thumbnails are not made yet for up to
  *      `thumbnailWait` after its copy was added.
+ * On a library with a mount, the folder a file manager shows, the pass first
+ * reads which files the system holds there and which it removed on its own
+ * (`syncMount`).
+ *
  * A current or trashed file is evicted only while it has an object on the
  * current indexer, read per batch and again before each removal. A superseded
  * version needs an object on any indexer, since the uploader never sends one.
@@ -165,6 +170,7 @@ export async function runCacheEviction(
   const thumbnailWait = config?.thumbnailWait ?? FS_EVICTION_THUMBNAIL_WAIT
   const batchSize = config?.batchSize ?? 100
 
+  await syncMount(app, signal)
   const totalSize = await app.fs.calcTotalSize()
 
   logger.info('cacheEviction', 'starting', { totalSize, limit: maxBytes })

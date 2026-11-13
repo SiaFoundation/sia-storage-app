@@ -75,7 +75,7 @@ export type ProviderItem = {
   /** An indexer object exists for this file. */
   uploaded: boolean
   uploading: boolean
-  /** The bytes are present in managed storage. */
+  /** This version's bytes are on this device: in the cache, or whole in the mount. */
   downloaded: boolean
   downloading: boolean
   /** 0..1, meaningful only while uploading or downloading. */
@@ -169,4 +169,14 @@ export type ProviderHello = {
    * its own.
    */
   library: string
+}
+
+/** Where the last read of the mount's files ended, saved only after a read that succeeded. */
+export type MountCursorState = {
+  /** The mount the cursor belongs to. */
+  mountId: string
+  /** The adapter's cursor, to read only what changed after it. */
+  cursor: string
+  /** When the mount's files were last read whole. */
+  fullAt: number
 }

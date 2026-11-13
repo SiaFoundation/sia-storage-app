@@ -8,12 +8,12 @@
  * reconnects, so start never branches on the current state.
  */
 
-import { readdirSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { DesktopConfig } from '../config'
 import { log } from '../log'
-import { agentInstalled, runAgent } from './agent'
+import { agentInstalled, finderAgentPath, runAgent } from './agent'
 import type { PlatformIntegration, ShellConfig, ShellPaths, ShellState, StopOptions } from './types'
 
 /** How long a quit waits on the helper. It is not cancelled, so a slow hide
@@ -97,6 +97,8 @@ export function createDarwinIntegration(): PlatformIntegration {
   let state: ShellState = 'absent'
   let displayName: string | null = null
   let domainId: string | null = null
+  /** Whether the last `start` confirmed the domain is registered. */
+  let registered = false
 
   return {
     shellPaths(config: DesktopConfig): ShellPaths {
@@ -119,7 +121,7 @@ export function createDarwinIntegration(): PlatformIntegration {
       state = 'starting'
       displayName = config.displayName
       domainId = config.domainId
-      let registered = false
+      registered = false
       let confirmed = true
       try {
         await runAgent(['register', config.domainId, config.displayName])
@@ -167,6 +169,7 @@ export function createDarwinIntegration(): PlatformIntegration {
       state = 'absent'
       displayName = null
       domainId = null
+      registered = false
     },
 
     discard: async (id) => agentInstalled() && (await removeDomain(id)),
@@ -187,5 +190,12 @@ export function createDarwinIntegration(): PlatformIntegration {
     // Null unless mounted: the directory appears before the domain serves and
     // outlives one that failed, so its presence alone proves nothing.
     mountPath: () => (displayName && state === 'mounted' ? findMount(displayName) : null),
+
+    mount: () => {
+      const agentPath = finderAgentPath()
+      return domainId && registered && agentPath && existsSync(agentPath)
+        ? { id: domainId, adapterConfig: agentPath }
+        : null
+    },
   }
 }

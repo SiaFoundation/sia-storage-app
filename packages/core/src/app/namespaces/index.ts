@@ -1,6 +1,7 @@
 import type { SdkAuthAdapters } from '../../adapters/auth'
 import type { CryptoAdapter } from '../../adapters/crypto'
 import type { DatabaseAdapter } from '../../adapters/db'
+import type { MountAdapter } from '../../adapters/mount'
 import type { ObjectsCursor, SdkAdapter } from '../../adapters/sdk'
 import type { StorageAdapter } from '../../adapters/storage'
 import type { ThumbnailAdapter } from '../../adapters/thumbnail'
@@ -60,6 +61,8 @@ export interface AppServiceAdapters {
   usedAtUpdateIntervalMs?: number
   /** The cache's minimum age until `cacheMinAge` is set. Left out, `FS_EVICTABLE_MIN_AGE`. */
   cacheMinAgeMs?: number
+  /** Reaches the operating system about the mount. Only a host with a mount passes one. */
+  mount?: MountAdapter
 }
 
 /** The result of creating an AppService: the public service, internal APIs, and upload manager. */
@@ -197,6 +200,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       caches.libraryVersion.invalidate()
     },
     adapters.cacheMinAgeMs,
+    () => service.mountCopies.deleteAll(),
   )
   const authNamespace = buildAuthNamespace(adapters.secrets, adapters.crypto, adapters.sdkAuth)
 
@@ -288,10 +292,19 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       transferBudget,
       localCopyLock,
     }),
+    mount: {
+      changes: async (cursor, signal) => {
+        const mount = await settingsNamespace.getMount()
+        if (!mount || !adapters.mount) return null
+        return adapters.mount.changes(mount, cursor, signal)
+      },
+    },
     downloads: downloadsNamespace,
     cache: {
       evict: () => eviction.evict(),
       clear: () => eviction.clear(),
+      bytesOnDevice: async () =>
+        (await service.fs.calcTotalSize()) + (await service.mountCopies.onlyBytes()),
     },
     shares: sharesNamespace,
     connection: {

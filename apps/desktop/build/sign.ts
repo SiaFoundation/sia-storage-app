@@ -135,6 +135,10 @@ export async function sign(build: BuildResult, env: BuildEnv): Promise<void> {
   await seal(build.runtimePath, helperEntPath, env.appBundleId)
 
   await seal(build.agentPath, appEntPath, env.appBundleId)
+  // No entitlements: its calls act on a domain the app already registered,
+  // which needs none. The identifier is what the daemon checks before it runs
+  // the path the app gives it (`finderAgent.ts` in the CLI).
+  await seal(build.finderAgentPath, undefined, `${env.appBundleId}.finder-agent`)
   await seal(build.appexPath, extEntPath, env.extBundleId)
   await seal(build.appPath, appEntPath, env.appBundleId)
 
