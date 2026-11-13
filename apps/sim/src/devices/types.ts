@@ -58,6 +58,12 @@ export interface Device {
   start(opts?: { relaunchAfterCrash?: boolean }): Promise<void>
   /** The first crash line of each start a relaunch got past. */
   readonly startCrashes?: readonly string[]
+  /**
+   * For a device whose code is copied from this checkout when it starts,
+   * starts it again if the checkout has changed since. Returns whether it
+   * did. `up` calls it on a device that is already running.
+   */
+  refresh?(): Promise<boolean>
   /** Asks the app to shut down and waits for it to exit. */
   stop(): Promise<void>
   /** Kills the process with no chance to clean up. */

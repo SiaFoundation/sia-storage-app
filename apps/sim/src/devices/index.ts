@@ -13,11 +13,14 @@ import { CliDevice } from './cli'
 import * as desktop from './desktop'
 import { IosDevice } from './ios'
 import type { Device } from './types'
+import * as windows from './windows'
+import { WindowsDevice } from './windows'
 
 export type { Device, LibraryEntry } from './types'
 export { CliDevice } from './cli'
 export { DesktopDevice } from './desktop'
 export { IosDevice } from './ios'
+export { WindowsDevice } from './windows'
 export { PhoneDevice, PhoneStartFailed } from './phone'
 
 type KindEntry = {
@@ -48,6 +51,10 @@ const KINDS: Record<DeviceKind, KindEntry> = {
     open: (name, session) => new desktop.DesktopDevice(name, session),
     release: desktop.release,
   },
+  windows: {
+    open: (name, session) => new WindowsDevice(name, session),
+    release: windows.release,
+  },
 }
 
 /** Servers every phone shares, stopped once no session needs them. */
@@ -75,7 +82,7 @@ export async function addDevice(
   }
   // A CLI daemon and the desktop app sign in through the mock network's
   // account, which a live session's network does not stand in for.
-  if (session.state.live && (kind === 'cli' || kind === 'desktop')) {
+  if (session.state.live && (kind === 'cli' || kind === 'desktop' || kind === 'windows')) {
     throw new Error(`A live session runs phones only, and ${name} is a ${kind} device`)
   }
   await session.update((s) => {
@@ -86,6 +93,11 @@ export async function addDevice(
     const desktop = Object.entries(s.devices).find(([, d]) => d.kind === 'desktop')
     if (kind === 'desktop' && desktop) {
       throw new Error(`Session ${session.name} already has a desktop device, ${desktop[0]}`)
+    }
+    // The VM has one desktop session, and the app allows one running copy in it.
+    const windows = Object.entries(s.devices).find(([, d]) => d.kind === 'windows')
+    if (kind === 'windows' && windows) {
+      throw new Error(`Session ${session.name} already has a Windows device, ${windows[0]}`)
     }
     s.devices[name] = {
       kind,

@@ -8,6 +8,7 @@ import {
   DesktopDevice,
   DEVICE_KINDS,
   openDevice,
+  WindowsDevice,
 } from '../devices'
 import { capture } from '../evidence'
 import { addTyped, NAME_STYLES, type NameStyle, seedTypedFiles } from '../filetypes'
@@ -67,7 +68,8 @@ export function registerDeviceCommands({ program, current }: CommandContext): vo
     .command('open <name>')
     .description("Open the desktop app's window, as launching the app again does")
     .action(async (name: string) => {
-      await desktop(name).openWindow()
+      const d = openDevice(current(), name)
+      await (d instanceof WindowsDevice ? d : desktop(name)).openWindow()
       console.log(`opened ${name}'s window`)
     })
 
