@@ -645,9 +645,9 @@ final class ProgressPoller: @unchecked Sendable {
 /// video waits for every byte before it.
 extension FileProviderExtension: NSFileProviderPartialContentFetching {
     public func fetchPartialContents(
-        for identifier: NSFileProviderItemIdentifier, version _: NSFileProviderItemVersion,
+        for identifier: NSFileProviderItemIdentifier, version: NSFileProviderItemVersion,
         request _: NSFileProviderRequest, minimalRange requestedRange: NSRange,
-        aligningTo alignment: Int, options _: NSFileProviderFetchContentsOptions = [],
+        aligningTo alignment: Int, options: NSFileProviderFetchContentsOptions = [],
         completionHandler: @escaping (
             URL?, NSFileProviderItem?, NSRange, NSFileProviderMaterializationFlags, Error?
         ) -> Void
@@ -657,23 +657,32 @@ extension FileProviderExtension: NSFileProviderPartialContentFetching {
             let destination = handoff.fetchDestination()
             do {
                 try await ready()
-                let item = try await rpc.callDecoding(
-                    ProviderItem.self, Channel.item, [identifier.rawValue])
-                let range = fetchWindow(
-                    requestedRange, alignment: alignment, documentSize: item.size)
+                // Not cut to the file's size here. The daemon cuts the range
+                // to the version it serves, which another device can replace
+                // with a longer one after any size read from this side.
+                let range = fetchWindow(requestedRange, alignment: alignment, documentSize: .max)
                 fpLog.debug(
                     "fetch range \(identifier.rawValue, privacy: .public) at \(range.location, privacy: .public) len \(range.length, privacy: .public)"
                 )
+                // The system keeps ranges of one version in a file and names
+                // the version it has. With strict versioning it discards any
+                // other, so the daemon is told to refuse one. Without it the
+                // daemon serves the current version, and the system compares
+                // the item returned with what it asked for.
+                let asked = String(decoding: version.contentVersion, as: UTF8.self)
+                let strict = options.contains(.strictVersioning)
                 let result = try await rpc.callDecoding(
                     ProviderRangeResult.self, Channel.fetchRange,
-                    [identifier.rawValue, destination, range.location, range.length],
+                    [identifier.rawValue, destination, range.location, range.length, asked, strict],
                     receiveTimeout: Rpc.transferTimeout)
                 progress.completedUnitCount = 100
                 fpLog.notice(
-                    "fetch range ok \(result.offset, privacy: .public)+\(result.bytes, privacy: .public) of \(item.size, privacy: .public)"
+                    "fetch range ok \(result.offset, privacy: .public)+\(result.bytes, privacy: .public) of \(result.item.size, privacy: .public)"
                 )
+                // The item the daemon served, which names the version of
+                // these bytes and the size the range was cut to.
                 completionHandler(
-                    URL(fileURLWithPath: destination), SiaItem(item),
+                    URL(fileURLWithPath: destination), SiaItem(result.item),
                     NSRange(location: Int(result.offset), length: Int(result.bytes)), [], nil)
             } catch {
                 fpLog.failure("fetch range failed", error)

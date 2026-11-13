@@ -1138,12 +1138,21 @@ export interface AppService {
      * handed the path instead, when such a host exists.
      */
     fetch(id: string, destPath: string): Promise<ProviderFetchResult>
-    /** Places one byte range of a file at a path, for a shell serving a seek. */
+    /**
+     * Places one byte range of a file at a path, for a shell serving a
+     * seek. The range served is always the current version's, and the item
+     * returned names it, so a caller can tell it from `version`, the content
+     * version the system asked for. With `strict`, a caller that keeps ranges
+     * of one version in a file and cannot take another, this rejects when
+     * `version` is no longer the current one.
+     */
     fetchRange(
       id: string,
       destPath: string,
       offset: number,
       length: number,
+      version?: string,
+      strict?: boolean,
     ): Promise<ProviderRangeResult>
     /** Bytes moved so far for an in-flight transfer of this item, never a fraction. */
     progress(id: string): Promise<ProviderProgress>
