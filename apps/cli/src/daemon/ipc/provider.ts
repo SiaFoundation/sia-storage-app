@@ -57,7 +57,9 @@ export function isProviderChannel(channel: string): boolean {
     channel === 'hello' ||
     channel === 'subscribe' ||
     channel === 'warm' ||
-    channel === 'share'
+    channel === 'share' ||
+    channel === 'mount' ||
+    channel === 'mountAnswer'
   )
 }
 

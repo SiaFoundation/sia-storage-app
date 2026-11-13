@@ -28,6 +28,7 @@ import {
 import { createBunDatabase } from '@siastorage/node-adapters/bunDatabase'
 import { cliVariant } from './lib/variant'
 import { createFinderAgent } from './daemon/finderAgent'
+import { createMountLink, mountAdapter, type MountLink } from './daemon/mountLink'
 
 export const isTestMode = process.env.SIA_TEST_MODE === '1'
 
@@ -39,6 +40,8 @@ export type CliApp = {
   fsIO: FsIOAdapter
   paths: ReturnType<typeof getPaths>
   bootstrap: Bootstrap
+  /** Carries the daemon's questions about the mount to an integration that stays connected. */
+  mountLink: MountLink
 }
 
 export type CreateDatabaseFn = (path: string) => DatabaseAdapter
@@ -138,6 +141,7 @@ export async function createCliAppService(
 
   const bootstrap = await buildBootstrap()
 
+  const mountLink = createMountLink()
   const { service, internal, uploadManager } = createAppService({
     db,
     storage,
@@ -155,9 +159,10 @@ export async function createCliAppService(
     handoffDir: opts?.handoffDir,
     usedAtUpdateIntervalMs: USED_AT_UPDATE_INTERVAL,
     cacheMinAgeMs: FS_EVICTABLE_MIN_AGE,
-    // Only a Mac can reach its file manager, through the Finder agent, and
-    // the setting naming a mount decides whether it is ever used.
-    mount: process.platform === 'darwin' ? createFinderAgent() : undefined,
+    // An integration that stays connected is asked directly. Otherwise only
+    // a Mac can reach its file manager, through the Finder agent, and the
+    // setting naming a mount decides whether either is ever used.
+    mount: mountAdapter(mountLink, process.platform === 'darwin' ? createFinderAgent() : undefined),
   })
 
   // In test mode the test SDK, MockSdk or the mock network's client, attaches
@@ -167,7 +172,7 @@ export async function createCliAppService(
     internal.setSdk(bootstrap.testSdkAdapter)
   }
 
-  return { service, internal, uploadManager, db, fsIO, paths: p, bootstrap }
+  return { service, internal, uploadManager, db, fsIO, paths: p, bootstrap, mountLink }
 }
 
 /** Performs the SDK connection chosen at bootstrap (real or test-mode). */
