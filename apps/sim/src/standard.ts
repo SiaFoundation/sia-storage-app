@@ -209,7 +209,9 @@ async function unsettledImports(device: Device): Promise<Record<string, number>>
 async function localWithoutBytes(device: Device): Promise<string[]> {
   const local = await device.sql<{ fileId: string }>('SELECT fileId FROM fs')
   if (local.length === 0) return []
-  const names = (await device.call<string[]>('fs.listFiles')).map((p) => p.split('/').pop() ?? '')
+  const names = (await device.call<string[]>('fs.listFiles')).map(
+    (p) => p.split(/[\\/]/).pop() ?? '',
+  )
   return local
     .map((r) => r.fileId)
     .filter((id) => !names.some((n) => n.startsWith(id)))

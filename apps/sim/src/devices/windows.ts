@@ -1,24 +1,49 @@
 /**
  * A device that is the desktop app running in the Windows VM: Electron from
- * this checkout's source, built in the VM, and the daemon it starts, also from
- * source. It has no Explorer folder yet, so it runs the way the Mac app runs
- * from source with no Finder folder.
+ * this checkout's source, built in the VM, the daemon it starts, also from
+ * source, and the provider process behind its File Explorer folder.
+ * `explorer*` acts on that folder with ordinary file operations made in the
+ * VM, which reach the provider through Windows' Cloud Files, the path a
+ * person's File Explorer takes.
  *
  * Each start sends the checkout to the VM, uncommitted work included, and
  * rebuilds what changed, so starting the device again picks up an edit made
  * on the Mac. Calls, queries and logs go through the agent in the VM's desktop
  * session, which reaches the daemon's socket and files there.
  */
-import { writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { leaseHolder, releaseLease, takeLease } from '../desktop-lock'
 import { networkControl } from '../network'
 import { defaultSessionName, REPO_ROOT, type Session } from '../session'
 import { waitFor } from '../wait'
-import { GUEST, psQuote, VM_NAME, WindowsHost } from '../windows/host'
+import { GUEST, psQuote, TEST_USER, VM_NAME, WindowsHost } from '../windows/host'
 import { parallelsInstalled } from '../windows/vm'
 import { inputKey, snapshotWorkingTree, syncCheckout } from '../windows/sync'
+import { desktopIdentity } from './desktop'
 import { LIBRARY_QUERY, toLibrary } from './library'
 import type { Device, LibraryEntry } from './types'
+
+/**
+ * What Windows holds for a file in the File Explorer folder, which is what
+ * File Explorer draws the file's status icon from.
+ */
+export type ExplorerState = {
+  size: number | null
+  directory: boolean
+  /** Its bytes are not on the PC, the cloud icon. */
+  cloudOnly: boolean
+  /** Always keep on this device, the filled green circle. */
+  pinned: boolean
+  /** Free up space was chosen, so Windows may drop the bytes again. */
+  unpinned: boolean
+  /** A Cloud Files placeholder. A plain file in the folder shows sync-pending. */
+  placeholder: boolean
+  /** The tick when set, the sync-pending arrows when not. */
+  inSync: boolean
+  /** The placeholder's file identity, the item id and version the provider gave it. */
+  identity: string | null
+}
 
 /**
  * What every app and daemon a Windows device starts has in its command line,
@@ -30,6 +55,18 @@ import type { Device, LibraryEntry } from './types'
 const DEVICE_PROCESSES = 'D:\\sia\\worktrees\\'
 
 const LEASE_CONTEXT = `windows-${VM_NAME}`
+
+/** The identity the app runs under from source, which names its folder and its mount. */
+const IDENTITY = desktopIdentity('dev')
+
+/** Why no Windows device can run on this machine, or null when one can. */
+export async function windowsUnavailable(): Promise<string | null> {
+  if (!parallelsInstalled()) return 'Windows devices need Parallels Desktop Pro.'
+  if ((await new WindowsHost().vm.state()) === 'missing') {
+    return `There is no VM named ${VM_NAME}. Run \`bun sim windows create <iso>\` once.`
+  }
+  return null
+}
 
 /**
  * Stops whatever a Windows device left running in the VM when no session
@@ -85,6 +122,39 @@ export class WindowsDevice implements Device {
     return worktree
   }
 
+  /** The app's File Explorer folder, or a path inside it. */
+  explorerPath(path = ''): string {
+    const folder = `C:\\Users\\${TEST_USER}\\${IDENTITY.domainDisplay}`
+    return path ? `${folder}\\${path.replace(/\//g, '\\')}` : folder
+  }
+
+  /**
+   * Unregisters the folder with Windows and deletes it, by the provider's
+   * own `remove`, so a device starts with none of what an earlier one listed
+   * or downloaded. Run while no app is, since a provider still connected to
+   * the folder keeps Windows from letting it go.
+   */
+  private async removeFolder(): Promise<void> {
+    const out = await this.host.agent<{ exitCode: number; stderr: string }>('/exec', {
+      command: [
+        GUEST.bun,
+        `${this.worktree}\\apps\\desktop\\native\\windows\\provider\\main.ts`,
+        'remove',
+        this.explorerPath(),
+        IDENTITY.domainId,
+      ],
+      cwd: this.worktree,
+    })
+    if (out.exitCode !== 0) {
+      throw new Error(`Removing ${this.name}'s File Explorer folder failed: ${out.stderr.trim()}`)
+    }
+    // The provider leaves a file the daemon was never sent, such as one a
+    // scenario was still uploading when it ended, and the next device would
+    // take what is left for files made in its own folder.
+    const left = await this.host.agent<{ exists: boolean }>('/stat', { path: this.explorerPath() })
+    if (left.exists) await this.host.agent('/file/remove', { path: this.explorerPath() })
+  }
+
   /** The daemon's environment, which the CLI and the app hand on to it alike. */
   private env(networkUrl: string): Record<string, string> {
     return {
@@ -102,7 +172,8 @@ export class WindowsDevice implements Device {
    * through the agent. Over SSH the account could not follow the workspace
    * links `bun install` made, for the reason `WindowsHost.ps` gives.
    */
-  private async cli(networkUrl: string, ...args: string[]): Promise<string> {
+  async cli(...args: string[]): Promise<string> {
+    const networkUrl = await this.vmNetworkUrl()
     const out = await this.host.agent<{ exitCode: number; stdout: string; stderr: string }>(
       '/exec',
       {
@@ -189,20 +260,26 @@ Step 'build' ${psQuote(build)} { & ${psQuote(GUEST.bun)} run --cwd apps/desktop 
     await this.stop()
     // A session's device names reuse the same folder in the VM, so a new
     // device would otherwise start on an earlier one's library and account.
-    if (!this.session.state.devices[this.name]?.prepared) {
+    const first = !this.session.state.devices[this.name]?.prepared
+    if (first) {
       await this.host.mustPs(
         `if (Test-Path ${psQuote(this.dir)}) { Remove-Item -Recurse -Force ${psQuote(this.dir)} }`,
         `Clearing ${this.name}'s folder`,
       )
+    }
+    await this.build(commit)
+    // After the build, since the provider that removes the File Explorer
+    // folder runs from the worktree's source.
+    if (first) {
+      await this.removeFolder()
       await this.session.update((s) => {
         s.devices[this.name].prepared = true
       })
     }
-    await this.build(commit)
     const signedIn = await this.host.agent<{ exists: boolean }>('/stat', {
       path: `${this.dataDir}\\secrets.json`,
     })
-    if (!signedIn.exists) await this.cli(networkUrl, 'connect')
+    if (!signedIn.exists) await this.cli('connect')
     await this.host.agent('/spawn', {
       key: this.name,
       command: [
@@ -237,6 +314,14 @@ Step 'build' ${psQuote(build)} { & ${psQuote(GUEST.bun)} run --cwd apps/desktop 
           `daemon.log:\n${await read(`${this.dataDir}\\daemon.log`)}`,
       )
     })
+    // The app tells the daemon of the folder once the provider serves it. A
+    // file saved in the folder before that is sent to a daemon that does not
+    // yet record what File Explorer holds.
+    await waitFor(
+      `${this.name}'s File Explorer folder`,
+      async () => (await this.call('settings.getMount')) !== null,
+      { timeoutMs: 60_000, intervalMs: 500 },
+    )
     // Recorded only once the app answers, so a start that failed partway is
     // started again by the next `up` rather than taken as current.
     await this.session.update((s) => {
@@ -324,6 +409,17 @@ Step 'build' ${psQuote(build)} { & ${psQuote(GUEST.bun)} run --cwd apps/desktop 
     await this.host.agent('/kill', { match: DEVICE_PROCESSES })
   }
 
+  /**
+   * Kills the daemon and leaves the app and its provider running, as a
+   * daemon that crashed does. The app starts another.
+   */
+  async killDaemon(): Promise<void> {
+    const lock = await this.host.agent<{ text: string }>('/read', {
+      path: `${this.dataDir}\\daemon.lock`,
+    })
+    await this.host.agent('/kill', { pid: Number.parseInt(lock.text, 10) })
+  }
+
   /** Whether the app runs and its daemon answers. */
   async isRunning(): Promise<boolean> {
     try {
@@ -351,14 +447,16 @@ Step 'build' ${psQuote(build)} { & ${psQuote(GUEST.bun)} run --cwd apps/desktop 
   }
 
   /**
-   * Stops the app, deletes the device's folder in the VM and frees the VM's
-   * desktop for the next session, when this session holds it.
+   * Stops the app, removes its File Explorer folder, deletes the device's
+   * folder in the VM and frees the VM's desktop for the next session, when
+   * this session holds it.
    */
   async dispose(): Promise<void> {
     if (this.holdsLease()) {
       try {
         await this.stop().catch(() => {})
         if (await this.vmRunning()) {
+          await this.removeFolder().catch(() => {})
           await this.host
             .mustPs(
               `if (Test-Path ${psQuote(this.dir)}) { Remove-Item -Recurse -Force ${psQuote(this.dir)} }`,
@@ -373,6 +471,164 @@ Step 'build' ${psQuote(build)} { & ${psQuote(GUEST.bun)} run --cwd apps/desktop 
     await this.session.update((s) => {
       delete s.devices[this.name].prepared
     })
+  }
+
+  /** Names in a directory of the File Explorer folder. */
+  async explorerList(dir = ''): Promise<string[]> {
+    const { names } = await this.host.agent<{ names: string[] }>('/file/list', {
+      path: this.explorerPath(dir),
+    })
+    return names
+  }
+
+  /** Reads a file through File Explorer's folder, which downloads it first when it is not on the PC. */
+  async explorerRead(path: string, timeoutMs = 120_000): Promise<Uint8Array> {
+    const bytes = await this.host.agent<ArrayBuffer>(
+      '/file/read',
+      { path: this.explorerPath(path) },
+      timeoutMs,
+    )
+    return new Uint8Array(bytes)
+  }
+
+  /**
+   * The SHA-256 of a file read through the folder in the VM, for a file too
+   * large to bring to this Mac to hash.
+   */
+  async explorerHash(path: string, timeoutMs = 10 * 60_000): Promise<string> {
+    const { sha256 } = await this.host.agent<{ sha256: string }>(
+      '/file/hash',
+      { path: this.explorerPath(path) },
+      timeoutMs,
+    )
+    return sha256
+  }
+
+  /** The bytes the VM's `C:` drive has written since it started, by Windows' own counter. */
+  async diskWritten(): Promise<number> {
+    const out = await this.host.agent<{ stdout: string }>('/exec', {
+      command: [
+        'powershell.exe',
+        '-NoProfile',
+        '-Command',
+        "(Get-CimInstance Win32_PerfRawData_PerfDisk_LogicalDisk | Where-Object Name -eq 'C:').DiskWriteBytesPersec",
+      ],
+    })
+    return Number(out.stdout.trim())
+  }
+
+  async explorerWrite(path: string, bytes: Uint8Array): Promise<void> {
+    await this.host.agent('/file/write', {
+      path: this.explorerPath(path),
+      base64: Buffer.from(bytes).toString('base64'),
+    })
+  }
+
+  async explorerRename(from: string, to: string): Promise<void> {
+    await this.host.agent('/file/rename', {
+      from: this.explorerPath(from),
+      to: this.explorerPath(to),
+    })
+  }
+
+  async explorerRemove(path: string): Promise<void> {
+    await this.host.agent('/file/remove', { path: this.explorerPath(path) })
+  }
+
+  /** Deletes a file in the folder as File Explorer's Delete does, by moving it to the Recycle Bin. */
+  async explorerRecycle(path: string): Promise<void> {
+    const out = await this.host.agent<{ exitCode: number; stderr: string }>('/exec', {
+      command: [
+        'powershell.exe',
+        '-NoProfile',
+        '-Command',
+        `$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName Microsoft.VisualBasic
+[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($env:SIM_FILE, 'OnlyErrorDialogs', 'SendToRecycleBin')`,
+      ],
+      env: { SIM_FILE: this.explorerPath(path) },
+    })
+    if (out.exitCode !== 0) {
+      throw new Error(`Moving ${path} to the Recycle Bin failed: ${out.stderr.trim()}`)
+    }
+  }
+
+  /** The attribute letters `attrib` prints for a file in the folder. */
+  private async attrib(path: string): Promise<string> {
+    const target = this.explorerPath(path)
+    const { stdout } = await this.host.agent<{ stdout: string }>('/exec', {
+      command: ['attrib.exe', target],
+    })
+    // attrib exits 0 for a file it cannot find, and prints that in place of the attributes.
+    if (!stdout.includes(target)) throw new Error(`attrib ${path} failed: ${stdout.trim()}`)
+    return stdout.slice(0, stdout.indexOf(target))
+  }
+
+  /** Whether a file in the folder is a placeholder whose bytes are not on the PC. */
+  async isCloudOnly(path: string): Promise<boolean> {
+    return (await this.attrib(path)).includes('O')
+  }
+
+  /** What File Explorer shows for each file, read through the agent in one call. */
+  async explorerStates(paths: string[]): Promise<ExplorerState[]> {
+    const { states } = await this.host.agent<{
+      states: ({ path: string; exists: false } | (ExplorerState & { path: string; exists: true }))[]
+    }>('/file/state', { paths: paths.map((p) => this.explorerPath(p)) })
+    return states.map((state, i) => {
+      if (!state.exists)
+        throw new Error(`${paths[i]} is not in ${this.name}'s File Explorer folder`)
+      const { path: _path, exists: _exists, ...rest } = state
+      return rest
+    })
+  }
+
+  /** What File Explorer shows for a file: its size, where its bytes are, its pin and its sync icon. */
+  async explorerState(path: string): Promise<ExplorerState> {
+    return (await this.explorerStates([path]))[0]
+  }
+
+  /**
+   * Chooses a command from the menu File Explorer shows for a file, by the
+   * name the menu gives it, and fails when the menu has none by that name.
+   * The shell runs the command on the calling thread's message loop, so the
+   * script keeps one going for two seconds.
+   */
+  private async chooseFromMenu(path: string, command: string): Promise<void> {
+    const target = this.explorerPath(path)
+    const out = await this.host.agent<{ exitCode: number; stderr: string }>('/exec', {
+      command: [
+        'powershell.exe',
+        '-NoProfile',
+        '-Command',
+        `$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Windows.Forms
+$file = Get-Item -LiteralPath $env:SIM_FILE
+$verb = (New-Object -ComObject Shell.Application).Namespace($file.DirectoryName).ParseName($file.Name).Verbs() |
+  Where-Object Name -eq $env:SIM_COMMAND
+if (-not $verb) { throw 'no such command' }
+$verb.DoIt()
+$end = (Get-Date).AddSeconds(2)
+while ((Get-Date) -lt $end) { [System.Windows.Forms.Application]::DoEvents(); Start-Sleep -Milliseconds 50 }`,
+      ],
+      env: { SIM_FILE: target, SIM_COMMAND: command },
+    })
+    if (out.exitCode !== 0) {
+      throw new Error(`File Explorer's menu has no "${command}" for ${path}: ${out.stderr.trim()}`)
+    }
+  }
+
+  /** Chooses Free up space for a file in File Explorer's menu. */
+  async freeUpSpace(path: string): Promise<void> {
+    await this.chooseFromMenu(path, 'Free up space')
+  }
+
+  /** Chooses Always keep on this device for a file in File Explorer's menu. */
+  async keepOnDevice(path: string): Promise<void> {
+    await this.chooseFromMenu(path, 'Always keep on this device')
+  }
+
+  async isKeptOnDevice(path: string): Promise<boolean> {
+    return (await this.attrib(path)).includes('P')
   }
 
   async addFile(): Promise<{ id: string; name: string }> {
@@ -403,6 +659,29 @@ Step 'build' ${psQuote(build)} { & ${psQuote(GUEST.bun)} run --cwd apps/desktop 
     ).text
   }
 
+  /** The provider's log, beside the daemon's, which says what it did with the folder. */
+  async providerLog(lines = 50): Promise<string> {
+    return (
+      await this.host.agent<{ text: string }>('/read', {
+        path: `${this.dataDir}\\provider.log`,
+        lines,
+      })
+    ).text
+  }
+
+  /**
+   * Opens the File Explorer folder in an Explorer window, in front of the
+   * app, so a screenshot shows each file's status icon. The VM is a test
+   * machine with nothing else on its screen.
+   */
+  async show(): Promise<string> {
+    await this.host.agent('/spawn', {
+      key: `${this.name}:explorer`,
+      command: ['explorer.exe', this.explorerPath()],
+    })
+    return `${this.name}'s File Explorer folder is open in ${VM_NAME}. \`device screenshot ${this.name} <file>\` captures it.`
+  }
+
   /**
    * The VM's desktop as a PNG, taken by the agent in the desktop session. A
    * session that hangs, or an agent that is not running, falls back to the
@@ -422,7 +701,33 @@ Step 'build' ${psQuote(build)} { & ${psQuote(GUEST.bun)} run --cwd apps/desktop 
     }
   }
 
+  /**
+   * The app's, the provider's and the daemon's logs, and the folder's top
+   * level as text, each entry with what File Explorer shows for it.
+   */
   async captureMore(dir: string): Promise<void> {
-    writeFileSync(`${dir}/desktop.log`, await this.appLog(500).catch(() => ''))
+    writeFileSync(join(dir, 'desktop.log'), await this.appLog(500).catch(() => ''))
+    writeFileSync(join(dir, 'provider.log'), await this.providerLog(500).catch(() => ''))
+    writeFileSync(join(dir, 'daemon.log'), await this.logs(500).catch(() => ''))
+    let entries: unknown
+    try {
+      const names = await this.explorerList()
+      const states = await this.explorerStates(names)
+      entries = names.map((name, i) => ({ name, ...states[i] }))
+    } catch (e) {
+      entries = { error: e instanceof Error ? e.message : String(e) }
+    }
+    writeFileSync(join(dir, 'explorer.json'), `${JSON.stringify(entries, null, 2)}\n`)
+  }
+
+  /**
+   * Keeps the logs and the folder's state for a failed run, since the
+   * device's folder in the VM is deleted when the device is handed back.
+   */
+  async preserve(dir: string): Promise<void> {
+    if (!(await this.vmRunning())) return
+    mkdirSync(dir, { recursive: true })
+    await this.captureMore(dir)
+    await this.screenshot(join(dir, 'screen.png')).catch(() => {})
   }
 }
