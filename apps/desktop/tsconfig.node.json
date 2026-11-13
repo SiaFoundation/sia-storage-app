@@ -12,5 +12,10 @@
     "resolveJsonModule": true,
     "composite": true
   },
-  "include": ["src/main/**/*.ts", "src/preload/**/*.ts", "electron.vite.config.ts"]
+  "include": [
+    "src/shared/**/*.ts",
+    "src/main/**/*.ts",
+    "src/preload/**/*.ts",
+    "electron.vite.config.ts"
+  ]
 }

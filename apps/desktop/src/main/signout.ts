@@ -11,6 +11,7 @@ import { dialog } from 'electron'
 import { readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { dataDir } from './paths'
+import { copyTerms } from './platform'
 
 export async function confirmSignOut(): Promise<boolean> {
   const { response } = await dialog.showMessageBox({
@@ -19,8 +20,7 @@ export async function confirmSignOut(): Promise<boolean> {
     defaultId: 0,
     cancelId: 0,
     message: 'Sign out and clear local data?',
-    detail:
-      "This Mac's copy of your library is deleted and you are signed out. Files still uploading will be lost. Signing back in needs your recovery phrase.",
+    detail: `This ${copyTerms().computer}'s copy of your library is deleted and you are signed out. Files still uploading will be lost. Signing back in needs your recovery phrase.`,
   })
   return response === 1
 }

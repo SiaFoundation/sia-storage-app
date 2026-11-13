@@ -34,6 +34,7 @@ import { FinderItemIcon } from './finderIcons'
 import { ROW, Section } from './Group'
 import { CheckCircle, ChevronDown, Clock, Link, Magnifier, Spinner, WarnCircle } from './icons'
 import { useNow } from './useNow'
+import { terms } from './terms'
 
 /** How many files the list holds. Older ones are in Finder. */
 const RECENT_LIMIT = 30
@@ -200,8 +201,8 @@ function ActivityRow({
             <button
               type="button"
               className={`${ICON_BUTTON} w-[22px] text-secondary`}
-              aria-label={`Show ${file.name} in Finder`}
-              title="Show in Finder"
+              aria-label={`Show ${file.name} in ${terms.fileManager}`}
+              title={`Show in ${terms.fileManager}`}
               disabled={!canReveal}
               onClick={reveal}
             >

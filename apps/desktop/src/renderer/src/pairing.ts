@@ -15,6 +15,7 @@
 import type { AppService } from '@siastorage/core/app'
 import { APP_META } from '@siastorage/core/config'
 import { sia } from './api'
+import { terms } from './terms'
 
 /**
  * The identity the indexer shows on its approval page, and the same one mobile
@@ -36,8 +37,7 @@ export const UNVERIFIED =
 export const DAEMON_DOWN = 'Sia Storage is not running. Quit and reopen the app.'
 export const REQUEST_FAILED = 'Could not reach the indexer. Check your connection and try again.'
 export const NOT_APPROVED = 'The connection was not approved.'
-export const OTHER_ACCOUNT =
-  "This Mac still holds another account's data. Enter that account's recovery phrase."
+export const OTHER_ACCOUNT = `This ${terms.computer} still holds another account's data. Enter that account's recovery phrase.`
 export const REGISTER_FAILED = 'Could not finish signing in. Choose Start over to reconnect.'
 export const CONNECT_FAILED = 'Signed in, but connecting failed. Try again.'
 export const SIGN_IN_FAILED = 'Something went wrong. Try again.'

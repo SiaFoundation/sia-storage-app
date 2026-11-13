@@ -29,6 +29,7 @@ import { HEADING, LEAD, Shell } from './onboarding/Shell'
 import { Tour } from './onboarding/Tour'
 import { useAppInfo } from './useAppInfo'
 import { useStatus } from './useStatus'
+import { terms } from './terms'
 
 const LINK =
   'cursor-default border-none bg-transparent p-0 text-[11px] text-secondary underline ' +
@@ -174,17 +175,21 @@ export function Setup({ onDone }: { onDone: () => void }) {
       stage={mountable ? <FinderMock finderName={finderName} /> : <PhotoPile mode="preview" />}
       caption={
         mountable
-          ? `Sia Storage stays in the menu bar. Your files are under ${finderName} in Finder.`
-          : 'This build runs without a Finder folder. The menu bar still shows the library.'
+          ? `Sia Storage stays in the ${terms.iconArea}. Your files are under ${finderName} in ${terms.fileManager}.`
+          : `This build runs without a ${terms.fileManager} folder. The ${terms.iconArea} still shows the library.`
       }
     >
       <div className="animate-rise">
         <h1 data-testid="setup-heading" className={HEADING}>
-          {finished ? 'Sia Storage is ready' : failed ? 'Setup has stopped' : 'Setting up this Mac'}
+          {finished
+            ? 'Sia Storage is ready'
+            : failed
+              ? 'Setup has stopped'
+              : `Setting up this ${terms.computer}`}
         </h1>
         <p className={LEAD}>
           {finished
-            ? 'Your library is on this Mac. Sia Storage keeps it in sync from the menu bar.'
+            ? `Your library is on this ${terms.computer}. Sia Storage keeps it in sync from the ${terms.iconArea}.`
             : failed
               ? 'One step could not finish. The reason is under it.'
               : 'This happens once, and carries on if you close the window.'}
@@ -214,7 +219,7 @@ export function Setup({ onDone }: { onDone: () => void }) {
               disabled={!status.mountPath}
               onClick={() => void sia.openMount()}
             >
-              Open in Finder
+              Open in {terms.fileManager}
             </button>
           ) : null}
           <button

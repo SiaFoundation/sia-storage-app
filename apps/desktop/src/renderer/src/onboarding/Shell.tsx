@@ -23,10 +23,9 @@ export function Shell({
 }) {
   return (
     <div className="flex" style={{ height: ONBOARDING_HEIGHT }}>
-      {/* pt-14: the window has no title bar, so the traffic lights sit over
-          this column, and the inset keeps the first thing drawn out from
-          under them. */}
-      <div className="flex w-[380px] shrink-0 flex-col px-7 pt-14 pb-6">{children}</div>
+      <div className="flex w-[380px] shrink-0 flex-col px-7 pt-[calc(26px+var(--title-bar-clearance))] pb-6">
+        {children}
+      </div>
 
       <div className="relative my-2.5 mr-2.5 flex flex-auto flex-col items-center justify-center gap-5 overflow-hidden rounded-[12px] bg-card">
         {stage}

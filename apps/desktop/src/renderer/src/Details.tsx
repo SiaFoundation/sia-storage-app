@@ -44,6 +44,7 @@ import { UpdateNotice } from './UpdateNotice'
 import { useAppInfo } from './useAppInfo'
 import { useConfirm } from './useConfirm'
 import { useClearState, useLocalCache, useStatus } from './useStatus'
+import { terms } from './terms'
 
 export function Details({
   onShowLinks,
@@ -70,9 +71,7 @@ export function Details({
 
   return (
     <div className="flex flex-col">
-      {/* pt-12: the window has no title bar, so the traffic lights sit over the
-          content, and the inset keeps the first thing drawn from landing under them. */}
-      <div className="flex flex-col gap-3 px-inset pt-12 pb-[18px]">
+      <div className="flex flex-col gap-3 px-inset pt-[calc(18px+var(--title-bar-clearance))] pb-[18px]">
         <StatusLine status={status} />
         <UpdateNotice />
 
@@ -108,7 +107,7 @@ export function Details({
           <Row icon={<InternalDrive />} label="Size" id="size" value={librarySizeLabel(status)} />
           <Row
             icon={<InternalDrive />}
-            label="On this Mac"
+            label={`On this ${terms.computer}`}
             id="on-this-mac"
             value={localCacheLabel(localCache)}
           />
@@ -155,7 +154,7 @@ export function Details({
           </button>
         </Section>
 
-        <Section header="Finder">
+        <Section header={terms.fileManager}>
           <Row
             icon={!mountable ? <Folder /> : mounted ? <CheckCircle /> : <WarnCircle />}
             label="Folder"
@@ -235,7 +234,7 @@ function ClearLocalFiles({
     onDone(
       freed === null
         ? { text: 'Could not clear local files. Try again.', error: true }
-        : { text: `Removed ${formatBytes(freed)} from this Mac.`, error: false },
+        : { text: `Removed ${formatBytes(freed)} from this ${terms.computer}.`, error: false },
     )
   }, [finishedBefore, state.data, onDone])
 
@@ -269,11 +268,11 @@ function ClearLocalFiles({
         {clearing
           ? 'Clearing…'
           : confirming
-            ? `Remove up to ${formatBytes(bytes ?? 0)} from this Mac`
+            ? `Remove up to ${formatBytes(bytes ?? 0)} from this ${terms.computer}`
             : 'Clear Local Files'}
         <span className="text-[11px] leading-[1.4] text-pretty text-secondary">
-          Removes files on this Mac that are already backed up. Files that aren't backed up yet are
-          kept.
+          Removes files on this {terms.computer} that are already backed up. Files that aren't
+          backed up yet are kept.
         </span>
       </span>
     </button>

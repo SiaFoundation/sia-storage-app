@@ -9,6 +9,7 @@
  */
 
 import type { Mount } from '@siastorage/core/adapters'
+import type { BrowserWindowConstructorOptions, NativeImage } from 'electron'
 import type { DesktopConfig } from '../config'
 
 /**
@@ -71,4 +72,29 @@ export interface PlatformIntegration {
    * registered.
    */
   mount(): Mount | null
+}
+
+/**
+ * How the app's windows and tray icon look and sit in the OS shell. Their
+ * behaviour is the same everywhere and lives in windows.ts and tray.ts. What
+ * differs is the title bar, what is drawn behind the page, the icons, and
+ * whether showing a window adds a Dock tile.
+ */
+export interface WindowChrome {
+  /** Appearance options for the main window. */
+  mainWindow(): Pick<
+    BrowserWindowConstructorOptions,
+    'titleBarStyle' | 'transparent' | 'vibrancy' | 'backgroundColor' | 'icon'
+  >
+  /** Appearance options for the tray popover. */
+  popover(): Pick<
+    BrowserWindowConstructorOptions,
+    'transparent' | 'vibrancy' | 'visualEffectState' | 'backgroundColor' | 'icon'
+  >
+  /** The tray icon's image. */
+  trayImage(): NativeImage
+  /** The app now has its main window on screen. */
+  windowShown(): void
+  /** The app has no window on screen, at launch and after the main window closes. */
+  windowsHidden(): void
 }

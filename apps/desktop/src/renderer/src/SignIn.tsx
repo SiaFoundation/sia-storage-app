@@ -35,12 +35,13 @@ import {
   UNVERIFIED,
 } from './pairing'
 import { Wordmark } from './Wordmark'
+import { terms } from './terms'
 
 const PROGRESS: Record<PairingStep, string> = {
   idle: '',
   requesting: 'Asking the indexer for a connection',
   'awaiting-approval': 'Waiting for you to approve in your browser',
-  registering: 'Setting up this Mac',
+  registering: `Setting up this ${terms.computer}`,
   done: '',
 }
 
@@ -188,10 +189,15 @@ export function SignIn({ onDone }: { onDone: () => void }) {
         <Wordmark />
 
         <div className="mt-7">
-          <h1 className={HEADING}>Private storage, right in Finder</h1>
+          <h1 className={HEADING}>
+            {terms.hasFolder
+              ? `Private storage, right in ${terms.fileManager}`
+              : `Private storage on your ${terms.computer}`}
+          </h1>
           <p className={LEAD}>
-            Sia Storage encrypts your files on this Mac and keeps them on the Sia network, where
-            only you can read them. To begin, approve this Mac in your browser.
+            Sia Storage encrypts your files on this {terms.computer} and keeps them on the Sia
+            network, where only you can read them. To begin, approve this {terms.computer} in your
+            browser.
           </p>
         </div>
 
@@ -258,8 +264,8 @@ export function SignIn({ onDone }: { onDone: () => void }) {
               ? 'This starts a new library with no files in it. Save the phrase somewhere safe. It cannot be recovered if lost.'
               : 'This is the key to your account. Save it somewhere safe. It cannot be recovered if lost.'
             : reconnecting
-              ? 'This account already uses Sia Storage. Enter its twelve word recovery phrase to bring your library to this Mac.'
-              : 'Enter the twelve word recovery phrase for the account you want on this Mac.'}
+              ? `This account already uses Sia Storage. Enter its twelve word recovery phrase to bring your library to this ${terms.computer}.`
+              : `Enter the twelve word recovery phrase for the account you want on this ${terms.computer}.`}
         </p>
       </div>
 
@@ -316,7 +322,7 @@ export function SignIn({ onDone }: { onDone: () => void }) {
           >
             {reconnecting
               ? 'Start a new library instead'
-              : 'Use the phrase generated for this Mac instead'}
+              : `Use the phrase generated for this ${terms.computer} instead`}
           </button>
         )}
 
