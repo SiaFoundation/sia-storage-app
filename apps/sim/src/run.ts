@@ -11,6 +11,7 @@ import { join, relative } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 import { addDevice, type Device, PhoneStartFailed } from './devices'
 import { desktopUnavailable } from './devices/desktop'
+import { windowsUnavailable } from './devices/windows'
 import { releaseRunHolds } from './desktop-lock'
 import { networkControl, startNetwork, stopNetwork } from './network'
 import {
@@ -356,6 +357,10 @@ async function runOne(
     }
     if (Object.values(scenario.devices).some(isDesktopKind)) {
       const unavailable = desktopUnavailable()
+      if (unavailable) throw new Skipped(unavailable)
+    }
+    if (Object.values(scenario.devices).includes('windows')) {
+      const unavailable = await windowsUnavailable()
       if (unavailable) throw new Skipped(unavailable)
     }
     needs = Object.values(scenario.devices).includes('phone') ? [opts.phone ?? 'ios'] : []

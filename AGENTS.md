@@ -183,6 +183,7 @@ anything on a screen.
 | Benchmarks            | `bun run --cwd apps/benchmark bench:ci`         | core database calls: statement counts, query plans, time against base | on PRs touching core |
 | Sim, phones           | `bun sim run mobile/ photos/ [--phone android]` | the built app on simulators and emulators, suspended and killed       | on label             |
 | Sim, desktop          | `bun sim run desktop/`                          | the installed test app: sign-in, its windows and Finder folder        | on label             |
+| Sim, Windows          | `bun sim run windows/`                          | the desktop app in a Windows 11 VM: its File Explorer folder          | no                   |
 
 The benchmark check compares statement counts, query plans and results exactly against
 `apps/benchmark/baseline/structure.json`, and times each call against the PR's base
@@ -194,7 +195,9 @@ from the reports of CI runs whose two sides ran the same core.
 The native device tier, the phone scenarios and the desktop scenarios run in CI only on
 a sim label, so run them, or add the label, before landing anything that touches native
 code, the import flow, the desktop app or its extension. `sim` runs every platform,
-`sim-mobile` iOS and Android, and `sim-desktop` macOS.
+`sim-mobile` iOS and Android, and `sim-desktop` macOS. The Windows scenarios need the VM
+`bun sim windows create` builds and run nowhere in CI, so run them before landing a change
+to the app's Windows integration or to the daemon's mount link.
 
 **Which tier.** Core logic gets a unit test beside it. Behavior crossing upload,
 download, sync, and the database gets an integration test, because a unit test cannot

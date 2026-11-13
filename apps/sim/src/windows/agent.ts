@@ -10,11 +10,23 @@
  * nothing from the repo. Every request carries the token in `token` beside
  * this file, written when the VM was set up, as `x-sim-token`.
  */
+import { dlopen, ptr } from 'bun:ffi'
 import { Database } from 'bun:sqlite'
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import {
+  closeSync,
+  createReadStream,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+} from 'node:fs'
+import { readFile, writeFile } from 'node:fs/promises'
 import { createConnection, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -282,6 +294,70 @@ function ipc(
   })
 }
 
+/** The attribute bits Cloud Files sets on a file in a sync root. */
+const ATTRIBUTE = {
+  directory: 0x10,
+  /** OFFLINE and RECALL_ON_DATA_ACCESS: the bytes are not all on disk. */
+  notOnDisk: 0x1000 | 0x400000,
+  pinned: 0x80000,
+  unpinned: 0x100000,
+}
+
+let cloudApi: ReturnType<typeof openCloudApi> | null = null
+
+function openCloudApi() {
+  return {
+    cf: dlopen('cldapi.dll', {
+      CfGetPlaceholderInfo: { args: ['i64', 'u32', 'ptr', 'u32', 'ptr'], returns: 'i32' },
+    }).symbols,
+    kernel: dlopen('kernel32.dll', {
+      CreateFileW: { args: ['ptr', 'u32', 'u32', 'ptr', 'u32', 'u32', 'ptr'], returns: 'i64' },
+      CloseHandle: { args: ['i64'], returns: 'i32' },
+      GetFileAttributesW: { args: ['ptr'], returns: 'u32' },
+    }).symbols,
+  }
+}
+
+/**
+ * What Windows holds for a file in a sync root, which is what File Explorer
+ * draws its status icon from: the attribute bits for cloud-only, pinned and
+ * unpinned, and the placeholder's in-sync state, which is the tick when set
+ * and the sync-pending arrows when not. A file that is not a placeholder at
+ * all also shows sync-pending. The handle asks for the file's attributes and
+ * its permissions only, since one that asks to read its data would have
+ * Windows download a cloud-only file first.
+ */
+function fileState(path: string) {
+  cloudApi ??= openCloudApi()
+  const { cf, kernel } = cloudApi
+  const name = Buffer.from(`${path}\0`, 'utf16le')
+  const bits = kernel.GetFileAttributesW(ptr(name))
+  if (bits === 0xffffffff) return { path, exists: false }
+  // CF_PLACEHOLDER_BASIC_INFO: pin state, in-sync state, two file ids, the
+  // identity's length, then the identity.
+  const info = Buffer.alloc(28 + 4096)
+  // FILE_READ_ATTRIBUTES and WRITE_DAC, shared with everything, opening a
+  // folder too, as the provider opens files for its own Cloud Files calls.
+  const handle = kernel.CreateFileW(ptr(name), 0x80 | 0x40000, 7, null, 3, 0x02000000, null)
+  let placeholder = false
+  if (handle !== -1n) {
+    placeholder = cf.CfGetPlaceholderInfo(handle, 0, ptr(info), info.length, null) === 0
+    kernel.CloseHandle(handle)
+  }
+  return {
+    path,
+    exists: true,
+    size: (bits & ATTRIBUTE.directory) === 0 ? statSync(path).size : null,
+    directory: (bits & ATTRIBUTE.directory) !== 0,
+    cloudOnly: (bits & ATTRIBUTE.notOnDisk) !== 0,
+    pinned: (bits & ATTRIBUTE.pinned) !== 0,
+    unpinned: (bits & ATTRIBUTE.unpinned) !== 0,
+    placeholder,
+    inSync: placeholder && info.readUInt32LE(4) === 1,
+    identity: placeholder ? info.subarray(28, 28 + info.readUInt32LE(24)).toString() : null,
+  }
+}
+
 /**
  * A read-only query, for the same reason sim's own reader on the Mac opens
  * read-only: a read-write connection closing last checkpoints the WAL, which
@@ -294,6 +370,21 @@ function sql(path: string, query: string, params: unknown[]): unknown[] {
     // A read-only connection can still write another file, with `VACUUM INTO`.
     db.exec('PRAGMA query_only = 1')
     return db.query(query).all(...(params as never[]))
+  } finally {
+    db.close()
+  }
+}
+
+/**
+ * A copy of a database the app has open, as one transaction sees it, WAL
+ * included. `/sql` cannot make one, since its connection refuses to write
+ * even another file.
+ */
+function snapshot(path: string): Uint8Array<ArrayBuffer> {
+  const db = new Database(path, { readonly: true })
+  try {
+    db.exec('PRAGMA busy_timeout = 5000')
+    return new Uint8Array(db.serialize())
   } finally {
     db.close()
   }
@@ -351,10 +442,36 @@ async function handle(req: Request): Promise<Response> {
       const s = statSync(body.path)
       return json({ exists: true, size: s.size, mtimeMs: s.mtimeMs })
     }
+    // File operations a program makes in the app's File Explorer folder.
+    // Reading is not done on this thread, since a file not on the PC is
+    // downloaded first, for as long as that takes.
+    case '/file/read':
+      return new Response(await readFile(body.path))
+    case '/file/hash': {
+      const hash = createHash('sha256')
+      for await (const chunk of createReadStream(body.path)) hash.update(chunk)
+      return json({ sha256: hash.digest('hex') })
+    }
+    case '/file/write':
+      mkdirSync(dirname(body.path), { recursive: true })
+      await writeFile(body.path, Buffer.from(body.base64, 'base64'))
+      return json({})
+    case '/file/state':
+      return json({ states: (body.paths as string[]).map(fileState) })
+    case '/file/list':
+      return json({ names: readdirSync(body.path) })
+    case '/file/rename':
+      renameSync(body.from, body.to)
+      return json({})
+    case '/file/remove':
+      rmSync(body.path, { recursive: true })
+      return json({})
     case '/ipc':
       return json({ result: await ipc(body.path, body.method, body.params ?? {}, body.timeoutMs) })
     case '/sql':
       return json({ rows: sql(body.path, body.query, body.params ?? []) })
+    case '/sql/snapshot':
+      return new Response(snapshot(body.path))
     case '/screenshot':
       return new Response(await screenshot(), { headers: { 'content-type': 'image/png' } })
     case '/restart':

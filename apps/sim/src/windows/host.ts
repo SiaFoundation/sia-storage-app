@@ -21,7 +21,13 @@ export const WINDOWS_HOME = process.env.SIM_WINDOWS_HOME ?? join(homedir(), '.si
 export const VM_NAME = process.env.SIM_WINDOWS_VM ?? 'sia-sim-win11'
 export const AGENT_PORT = 47800
 
-/** Paths inside the VM. `D:` is the Dev Drive the image creates for builds. */
+/**
+ * Paths inside the VM. `D:` is the Dev Drive the image creates for builds. A
+ * device's own folder, with its library, is in the test account's profile on
+ * `C:` instead, which is NTFS as a person's PC is. The Dev Drive is ReFS,
+ * where a file written at an offset has a hole before it, and NTFS writes
+ * that hole out as zeros.
+ */
 export const GUEST = {
   agentDir: 'C:\\sia-sim\\agent',
   bun: 'C:\\Tools\\bun\\bun.exe',
@@ -29,7 +35,8 @@ export const GUEST = {
   repo: 'D:\\sia\\repo.git',
   incoming: 'D:\\sia\\incoming',
   worktree: (checkout: string) => `D:\\sia\\worktrees\\${checkout}`,
-  deviceDir: (session: string, device: string) => `D:\\sia\\sessions\\${session}\\${device}`,
+  deviceDir: (session: string, device: string) =>
+    `C:\\Users\\${TEST_USER}\\sia-sim\\${session}\\${device}`,
 }
 
 export const TEST_USER = 'siatest'
@@ -226,8 +233,12 @@ ${script}
       throw new Error(`scp to ${remote} failed: ${out.stderr.toString().trim()}`)
   }
 
-  /** Calls the agent in the desktop session. */
+  /**
+   * Calls the agent in the desktop session. A command run on its own, such as
+   * `device explorer-state`, has not attached, so this does.
+   */
   async agent<T = unknown>(path: string, body: unknown = {}, timeoutMs = 60_000): Promise<T> {
+    await this.attach()
     const res = await fetch(`http://${this.guest}:${AGENT_PORT}${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-sim-token': credentials().agentToken },

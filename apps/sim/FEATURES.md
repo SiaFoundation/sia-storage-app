@@ -243,6 +243,14 @@ bun sim device expect phone --label Menu
   way the system does on its own. Opening a file in an app moves its last use
   forward (`provider.touch`). After the indexer is changed, a file only
   Finder holds comes back into the cache to upload (`mount.resend`).
+- File Explorer: on Windows the same record is kept through the provider
+  process, which holds the daemon's mount link open
+  (`apps/cli/src/daemon/mountLink.ts`). It sends `provider.mountChanged`
+  when Windows fetches or drops a file, as the Finder extension does,
+  answers the pass's `dehydrate`, and answers `list` with every file the
+  folder holds, which the daemon reads as it reads Finder's list. `isCloudOnly` shows a file's bytes are gone,
+  `freeUpSpace` chooses Free up space from File Explorer's menu for the file,
+  and `keepOnDevice` chooses Always keep on this device.
 - Folder on a CLI device: `mount()` in a scenario stands in for a file
   manager's folder, with real files in the device's `mount` directory. It
   holds the daemon's mount link open as the Windows provider does, answers
@@ -256,7 +264,12 @@ bun sim device expect phone --label Menu
   `finder/mount-evicts-unused`,
   `desktop/cache-evicts-finder-copies`, `desktop/finder-drop-leaves-no-copy`,
   `desktop/clear-local-files`, `desktop/finder-open-counts-as-use`,
-  `desktop/indexer-change-restores-from-finder`; integration `downloads`, `finder-mount`,
+  `desktop/indexer-change-restores-from-finder`,
+  `windows/one-copy-of-an-uploaded-file`,
+  `windows/cache-evicts-explorer-copies`,
+  `windows/free-up-space-leaves-no-copy`,
+  `windows/keep-on-device-downloads`,
+  `windows/daemon-restart-rereads-the-folder`; integration `downloads`, `finder-mount`,
   `fs-eviction`, `fs-adopt`, `fs-orphan`, `size-reconcile`
 - Network: `net latency` adds a delay to every call and `net download-rate`
   shares one download speed between every download, the two costs that decide
@@ -373,6 +386,37 @@ bun sim device expect phone --label Menu
   Finder shows for a file, `download` reads a cloud-only file through Finder,
   and `show` opens the folder in Finder. Only desktop devices run the Swift
   extension, Finder and macOS's File Provider framework.
+
+### File Explorer on the PC
+
+- When: the desktop app's File Explorer folder on Windows, and the provider
+  process that serves it from the daemon.
+- Code: `app.provider`; files `apps/desktop/native/windows/provider/folder.ts`,
+  `apps/desktop/native/windows/provider/cloudFiles.ts`,
+  `apps/desktop/src/main/platform/win32.ts`
+- Check: tables `files`, `mount_copies`, `fs`; `explorerState` and
+  `device explorer-state win <file>` give what File Explorer draws for a
+  file, its size, whether it is cloud-only, pinned or unpinned, and whether
+  its placeholder is in sync, which is the tick versus the sync-pending
+  arrows. The provider's log is `providerLog()`, from `provider.log` in the
+  device's data directory in the VM, and `device capture` saves it with the
+  daemon's and the app's logs, a copy of the app's database and an
+  `explorer.json` of the folder's top level.
+- Tests: scenarios `windows/explorer-opens-peer-files`,
+  `windows/explorer-save-reaches-peer`,
+  `windows/explorer-swap-save-keeps-the-item`,
+  `windows/explorer-delete-then-move-in-keeps-the-item`,
+  `windows/explorer-rename-and-delete-reach-peer`,
+  `windows/peer-version-replaces-explorer-copy`,
+  `windows/peer-rename-and-delete-reach-explorer`,
+  `windows/save-while-reading`, `windows/large-file-read-writes-it-once`
+- Windows: `bun sim up --cli laptop --windows win` runs the app in the VM with
+  its folder. A scenario's `explorer*` calls are file operations made there,
+  which reach the provider through Windows' Cloud Files. Only Windows devices
+  run the provider's Cloud Files calls. Its decisions are unit tested on any
+  platform beside `folder.ts`. `device show win` opens the folder in an
+  Explorer window in the VM, and `device screenshot win shot.png` then
+  captures its status icons.
 
 ### The desktop app's windows
 
