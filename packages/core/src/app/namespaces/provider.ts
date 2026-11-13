@@ -86,6 +86,15 @@ const THUMBNAIL_POLL_MS = 500
  * would otherwise hold every request for it for the whole wait.
  */
 const RECENT_VERSION_MS = 5 * 60_000
+/**
+ * Part of every anchor and every file's metadata version. The system keeps
+ * the fields of an item it has listed until it lists the item again with a
+ * new version. Changing this expires every anchor, so the system lists the
+ * library again, and gives every file a new version, so it takes the fields.
+ * `2` added the evicting capability to files, after macOS's `evictItem`
+ * refused items the system had listed without it.
+ */
+const ITEM_FORMAT = '2'
 /** Key-value storage key holding the thumbnails waiting for a retry. */
 const THUMBNAIL_RETRIES_KEY = 'providerThumbnailRetries'
 
@@ -255,6 +264,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
         parentId ?? '',
         +uploaded,
         thumbnailNudge,
+        ITEM_FORMAT,
       ].join(':'),
       uploaded,
       // The uploader saves the object, which re-reports the file, and removes
@@ -363,10 +373,13 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     return dir ? dir.id : null
   }
 
-  /** This database's feed epoch, immutable for its lifetime. */
+  /**
+   * This database's feed epoch, immutable for its lifetime, with
+   * `ITEM_FORMAT` after it, which every anchor carries.
+   */
   let feedEpoch: string | null = null
   async function epoch(): Promise<string> {
-    if (feedEpoch === null) feedEpoch = (await ops.queryFeedMeta(db)).epoch
+    if (feedEpoch === null) feedEpoch = `${(await ops.queryFeedMeta(db)).epoch}.${ITEM_FORMAT}`
     return feedEpoch
   }
 
@@ -1410,6 +1423,20 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
 
     async mountChanged() {
       deps.mountHint.hint()
+    },
+
+    async touch(stackIds) {
+      const service = getService()
+      const now = Date.now()
+      for (const stackId of stackIds) {
+        const row = await ops.queryProviderItem(db, stackId)
+        // Written directly: a read through `getFileUri` moves `usedAt` at
+        // most once per `usedAtUpdateIntervalMs`, and the system reads its
+        // own copy without asking this device at all, so this is the only
+        // use it sees.
+        if (row) await service.fs.updateMetaUsedAt(row.id, now)
+      }
+      await service.mountCopies.touch(stackIds, now)
     },
 
     async trash(id) {

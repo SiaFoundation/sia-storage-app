@@ -1,3 +1,4 @@
+import { logger } from '@siastorage/logger'
 import type { SdkAuthAdapters } from '../../adapters/auth'
 import type { CryptoAdapter } from '../../adapters/crypto'
 import type { DatabaseAdapter } from '../../adapters/db'
@@ -298,6 +299,11 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       mountHint,
     }),
     mount: {
+      dehydrate: async (stackIds, signal) => {
+        const mount = await settingsNamespace.getMount()
+        if (!mount || !adapters.mount) return null
+        return adapters.mount.dehydrate(mount, stackIds, signal)
+      },
       resend: async (stackIds, signal) => {
         const mount = await settingsNamespace.getMount()
         if (!mount || !adapters.mount) return null
@@ -313,6 +319,14 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     cache: {
       evict: () => eviction.evict(),
       clear: () => eviction.clear(),
+      startClear: async () => {
+        // A failure shows through `clearState` as `lastBytesFreed` null.
+        void eviction
+          .clear()
+          .catch((e) => logger.error('cacheEviction', 'clear_failed', { error: e as Error }))
+        return eviction.clearState()
+      },
+      clearState: async () => eviction.clearState(),
       bytesOnDevice: async () =>
         (await service.fs.calcTotalSize()) + (await service.mountCopies.onlyBytes()),
     },

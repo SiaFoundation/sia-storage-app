@@ -125,6 +125,13 @@ public enum Agent {
         case "list":
             return AgentResult(ok: true, domains: try await registry.existing())
 
+        case "evict":
+            guard arguments.count >= 3 else { throw AgentError.usage("evict <domainId> <out> <id>...") }
+            let results = try await Evict.run(
+                domainId: arguments[1], itemIds: Array(arguments.dropFirst(3)), copies: copies)
+            try Evict.json(results).write(to: URL(fileURLWithPath: arguments[2]))
+            return AgentResult(ok: true)
+
         case "resend":
             guard arguments.count >= 3 else {
                 throw AgentError.usage("resend <domainId> <out> <id>...")
@@ -146,7 +153,7 @@ public enum Agent {
 
         default:
             throw AgentError.usage(
-                "register | hide | show | unregister | list | resend | materialized")
+                "register | hide | show | unregister | list | evict | resend | materialized")
         }
     }
 }

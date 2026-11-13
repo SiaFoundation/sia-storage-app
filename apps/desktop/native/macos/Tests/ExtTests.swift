@@ -123,6 +123,12 @@ final class ItemShapeTests: XCTestCase {
         XCTAssertTrue(caps.contains(.allowsDeleting))
     }
 
+    func testAFileCanBeEvictedAndAFolderCannot() throws {
+        // The system refused evictItem on items it listed without it.
+        XCTAssertTrue(SiaItem(try makeItem()).capabilities.contains(.allowsEvicting))
+        XCTAssertFalse(SiaItem(try makeItem(kind: "dir")).capabilities.contains(.allowsEvicting))
+    }
+
     func testADirectoryReportsNoSize() throws {
         XCTAssertNil(SiaItem(try makeItem(kind: "dir", size: 0)).documentSize)
     }

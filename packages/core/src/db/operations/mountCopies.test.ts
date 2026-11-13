@@ -4,6 +4,7 @@ import { insertObject } from './localObjects'
 import {
   addMountRange,
   deleteMountCopies,
+  queryMountCandidates,
   querySecondCopies,
   queryMountOnlyBytes,
   queryStrandedInMount,
@@ -220,6 +221,57 @@ describe('markMountCopiesWhole and queryStaleMountStackIds', () => {
     // until the system fetches the new version.
     expect((await queryStaleMountStackIds(db())).sort()).toEqual([trashed, stack].sort())
     expect(await queryWholeMountStackIds(db())).toEqual(expect.arrayContaining([whole]))
+  })
+})
+
+describe('queryMountCandidates', () => {
+  it('lists uploaded files oldest first, past a cursor', async () => {
+    const a = await addFile('a')
+    const b = await addFile('b')
+    const c = await addFile('c')
+    await hold(a, 'a', 300)
+    await hold(b, 'b', 100)
+    await hold(c, 'c', 200)
+
+    const first = await queryMountCandidates(db(), INDEXER, 1000, null, 2)
+    expect(first.map((r) => r.stackId)).toEqual([b, c])
+    const last = first[1]
+    const rest = await queryMountCandidates(
+      db(),
+      INDEXER,
+      1000,
+      { usedAt: last.usedAt, stackId: last.stackId },
+      2,
+    )
+    expect(rest.map((r) => r.stackId)).toEqual([a])
+  })
+
+  it('leaves out a file not on the indexer, one used too recently and one in the trash', async () => {
+    const elsewhere = await addFile('elsewhere', { uploaded: false })
+    await insertObject(db(), makeObject('elsewhere', 'https://other.example.com'))
+    const recent = await addFile('recent')
+    const trashed = await addFile('trashed')
+    const fine = await addFile('fine')
+    await hold(elsewhere, 'elsewhere')
+    await hold(recent, 'recent', 5000)
+    await hold(trashed, 'trashed')
+    await hold(fine, 'fine')
+    await trashFilesAndThumbnails(db(), ['trashed'])
+
+    const rows = await queryMountCandidates(db(), INDEXER, 2000, null, 10)
+    expect(rows.map((r) => r.stackId)).toEqual([fine])
+  })
+
+  it('asks for the version shown to be uploaded, whichever version the mount holds', async () => {
+    const stack = await addFile('v1', { overrides: { name: 'doc.bin', updatedAt: 1000 } })
+    await hold(stack, 'v1')
+    await addFile('v2', { uploaded: false, overrides: { name: 'doc.bin', updatedAt: 2000 } })
+    expect(await queryMountCandidates(db(), INDEXER, 2000, null, 10)).toEqual([])
+
+    await insertObject(db(), makeObject('v2'))
+    expect(await queryMountCandidates(db(), INDEXER, 2000, null, 10)).toEqual([
+      { stackId: stack, fileId: 'v1', shownId: 'v2', size: 100, usedAt: 1000 },
+    ])
   })
 })
 

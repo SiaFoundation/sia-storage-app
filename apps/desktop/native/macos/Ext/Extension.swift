@@ -571,6 +571,18 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
                             Self.containerArg(item.parentItemIdentifier), item.filename,
                         ])
                 }
+                if changedFields.contains(.lastUsedDate) {
+                    // The system sets it when the user opens the file in an
+                    // app, and Finder then reads its own copy without asking
+                    // the daemon. Telling the daemon keeps an often-opened
+                    // file from looking unused to its eviction. A failure
+                    // costs only that, so it does not fail the change.
+                    do {
+                        _ = try await rpc.call(Channel.touch, [[item.itemIdentifier.rawValue]])
+                    } catch {
+                        fpLog.attemptFailed("touch failed", item.itemIdentifier.rawValue, error)
+                    }
+                }
                 if latest == nil {
                     latest = try await rpc.callDecodingOptional(
                         ProviderItem.self, Channel.item, [item.itemIdentifier.rawValue])

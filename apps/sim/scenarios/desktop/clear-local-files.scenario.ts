@@ -5,7 +5,7 @@ import { defineScenario } from '../../src/scenario'
 export default defineScenario({
   name: "Clear Local Files in the Mac's window removes its backed-up copies and keeps the rest",
   description:
-    "The laptop adds two files and the Mac downloads both, so it holds copies of them. With the Mac's uploads held, a third file saved in Finder is not backed up. Clear Local Files in the status window takes a second click, then removes the two backed-up copies and keeps the third, and Finder still opens all three with their bytes.",
+    "The laptop adds two files and the Mac downloads both, so it holds copies of them. With the Mac's uploads held, a third file saved in Finder is not backed up. Clear Local Files in the status window takes a second click, then the daemon removes the two backed-up copies in the background and keeps the third, and Finder still opens all three with their bytes.",
   devices: { mac: 'desktop', laptop: 'cli' },
   timeoutMs: 8 * 60_000,
   async run({ devices, network, seed, converge, step, precondition, checkEqual, check, waitFor }) {
@@ -61,6 +61,16 @@ export default defineScenario({
       { timeoutMs: 60_000, intervalMs: 500 },
     )
     check('the window says how much it removed', notice.startsWith('Removed '), notice)
+    const state = await mac.call<{
+      running: boolean
+      finished: number
+      lastBytesFreed: number | null
+    }>('cache.clearState')
+    check(
+      'the daemon ran the clear the window started and reports it done',
+      !state.running && state.finished === 1 && (state.lastBytesFreed ?? 0) > 0,
+      JSON.stringify(state),
+    )
 
     const cached = await cachedIds()
     checkEqual(
