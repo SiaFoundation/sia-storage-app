@@ -1,3 +1,21 @@
+## 0.0.8-rc.2 (2026-11-13)
+
+### Features
+
+- `sia config set cacheMaxBytes` and `sia config set cacheMinAge` change how much the local cache may hold and how long a file must go unused before it can be removed, and the status window shows how much is cached against the limit, with how much of it hasn't uploaded yet and so stays until it does.
+- The files cached on this computer are kept under 4 GB by removing backed-up files that have not been used for an hour, and they download again when opened.
+
+### Fixes
+
+- `sia links` lists each link's files by folder and then by name, instead of in the order they were added to the link.
+- A deleted folder no longer stays behind empty or comes back on your other devices. It goes to the trash as one item, and restoring it, or a file trashed from it earlier, puts the files back in the folders they came from, creating them again if needed. Trashing the last file in a folder removes the folder too, except in the Finder folder on the Mac, which keeps it until you delete it.
+- A file's local copy is no longer removed to save space, and Finder no longer treats it as backed up, until the file is on the indexer you use now, so switching indexers cannot leave a file with no copy the new indexer can get.
+- Opening a file from Finder no longer fails when the cache removes its copy at the same moment, and a download is never cut short by cache cleanup. `fs.removeFile` takes `skipIfLocked` and resolves whether it removed the file.
+- Clearing local data, signing out and `sia reset` delete the device's copies of the library they drop. Before, those copies stayed on the device and no cleanup could find them again. `sia reset` stops without deleting anything when the daemon does not shut down. `downloads.cancelAll()` resolves once every cancelled download has settled.
+- Putting a file in the trash, on its own or by deleting its folder, takes it off your share links, and restoring it no longer shares it again.
+- A file trashed before it finishes uploading leaves the upload queue and is not uploaded, and neither are its thumbnails. A restored file waits to upload like any other new file.
+- A file that fails to upload is tried again after a delay that grows with each failure, instead of over and over without a pause. A file that can't be read waits up to 30 minutes, a network failure up to 2 minutes, and every file is tried again as soon as the connection comes back.
+
 ## 0.0.8-rc.1 (2026-11-05)
 
 ### Features
