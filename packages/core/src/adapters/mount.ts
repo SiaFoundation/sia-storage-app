@@ -82,7 +82,9 @@ export type MountAdapter = {
   ): Promise<Record<string, ResendResult>>
   /**
    * Reads which files the system holds whole: all of them with no `cursor`,
-   * or what changed since it. Rejects as `dehydrate` does.
+   * or what changed since it. Resolves null where the integration reports
+   * each change as it happens instead (`provider.mountReport`). Rejects as
+   * `dehydrate` does.
    */
-  changes(mount: Mount, cursor: string | null, signal?: AbortSignal): Promise<MountChanges>
+  changes(mount: Mount, cursor: string | null, signal?: AbortSignal): Promise<MountChanges | null>
 }

@@ -12,21 +12,26 @@
  * fetch after the bytes were placed for it. Its cache copy is removed once
  * the row is whole.
  *
- * The system's list of what it holds is read through the adapter
- * (`syncMount`): what changed since a saved cursor on every eviction pass and
- * after a hint, and the whole list once a day.
+ * Two ways in. A system that can list what it holds is read through the
+ * adapter (`syncMount`): what changed since a saved cursor on every eviction
+ * pass and after a hint, and the whole list once a day. A system that tells
+ * its integration about each file reports through `applyMountReport`.
  *
  * A wrong row is never dangerous. A whole row for a file the mount no longer
  * holds overstates what is on the device until the next full read. Ranges the
  * system dropped on its own are named by no read, so their row stays until
  * the file's version changes or a dehydrate of it answers done. A missing row
- * understates the device until the next read adds it. Whether bytes may be
+ * understates the device until the next read adds it. A mount with no list to
+ * read has only its reports, so one lost while the daemon was down leaves its
+ * row wrong until a dehydrate of that file answers. Whether bytes may be
  * removed rests on the `objects` table.
  */
 import { logger } from '@siastorage/logger'
 import type { MountChanges } from '../adapters/mount'
 import type { AppService } from '../app/service'
 import { MOUNT_FULL_READ_INTERVAL, MOUNT_HINT_MIN_INTERVAL } from '../config'
+import type { MountReport } from '../types/provider'
+import { tidyCopies } from './localCopies'
 
 /** The integration's notice that the mount's files changed, spaced out into reads. */
 export class MountHint {
@@ -112,10 +117,29 @@ export async function syncMount(app: AppService, signal?: AbortSignal): Promise<
   }
 }
 
+/** Applies what an integration was told by the system about single files. */
+export async function applyMountReport(app: AppService, report: MountReport): Promise<void> {
+  if (!(await app.settings.getMount())) return
+  await app.mountCopies.delete(report.dehydrated ?? [])
+  // The system holds the version it was handed. When a newer one has synced
+  // in since, the row still names the handed version and is left alone:
+  // marking it whole would record the mount as holding bytes it was never
+  // given, and the tidy below would then remove the newer version's cache copy.
+  const hydrated: string[] = []
+  for (const stackId of report.hydrated ?? []) {
+    const [shown] = await app.provider.fileIds([stackId])
+    const row = await app.mountCopies.read(stackId)
+    if (shown && (!row || row.fileId === shown)) hydrated.push(stackId)
+  }
+  await app.mountCopies.markWhole(hydrated, Date.now())
+  // A file the system now holds whole needs no cache copy once uploaded.
+  await tidyCopies(app, { fileIds: await app.provider.fileIds(hydrated) })
+}
+
 /**
  * Asks the adapter for the mount's files, whole or since `cursor`. Undefined
- * when the adapter could not run, which leaves the saved cursor for next
- * time.
+ * when the adapter could not run or has no such read, which leaves the saved
+ * cursor for next time.
  */
 async function read(
   app: AppService,

@@ -13,6 +13,7 @@ import { REPO_ROOT, type Session } from '../session'
 import { isAlive, isCliDaemon, type ProcessSample, psSample } from '../process'
 import { waitFor } from '../wait'
 import { LIBRARY_QUERY, toLibrary } from './library'
+import { SimMount } from './mount'
 import type { Device, LibraryEntry } from './types'
 
 export const CLI_ENTRY = join(REPO_ROOT, 'apps/cli/src/index.ts')
@@ -22,6 +23,7 @@ type CliResult = { stdout: string; stderr: string; exitCode: number }
 export class CliDevice implements Device {
   readonly kind: 'cli' | 'desktop' = 'cli'
   protected readonly paths: ReturnType<typeof getPaths>
+  private simMount: SimMount | null = null
 
   constructor(
     readonly name: string,
@@ -68,6 +70,22 @@ export class CliDevice implements Device {
     return join(this.handoffDir, crypto.randomUUID())
   }
 
+  /**
+   * A folder a file manager would show for this device, with the system and
+   * the integration behind it stood in for. It holds nothing and the daemon
+   * knows of no mount until `attach()` registers it.
+   */
+  mount(): SimMount {
+    this.simMount ??= new SimMount({
+      sockPath: this.paths.sockPath,
+      dir: join(this.paths.dataDir, 'mount'),
+      stage: (bytes) => this.stage(bytes),
+      handoffTarget: () => this.handoffTarget(),
+      call: (method, ...args) => this.call(method, ...args),
+    })
+    return this.simMount
+  }
+
   /** Runs any `sia` command as this device, e.g. `cli('mv', 'a.txt', 'docs/')`, for up to 5 minutes. */
   async cli(...args: string[]): Promise<CliResult> {
     const proc = Bun.spawn([process.execPath, CLI_ENTRY, ...args], {
@@ -109,6 +127,7 @@ export class CliDevice implements Device {
   }
 
   async stop(): Promise<void> {
+    this.simMount?.detach()
     const pid = readDaemonPid(this.paths.pidPath)
     await sendIpcCommand(this.paths.sockPath, 'shutdown', {}, 5_000).catch(() => {})
     if (pid) {
@@ -119,6 +138,7 @@ export class CliDevice implements Device {
   }
 
   async kill(): Promise<void> {
+    this.simMount?.detach()
     const pid = readDaemonPid(this.paths.pidPath)
     if (pid && isCliDaemon(pid, this.paths.dataDir)) {
       process.kill(pid, 'SIGKILL')

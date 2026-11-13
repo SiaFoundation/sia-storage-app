@@ -36,7 +36,7 @@ import type { FileRecord, ThumbSize } from '../../types/files'
 import type { AppService, AppServiceInternal } from '../service'
 import type { TransferMemoryBudget } from '../../services/transferMemoryBudget'
 import type { LocalCopyLock } from '../../services/localCopyLock'
-import type { MountHint } from '../../services/mountSync'
+import { applyMountReport, type MountHint } from '../../services/mountSync'
 import type { DownloadPriority } from '../stores'
 import type { DownloadObjectAdapter } from './downloads'
 import { ANCHOR_START, formatAnchor, parseAnchor, type ProviderAnchor } from '../providerAnchor'
@@ -1423,6 +1423,10 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
 
     async mountChanged() {
       deps.mountHint.hint()
+    },
+
+    async mountReport(report) {
+      await applyMountReport(getService(), report)
     },
 
     async touch(stackIds) {

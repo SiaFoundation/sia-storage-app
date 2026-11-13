@@ -40,6 +40,7 @@ import type {
   ProviderPage,
   ProviderProgress,
   MountCursorState,
+  MountReport,
 } from '../types/provider'
 import type { ShareFile, ShareLink, ShareLinkMode } from '../types/shareLinks'
 import type { AdoptFileHashed, AdoptFilePlain, ImportCopyResult } from '../services/fsFileUri'
@@ -1227,6 +1228,11 @@ export interface AppService {
      */
     mountChanged(): Promise<void>
     /**
+     * Records files the system now holds whole or no longer holds, for an
+     * integration that is told about each one. `dehydrated` is applied first.
+     */
+    mountReport(report: MountReport): Promise<void>
+    /**
      * Records that the user opened these files in the mount now. The system
      * reads its own copy without asking this device, so the eviction pass
      * would otherwise rank a file opened daily by when it was last downloaded.
@@ -1254,7 +1260,7 @@ export interface AppService {
     resend(stackIds: string[], signal?: AbortSignal): Promise<Record<string, ResendResult> | null>
     /**
      * Reads which files the system holds whole: all of them with no `cursor`,
-     * or what changed since it.
+     * or what changed since it. Null also when the adapter has no such read.
      */
     changes(cursor: string | null, signal?: AbortSignal): Promise<MountChanges | null>
   }
