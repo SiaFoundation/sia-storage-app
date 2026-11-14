@@ -14,7 +14,7 @@ import { useEffect, useState } from 'react'
 import { sia } from './api'
 import { PLAIN_BUTTON, PRIMARY_BUTTON } from './buttons'
 import { ROW, TONE_TEXT } from './Group'
-import { CheckCircle, Circle, DashCircle, Spinner, WarnCircle } from './icons'
+import { CheckCircle, Circle, DashCircle, ProgressRing, WarnCircle } from './icons'
 import {
   awaitingFolderPass,
   setupFailed,
@@ -51,13 +51,13 @@ const STEP_TONE: Record<StepState, string> = {
   skipped: 'text-secondary',
 }
 
-function glyph(state: StepState, current: boolean) {
+function glyph(state: StepState, current: boolean, progress: number | null) {
   switch (state) {
     case 'waiting':
       return <Circle />
     // Spun only while it is the one showing, so a finished list animates nothing.
     case 'active':
-      return <Spinner className={current ? 'animate-spin' : ''} />
+      return <ProgressRing progress={current ? progress : 0} />
     case 'done':
       return <CheckCircle />
     case 'failed':
@@ -72,7 +72,7 @@ function glyph(state: StepState, current: boolean) {
  * the last. Swapping the element instead would cut from one to the next, and
  * a step finishing is the moment this screen exists to show.
  */
-function StepIcon({ state }: { state: StepState }) {
+function StepIcon({ state, progress }: { state: StepState; progress: number | null }) {
   return (
     <span className="relative size-[15px] shrink-0">
       {STEP_STATES.map((each) => (
@@ -82,7 +82,7 @@ function StepIcon({ state }: { state: StepState }) {
             each === state ? 'scale-100 opacity-100 blur-[0px]' : 'scale-25 opacity-0 blur-[4px]'
           }`}
         >
-          {glyph(each, each === state)}
+          {glyph(each, each === state, progress)}
         </span>
       ))}
     </span>
@@ -92,7 +92,7 @@ function StepIcon({ state }: { state: StepState }) {
 function Step({ step }: { step: SetupStep }) {
   return (
     <li className={ROW}>
-      <StepIcon state={step.state} />
+      <StepIcon state={step.state} progress={step.progress} />
       <span className="flex min-w-0 flex-auto flex-col gap-px">
         <span
           data-testid={`step-${step.id}`}
@@ -113,19 +113,6 @@ function Step({ step }: { step: SetupStep }) {
           {step.hint}
         </span>
       ) : null}
-      {/* Over the row's bottom edge, from the label column on, so a step with
-          a measure is no taller than one without. */}
-      <span
-        aria-hidden
-        className={`absolute right-0 bottom-0 left-[35px] h-[2px] transition-opacity duration-300 ${
-          step.progress === null ? 'opacity-0' : 'opacity-100'
-        }`}
-      >
-        <span
-          className="block h-full origin-left bg-accent transition-transform duration-500 ease-settle"
-          style={{ transform: `scaleX(${Math.min(1, Math.max(0, step.progress ?? 0))})` }}
-        />
-      </span>
     </li>
   )
 }

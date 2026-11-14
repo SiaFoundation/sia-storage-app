@@ -37,9 +37,9 @@ import type { AppService, AppServiceInternal } from '../service'
 import type { TransferMemoryBudget } from '../../services/transferMemoryBudget'
 import type { LocalCopyLock } from '../../services/localCopyLock'
 import type { MountHint } from '../../services/mountSync'
-import type { DownloadPriority } from '../stores'
 import type { DownloadObjectAdapter } from './downloads'
 import { ANCHOR_START, formatAnchor, parseAnchor, type ProviderAnchor } from '../providerAnchor'
+import { MAX_INLINE_THUMBNAIL_BYTES, type ThumbnailBytes } from './thumbnailBytes'
 
 /** Rows per page. */
 const MAX_PAGE_SIZE = 500
@@ -51,11 +51,6 @@ const FOLDER_CURSOR = 'dirs:'
  * request says nothing about where the image will be drawn.
  */
 const PROVIDER_THUMB_SIZE: ThumbSize = 512
-/**
- * Every generator writes a 512px thumbnail far below this. A larger row is
- * malformed and is refused rather than sent over the socket as one line.
- */
-const MAX_INLINE_THUMBNAIL_BYTES = 1024 * 1024
 /**
  * The wait before a failed thumbnail's first retry, doubling after each
  * failure up to `MAX_THUMBNAIL_RETRY_BACKOFF_MS`. A thumbnail is retried for
@@ -122,6 +117,7 @@ export type ProviderNamespaceDeps = {
   localCopyLock: LocalCopyLock
   /** The integration's notice that the mount's files changed, read by the daemon's scheduler. */
   mountHint: MountHint
+  thumbnailBytes: ThumbnailBytes
 }
 
 /** Transfer flags for a batch of files, resolved in one pass over the library. */
@@ -814,24 +810,6 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     return null
   }
 
-  async function thumbnailIsLocal(thumb: { id: string; type: string; size: number }) {
-    return (await fsIO.size(thumb.id, thumb.type)).value === thumb.size
-  }
-
-  /**
-   * Downloads a thumbnail, then signals the change feed. A download moves no
-   * library counter, and the change signal a shell waits on fires only when
-   * one moves. Without it the shell never reads the feed, so the file's new
-   * date never reaches Finder, which matters whenever Finder already got an
-   * error: from a failed request, or from the extension giving up on a slow
-   * download that later finishes.
-   */
-  async function downloadThumbnail(thumb: FileRecord, priority: DownloadPriority) {
-    const service = getService()
-    await service.downloads.downloadFile(thumb.id, priority)
-    service.caches.libraryVersion.invalidate()
-  }
-
   /** One pass at one failed thumbnail. Removes it from `failed` once settled. */
   async function retryThumbnail(
     failed: Map<string, FailedThumbnail>,
@@ -852,8 +830,8 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       failed.delete(id)
       return
     }
-    if (thumb && !(await thumbnailIsLocal(thumb))) {
-      const download = downloadThumbnail(thumb, 'background').catch((e: unknown) => {
+    if (thumb && !(await deps.thumbnailBytes.isLocal(thumb))) {
+      const download = deps.thumbnailBytes.download(thumb, 'background').catch((e: unknown) => {
         logger.debug('provider', 'thumbnail_retry_failed', {
           thumbId: thumb.id,
           error: getErrorMessage(e),
@@ -865,7 +843,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       // Dropped from a full background queue without trying, so not a failure.
       if (service.downloads.wasDropped(thumb.id)) return
     }
-    if (thumb && (await thumbnailIsLocal(thumb))) {
+    if (thumb && (await deps.thumbnailBytes.isLocal(thumb))) {
       failed.delete(id)
       return
     }
@@ -874,22 +852,6 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     // Infinity after about six weeks of hourly failures.
     const backoff = retryBackoffMs * 2 ** Math.min(entry.attempts - 1, 16)
     entry.nextAt = Date.now() + Math.min(backoff, MAX_THUMBNAIL_RETRY_BACKOFF_MS)
-  }
-
-  async function readThumbnail(thumb: FileRecord): Promise<Uint8Array | null> {
-    const readFile = fsIO.readFile
-    if (!readFile) throw new Error('This host cannot read thumbnails')
-    if (!(await thumbnailIsLocal(thumb))) {
-      // At user priority, because Finder asks only for the icons on screen.
-      // A background download dropped from its queue would leave the icon
-      // plain until the file changed.
-      await downloadThumbnail(thumb, 'user')
-    }
-    // Under the lock, so eviction of a trashed file's thumbnails cannot
-    // remove the bytes between the size check and the read.
-    return deps.localCopyLock.run(thumb.id, async () =>
-      (await thumbnailIsLocal(thumb)) ? readFile(thumb) : null,
-    )
   }
 
   /** Whether this library is shown in a mount, where the system keeps its own copies. */
@@ -982,7 +944,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       if (thumb.size > MAX_INLINE_THUMBNAIL_BYTES) {
         throw new Error(`Thumbnail is ${thumb.size} bytes, over the inline limit`)
       }
-      const bytes = await readThumbnail(thumb).catch((e: unknown) => {
+      const bytes = await deps.thumbnailBytes.read(thumb).catch((e: unknown) => {
         logger.warn('provider', 'thumbnail_download_failed', {
           thumbId: thumb.id,
           error: getErrorMessage(e),

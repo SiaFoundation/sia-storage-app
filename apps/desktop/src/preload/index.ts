@@ -59,6 +59,8 @@ const api = {
   openMount: () => ipcRenderer.invoke('open:mount'),
   /** Selects a library file in its Finder window, by id. */
   revealFile: (fileId: string) => ipcRenderer.invoke('open:reveal', fileId),
+  /** The icon macOS draws for files with this extension, as a data URL. */
+  typeIcon: (extension: string) => ipcRenderer.invoke('icon:type', extension),
   /** Opens the menu holding the actions the footer has no room for. */
   showMoreMenu: () => ipcRenderer.invoke('menu:more'),
   quit: () => ipcRenderer.invoke('app:quit'),

@@ -14,13 +14,15 @@ export const TONE_TEXT = {
 
 export type Tone = keyof typeof TONE_TEXT
 
+export const ROW_LAYOUT = 'flex min-h-[30px] items-center gap-2 px-row-x py-row-y'
+
 /**
  * The divider between rows is inset to the label column, but the row is not:
  * drawing it as a border would shift every row after the first out of
  * alignment with the one above, the tell of a hand-rolled inset group.
  */
 export const ROW =
-  'relative flex min-h-[30px] items-center gap-2 px-row-x py-row-y ' +
+  `relative ${ROW_LAYOUT} ` +
   "before:absolute before:top-0 before:right-0 before:left-[35px] before:border-t before:border-divider before:content-[''] first:before:hidden"
 
 /** A green check, for a row whose value is that there is nothing left to do. */

@@ -51,6 +51,7 @@ import type {
   FileRecordRow,
   FileUpdate,
   ThumbSize,
+  ThumbnailImage,
   RecentFile,
   RestoredFile,
   TrashEntry,
@@ -499,6 +500,13 @@ export interface AppService {
     getSizesForFiles(fileIds: string[]): Promise<Map<string, ThumbSize[]>>
     /** Returns whether a thumbnail exists for a given file and size. */
     existsForFileAndSize(fileId: string, size: ThumbSize): Promise<boolean>
+    /**
+     * One version's thumbnail at `size` as base64 image data, for a window
+     * that cannot read files from disk. Downloaded first at user priority if
+     * only another device has it. Null when no thumbnail of that size has
+     * synced, or the file is trashed or deleted. Throws when the download fails.
+     */
+    read(fileId: string, size: ThumbSize): Promise<ThumbnailImage | null>
     /** Returns a page of candidate originals that still need thumbnails generated. */
     queryCandidatePage(
       pageSize: number,
@@ -1488,9 +1496,14 @@ export interface AppService {
   caches: AppCaches
 }
 
-/** The database-backed namespaces, which a transaction binds to its own handle. */
-export type DatabaseNamespaces = Omit<
+/**
+ * The database-backed namespaces, which a transaction binds to its own handle.
+ * `thumbnails.read` is left out because it can download, which no
+ * transaction should wait on.
+ */
+export type DatabaseNamespaces = { thumbnails: Omit<AppService['thumbnails'], 'read'> } & Omit<
   AppService,
+  | 'thumbnails'
   | 'settings'
   | 'storage'
   | 'secrets'

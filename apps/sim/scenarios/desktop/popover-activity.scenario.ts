@@ -89,7 +89,7 @@ export default defineScenario({
     await step('choose this version and no expiry, and make that link', async () => {
       await popover.waitForGone({ text: 'Link copied' }, 10_000)
       await popover.tap({ label: 'Share link options for report.txt' })
-      await popover.tap({ text: 'This version' })
+      await popover.tap({ text: 'This version only' })
       await popover.tap({ text: 'Never' })
       await popover.tap({ text: 'Copy Link' })
       await popover.waitFor({ text: 'Link copied' }, 30_000)

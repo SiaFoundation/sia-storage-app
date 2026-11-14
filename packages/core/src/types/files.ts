@@ -6,6 +6,9 @@ import { keysOf } from '../lib/types'
 export type ThumbSize = 64 | 512
 export const ThumbSizes: ThumbSize[] = [64, 512]
 
+/** A thumbnail's image, for a renderer that takes it as a data URL. */
+export type ThumbnailImage = { mimeType: string; /** The image bytes, base64. */ data: string }
+
 export type FileKind = 'file' | 'thumb'
 
 /** Fields that are stored in both the local database and the indexer metadata. */

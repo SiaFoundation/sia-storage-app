@@ -149,7 +149,7 @@ export function mountLabel(s: Status): string {
 /**
  * The one thing worth saying, chosen once.
  *
- * The headline, the value beside it, the line under it, the bar and the dot
+ * The headline, the value beside it, the line under it, the ring and the dot
  * all read this, so they cannot end up describing different things. Problems
  * outrank progress: a transfer running over a broken mount is still a broken
  * mount. Among progress, a file moving outranks metadata, and metadata
@@ -363,11 +363,13 @@ export function activityHelp(s: Status): string {
   }
 }
 
-/** 0..1 for the bar, or null when the state has no measure of how far it is. */
+/** 0..1 for the status ring, or null when the state has no measure of how far it is. */
 export function activityProgress(s: Status): number | null {
   switch (condition(s)) {
     case 'uploading':
-      return s.uploads.progress
+      // Progress counts bytes sent to hosts, so it is 0 while the card says
+      // "Preparing", and the ring spins rather than sit empty.
+      return s.uploads.progress > 0 ? s.uploads.progress : null
     case 'syncing-down':
       return s.syncDownProgress
     case 'syncing-up':

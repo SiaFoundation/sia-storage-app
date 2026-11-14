@@ -3,11 +3,11 @@
  * each with when it was added, and with its upload's progress while it is
  * still on its way to Sia.
  *
- * Pointing at a row swaps its status mark for two actions. The magnifier
- * selects the file in Finder. The link button makes a share link for the file
- * and copies it in one click, with the settings chosen behind the chevron
- * beside it, which start as this version of the file and no expiry and are
- * kept for every link after.
+ * Clicking a row selects the file in Finder. Pointing at it swaps its status
+ * mark for a link button, which makes a share link for the file and copies it
+ * in one click, with the settings chosen behind the chevron beside it. Those
+ * start as this version of the file and no expiry, and are kept for every
+ * link after.
  */
 
 import { useApp } from '@siastorage/core/app'
@@ -30,9 +30,10 @@ import {
 } from './activityModel'
 import { sia } from './api'
 import { PRIMARY_BUTTON } from './buttons'
-import { FinderItemIcon } from './finderIcons'
-import { ROW, Section } from './Group'
-import { CheckCircle, ChevronDown, Clock, Link, Magnifier, Spinner, WarnCircle } from './icons'
+import { FileIcon } from './FileIcon'
+import { ROW, ROW_LAYOUT, Section } from './Group'
+import { CheckCircle, ChevronDown, Clock, Link, ProgressRing, WarnCircle } from './icons'
+import { ScrollArea } from './ScrollArea'
 import { useNow } from './useNow'
 
 /** How many files the list holds. Older ones are in Finder. */
@@ -42,6 +43,14 @@ const ICON_BUTTON =
   'flex h-[22px] cursor-default items-center justify-center rounded-[5px] border-none bg-transparent p-0 outline-none ' +
   'transition-[scale,background-color,color] duration-150 ease-settle enabled:active:scale-[0.92] ' +
   'enabled:hover:bg-divider enabled:hover:text-label focus-visible:shadow-[0_0_0_2px_var(--color-accent)] disabled:opacity-40'
+
+/**
+ * The rows are a list of things to click, drawn the way AppKit's inset table
+ * style draws one: no lines between rows, and a rounded highlight inset from
+ * the card's edges. Lines between rows belong to the status groups, whose
+ * rows are not clickable and never highlight.
+ */
+const HIGHLIGHT = 'absolute inset-x-1 inset-y-0 rounded-[5px]'
 
 type ShareState =
   | { kind: 'idle' }
@@ -72,7 +81,7 @@ export function Activity({ canReveal }: { canReveal: boolean }) {
           {recent.data ? 'Files you add appear here.' : 'Loading…'}
         </div>
       ) : (
-        <div className="max-h-[352px] overflow-y-auto" data-testid="activity-list">
+        <ScrollArea className="max-h-[352px] overflow-y-auto py-1" testId="activity-list">
           {files.map((file) => (
             <ActivityRow
               key={file.id}
@@ -86,7 +95,7 @@ export function Activity({ canReveal }: { canReveal: boolean }) {
               onToggleOptions={() => setOptionsFor((open) => (open === file.id ? null : file.id))}
             />
           ))}
-        </div>
+        </ScrollArea>
       )}
     </Section>
   )
@@ -147,29 +156,40 @@ function ActivityRow({
   // Held on screen while a link is being made, just made, or being set up,
   // so the result shows where the click was even after the pointer leaves.
   const pinned = share.kind !== 'idle' || optionsOpen
-  const shareSetting = `${QUICK_MODE_CHOICES.find((c) => c.id === quick.mode)?.label.toLowerCase()}, ${
-    quick.expiry === 'never'
-      ? 'never expires'
-      : `expires in ${QUICK_EXPIRY_CHOICES.find((c) => c.id === quick.expiry)?.label}`
-  }`
+  const shareSetting = `${QUICK_MODE_CHOICES.find((c) => c.id === quick.mode)?.label.toLowerCase()}, ${expiryText(quick.expiry).toLowerCase()}`
 
   return (
-    <>
-      <div
-        className={`${ROW} group hover:bg-card`}
-        data-file-id={file.id}
-        title={file.folder ? `${file.folder}/${file.name}` : file.name}
-        onDoubleClick={reveal}
-      >
-        <span className="flex w-[15px] shrink-0 justify-center">
-          <FinderItemIcon folder={false} size={16} />
+    <div
+      className="group/item relative"
+      data-file-id={file.id}
+      title={file.folder ? `${file.folder}/${file.name}` : file.name}
+    >
+      <span
+        aria-hidden
+        className={`pointer-events-none ${HIGHLIGHT} bg-card transition-opacity duration-150 ${
+          optionsOpen ? 'opacity-100' : 'opacity-0 group-hover/item:opacity-100'
+        }`}
+      />
+      <div className={`${ROW_LAYOUT} relative`}>
+        {/* The whole row is the Finder button. It lies under the row's text,
+            which passes clicks through to it, and the share buttons sit above
+            it, so they stay separate targets rather than nested buttons. */}
+        <button
+          type="button"
+          className={`${HIGHLIGHT} cursor-default border-none bg-transparent p-0 outline-none transition-colors duration-150 enabled:active:bg-card focus-visible:shadow-[0_0_0_2px_var(--color-accent)]`}
+          aria-label={`Show ${file.name} in Finder`}
+          disabled={!canReveal}
+          onClick={reveal}
+        />
+        <span className="pointer-events-none relative flex shrink-0">
+          <FileIcon id={file.id} name={file.name} type={file.type} />
         </span>
         {/* Always rendered, so VoiceOver announces the result when the text
             changes. The visible line below is a new element each time. */}
         <span role="status" className="sr-only">
           {share.kind === 'copied' ? 'Link copied' : share.kind === 'failed' ? share.text : ''}
         </span>
-        <span className="flex min-w-0 flex-auto flex-col gap-px">
+        <span className="pointer-events-none relative flex min-w-0 flex-auto flex-col gap-px">
           <FileName name={file.name} />
           <Subtitle
             share={share}
@@ -179,11 +199,13 @@ function ActivityRow({
         </span>
         {/* The mark and the actions share one slot and swap by opacity, not
             display, so the buttons stay in the tab order and a keyboard focus
-            on one is what brings them up. */}
-        <span className="relative flex w-[62px] shrink-0 items-center justify-end">
+            on one is what brings them up. The mark is centred in a box the
+            width of the chevron button, so the chevron takes its place in the
+            same column on hover. */}
+        <span className="relative flex w-[46px] shrink-0 items-center justify-end">
           <span
-            className={`pointer-events-none absolute right-1 flex transition-opacity duration-150 ${
-              pinned ? 'opacity-0' : 'group-focus-within:opacity-0 group-hover:opacity-0'
+            className={`pointer-events-none absolute right-0 flex w-[22px] justify-center transition-opacity duration-150 ${
+              pinned ? 'opacity-0' : 'group-focus-within/item:opacity-0 group-hover/item:opacity-0'
             }`}
             role="img"
             aria-label={activityLabel(activity)}
@@ -191,22 +213,12 @@ function ActivityRow({
             <ActivityMark activity={activity} />
           </span>
           <span
-            className={`flex items-center gap-px transition-opacity duration-150 ${
+            className={`flex items-center gap-0.5 transition-opacity duration-150 ${
               pinned
                 ? 'opacity-100'
-                : 'opacity-0 group-focus-within:opacity-100 group-hover:opacity-100'
+                : 'opacity-0 group-focus-within/item:opacity-100 group-hover/item:opacity-100'
             }`}
           >
-            <button
-              type="button"
-              className={`${ICON_BUTTON} w-[22px] text-secondary`}
-              aria-label={`Show ${file.name} in Finder`}
-              title="Show in Finder"
-              disabled={!canReveal}
-              onClick={reveal}
-            >
-              <Magnifier />
-            </button>
             <button
               type="button"
               className={`${ICON_BUTTON} w-[22px] ${share.kind === 'copied' ? 'text-green' : 'text-secondary'}`}
@@ -216,7 +228,7 @@ function ActivityRow({
               onClick={() => void makeLink(quick)}
             >
               {share.kind === 'working' ? (
-                <Spinner className="animate-spin" />
+                <ProgressRing progress={null} />
               ) : share.kind === 'copied' ? (
                 <CheckCircle />
               ) : (
@@ -225,14 +237,18 @@ function ActivityRow({
             </button>
             <button
               type="button"
-              className={`${ICON_BUTTON} w-[14px] ${optionsOpen ? 'bg-divider text-label' : 'text-secondary'}`}
+              className={`${ICON_BUTTON} w-[22px] ${optionsOpen ? 'text-label' : 'text-secondary'}`}
               aria-label={`Share link options for ${file.name}`}
               aria-expanded={optionsOpen}
               title="Share link options"
               disabled={!canShare}
               onClick={onToggleOptions}
             >
-              <ChevronDown className="h-[11px] w-[11px]" />
+              <ChevronDown
+                className={`h-[11px] w-[11px] transition-transform duration-150 ease-settle ${
+                  optionsOpen ? 'rotate-180' : ''
+                }`}
+              />
             </button>
           </span>
         </span>
@@ -248,7 +264,7 @@ function ActivityRow({
           }}
         />
       ) : null}
-    </>
+    </div>
   )
 }
 
@@ -313,9 +329,9 @@ function ActivityMark({ activity }: { activity: FileActivity }) {
     case 'uploaded':
       return <CheckCircle className="text-secondary opacity-60" />
     case 'uploading':
-      return <ProgressRing progress={activity.progress} />
+      return <ProgressRing progress={activity.progress} className="text-accent" />
     case 'preparing':
-      return <ProgressRing progress={0} />
+      return <ProgressRing progress={null} className="text-accent" />
     case 'waiting':
       return <Clock className="text-secondary" />
     case 'failed':
@@ -325,29 +341,10 @@ function ActivityMark({ activity }: { activity: FileActivity }) {
   }
 }
 
-/** A ring that fills clockwise from the top as an upload goes. */
-function ProgressRing({ progress }: { progress: number }) {
-  const r = 6.2
-  const circumference = 2 * Math.PI * r
-  const done = Math.min(1, Math.max(0, progress))
-  return (
-    <svg width={15} height={15} viewBox="0 0 16 16" aria-hidden="true" className="text-accent">
-      <circle cx="8" cy="8" r={r} fill="none" stroke="var(--divider)" strokeWidth={1.6} />
-      <circle
-        cx="8"
-        cy="8"
-        r={r}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeDasharray={circumference}
-        strokeDashoffset={circumference * (1 - done)}
-        transform="rotate(-90 8 8)"
-        className="transition-[stroke-dashoffset] duration-500 ease-settle"
-      />
-    </svg>
-  )
+function expiryText(expiry: QuickShare['expiry']): string {
+  return expiry === 'never'
+    ? 'Never expires'
+    : `Expires in ${QUICK_EXPIRY_CHOICES.find((c) => c.id === expiry)?.label}`
 }
 
 /** What the next link shows and how long it lasts, under the row it is for. */
@@ -363,7 +360,10 @@ function ShareOptions({
   onCreate: () => void
 }) {
   return (
-    <div className="flex flex-col gap-1.5 pr-row-x pb-2.5 pl-[35px]" data-testid="share-options">
+    <div
+      className="relative flex flex-col gap-1.5 pr-row-x pb-2.5 pl-[52px]"
+      data-testid="share-options"
+    >
       <Segmented
         label="Link shows"
         choices={QUICK_MODE_CHOICES}
@@ -377,10 +377,10 @@ function ShareOptions({
         onChange={(expiry) => onChange({ ...quick, expiry })}
       />
       <div className="flex items-center gap-2 pt-0.5">
-        <span className="flex-auto text-[11px] leading-[1.4] text-pretty text-secondary">
-          {quick.mode === 'latest'
-            ? 'Follows the file when it changes.'
-            : 'Stays as the file is now.'}
+        {/* The expiry control's segments are bare durations, so this line is
+            what says they set when the link expires. */}
+        <span className="min-w-0 flex-auto truncate text-[11px] text-secondary">
+          {expiryText(quick.expiry)}
         </span>
         <button
           type="button"

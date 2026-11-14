@@ -8,7 +8,7 @@
  * Finder. Pointing at the line gives the longer account of any state.
  */
 
-import { CheckCircle, Spinner, WarnCircle } from './icons'
+import { CheckCircle, ProgressRing, WarnCircle } from './icons'
 import {
   activity,
   activityDetail,
@@ -44,15 +44,15 @@ export function StatusLine({ status }: { status: Status }) {
       role="status"
       aria-live="polite"
       title={activityHelp(status)}
-      className="relative overflow-hidden rounded-card bg-card px-row-x py-[9px]"
+      className="rounded-card bg-card px-row-x py-[9px]"
     >
       <div className="flex items-center gap-2">
-        {/* A check when all is well, a spinner while something is under way,
+        {/* A check when all is well, a ring while something is under way,
             a warning when something has stopped. Read from the same decision
             as the words, so the two cannot disagree. */}
         <span aria-hidden className={`flex w-[15px] shrink-0 justify-center ${TONE[colour]}`}>
           {busy ? (
-            <Spinner className="animate-spin" />
+            <ProgressRing progress={progress} />
           ) : colour === 'green' ? (
             <CheckCircle />
           ) : (
@@ -88,19 +88,6 @@ export function StatusLine({ status }: { status: Status }) {
           {detail}
         </p>
       ) : null}
-      {/* Laid over the card's bottom edge rather than given a row, so a state
-          with a measure and one without are the same height. */}
-      <div
-        aria-hidden
-        className={`absolute inset-x-0 bottom-0 h-[2px] bg-divider transition-opacity duration-300 ${
-          progress === null ? 'opacity-0' : 'opacity-100'
-        }`}
-      >
-        <div
-          className="h-full origin-left bg-accent transition-transform duration-500 ease-settle"
-          style={{ transform: `scaleX(${Math.min(1, Math.max(0, progress ?? 0))})` }}
-        />
-      </div>
     </div>
   )
 }

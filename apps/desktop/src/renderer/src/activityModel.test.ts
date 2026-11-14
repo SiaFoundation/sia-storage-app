@@ -5,6 +5,7 @@ import {
   activityLabel,
   addedLabel,
   DEFAULT_QUICK_SHARE,
+  fileExtension,
   fileActivity,
   loadQuickShare,
   rowDetail,
@@ -150,5 +151,17 @@ describe('a file name split before its extension', () => {
     expect(splitName('README')).toEqual({ stem: 'README', ext: '' })
     expect(splitName('.env')).toEqual({ stem: '.env', ext: '' })
     expect(splitName('notes.from-the-meeting')).toEqual({ stem: 'notes.from-the-meeting', ext: '' })
+  })
+})
+
+describe("the extension a file's type icon is looked up by", () => {
+  it('takes the whole last part, however long, in lower case', () => {
+    expect(fileExtension('Photo.JPG')).toBe('jpg')
+    expect(fileExtension('Build.applescript')).toBe('applescript')
+  })
+
+  it('is empty for a name with no extension or only a leading dot', () => {
+    expect(fileExtension('README')).toBe('')
+    expect(fileExtension('.env')).toBe('')
   })
 })

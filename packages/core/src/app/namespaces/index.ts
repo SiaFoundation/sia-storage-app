@@ -14,6 +14,7 @@ import { MountHint, syncMount } from '../../services/mountSync'
 import { type MemoryReader, TransferMemoryBudget } from '../../services/transferMemoryBudget'
 import type { UploaderAdapters, UploadManager } from '../../services/uploader'
 import { restampAllFiles } from '../../db/operations/providerChanges'
+import { bytesToBase64 } from '../../lib/base64'
 import {
   configuredCacheEviction,
   runCacheEviction,
@@ -30,6 +31,7 @@ import { buildDbNamespaces } from './db'
 import { buildDownloadsNamespace, type DownloadObjectAdapter } from './downloads'
 import { buildSettingsNamespace } from './settings'
 import { buildSharesNamespace } from './shares'
+import { buildThumbnailBytes, MAX_INLINE_THUMBNAIL_BYTES } from './thumbnailBytes'
 import { buildUploaderNamespace, initUploader } from './uploader'
 import { buildUploadsNamespace } from './uploads'
 
@@ -197,6 +199,13 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     localCopyLock,
   )
 
+  const thumbnailBytes = buildThumbnailBytes({
+    fsIO: adapters.fsIO,
+    localCopyLock,
+    downloadFile: (fileId, priority) => downloadsNamespace.downloadFile(fileId, priority),
+    caches,
+  })
+
   const settingsNamespace = buildSettingsNamespace(
     adapters.storage,
     caches,
@@ -233,6 +242,8 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     for (const invalidate of invalidations) invalidate()
   }
 
+  const rootNamespaces = databaseNamespaces(adapters.db)
+
   const service: AppService = {
     // PRAGMA optimize refreshes query planner stats for tables flagged as
     // having stale sqlite_stat*. WAL trimming is delegated to SQLite's own
@@ -243,7 +254,20 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     optimize: async () => {
       await adapters.db.execAsync('PRAGMA optimize')
     },
-    ...databaseNamespaces(adapters.db),
+    ...rootNamespaces,
+    thumbnails: {
+      ...rootNamespaces.thumbnails,
+      read: async (fileId, size) => {
+        // Eviction removes a trashed file's thumbnails, and reading one would
+        // download it again.
+        const file = await rootNamespaces.files.getById(fileId)
+        if (!file || file.trashedAt !== null || file.deletedAt !== null) return null
+        const thumb = await rootNamespaces.thumbnails.getByFileIdAndSize(fileId, size)
+        if (!thumb || thumb.size > MAX_INLINE_THUMBNAIL_BYTES) return null
+        const bytes = await thumbnailBytes.read(thumb)
+        return bytes ? { mimeType: thumb.type, data: bytesToBase64(bytes) } : null
+      },
+    },
     settings: settingsNamespace,
     storage: {
       getItem: (k) => adapters.storage.getItem(k),
@@ -297,6 +321,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       transferBudget,
       localCopyLock,
       mountHint,
+      thumbnailBytes,
     }),
     mount: {
       dehydrate: async (stackIds, signal) => {
