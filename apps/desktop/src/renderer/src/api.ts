@@ -59,6 +59,7 @@ export type SiaApi = {
   openMount(): Promise<void>
   /** Selects a library file in its Finder window, or opens its folder if Finder has not listed it yet. */
   revealFile(fileId: string): Promise<void>
+  typeIcon(extension: string): Promise<string | null>
   showMoreMenu(): Promise<void>
   quit(): Promise<void>
   /** Null in a build that cannot open at login, such as a run from source. */

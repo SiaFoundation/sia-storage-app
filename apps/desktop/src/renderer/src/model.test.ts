@@ -88,6 +88,7 @@ describe('what the status line says', () => {
 
     expect(activity(s)).toBe('Preparing 1 file')
     expect(activityHint(s)).toBe('')
+    expect(activityProgress(s)).toBeNull()
   })
 
   it('gives no file count while only thumbnails are uploading', () => {
@@ -229,7 +230,7 @@ describe('what the status line says', () => {
 })
 
 /*
- * The headline, the value beside it, the bar and the dot all read one
+ * The headline, the value beside it, the ring and the dot all read one
  * decision, so they cannot describe different things at once.
  */
 describe('what the status line says when pointed at', () => {
@@ -343,7 +344,7 @@ describe('a sync-up whose retries pass the total', () => {
     expect(metadataLabel(retrying)).toBe('Updating 10 of 10')
   })
 
-  it('never fills the bar past full', () => {
+  it('never fills the ring past full', () => {
     expect(activityProgress(retrying)).toBe(1)
   })
 })

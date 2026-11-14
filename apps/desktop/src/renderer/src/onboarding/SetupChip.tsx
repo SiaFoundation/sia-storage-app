@@ -6,7 +6,7 @@
  * Clicking it leaves the tour for the full list.
  */
 
-import { CheckCircle, Spinner, WarnCircle } from '../icons'
+import { CheckCircle, ProgressRing, WarnCircle } from '../icons'
 import { setupFailed, setupFinished, type SetupStep } from '../model'
 
 /** The step to name: the first one not finished, or the last when all are. */
@@ -42,7 +42,7 @@ export function SetupChip({ steps, onOpen }: { steps: SetupStep[]; onOpen: () =>
         ) : failed ? (
           <WarnCircle />
         ) : (
-          <Spinner className="animate-spin" />
+          <ProgressRing progress={step?.progress ?? null} />
         )}
       </span>
       <span data-testid="setup-chip-label">{label}</span>

@@ -73,6 +73,16 @@ export function splitName(name: string): { stem: string; ext: string } {
   return { stem: name.slice(0, dot), ext: name.slice(dot) }
 }
 
+/**
+ * The extension after a name's last dot, lowercased, for its type's icon. It
+ * has no length limit, unlike `splitName`, so `script.applescript` gets the
+ * AppleScript icon. A leading dot starts the name, as in `.env`.
+ */
+export function fileExtension(name: string): string {
+  const dot = name.lastIndexOf('.')
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : ''
+}
+
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
@@ -137,6 +147,6 @@ export function saveQuickShare(storage: Pick<Storage, 'setItem'>, choice: QuickS
 export const QUICK_EXPIRY_CHOICES = [...EXPIRY_CHOICES].reverse()
 
 export const QUICK_MODE_CHOICES: ReadonlyArray<{ id: ShareLinkMode; label: string }> = [
-  { id: 'snapshot', label: 'This version' },
+  { id: 'snapshot', label: 'This version only' },
   { id: 'latest', label: 'Latest version' },
 ]

@@ -155,26 +155,11 @@ export const DashCircle = ({ className }: Props) => (
   </svg>
 )
 
-/** Three quarters of a ring. The caller spins it. */
-export const Spinner = ({ className }: Props) => (
-  <svg {...box} strokeWidth={1.6} className={className} aria-hidden="true">
-    <path d="M8 1.8a6.2 6.2 0 1 0 6.2 6.2" />
-  </svg>
-)
-
 /** A trash can with its lid. */
 export const Trash = ({ className }: Props) => (
   <svg {...box} className={className} aria-hidden="true">
     <path d="M2.6 4.2h10.8M6.2 4.2V2.8h3.6v1.4" />
     <path d="M4 4.2l.7 8.6a1.4 1.4 0 0 0 1.4 1.3h3.8a1.4 1.4 0 0 0 1.4-1.3l.7-8.6" />
-  </svg>
-)
-
-/** A magnifying glass, for showing a file where Finder keeps it. */
-export const Magnifier = ({ className }: Props) => (
-  <svg {...box} className={className} aria-hidden="true">
-    <circle cx="7" cy="7" r="4.6" />
-    <path d="m10.4 10.4 3.6 3.6" />
   </svg>
 )
 
@@ -184,3 +169,32 @@ export const ChevronDown = ({ className }: Props) => (
     <path d="m4.6 6.4 3.4 3.4 3.4-3.4" />
   </svg>
 )
+
+/**
+ * A ring that fills clockwise from the top as work goes, over a faint track.
+ * With no measure of how far along the work is, a quarter of it turns instead.
+ */
+export function ProgressRing({ progress, className }: { progress: number | null } & Props) {
+  const r = 6.2
+  const circumference = 2 * Math.PI * r
+  const done = progress === null ? 0.25 : Math.min(1, Math.max(0, progress))
+  return (
+    <svg
+      {...box}
+      strokeWidth={1.6}
+      className={`${progress === null ? 'animate-spin' : ''} ${className ?? ''}`}
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="8" r={r} stroke="var(--divider)" />
+      <circle
+        cx="8"
+        cy="8"
+        r={r}
+        strokeDasharray={circumference}
+        strokeDashoffset={circumference * (1 - done)}
+        transform="rotate(-90 8 8)"
+        className="transition-[stroke-dashoffset] duration-500 ease-settle"
+      />
+    </svg>
+  )
+}

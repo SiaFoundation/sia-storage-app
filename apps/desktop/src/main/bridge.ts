@@ -17,6 +17,7 @@ import { revealFile } from './reveal'
 import { call } from './rpc'
 import { takeShareRequest } from './share'
 import { isMockNetworkPage } from './testMode'
+import { typeIcon } from './typeIcons'
 import { installUpdate, updateState } from './updates'
 import {
   beginQuit,
@@ -89,6 +90,9 @@ export function registerBridge(
     const path = platform.mountPath()
     if (path) await openPath(path)
   })
+  ipcMain.handle('icon:type', (_event, extension: unknown) =>
+    typeof extension === 'string' ? typeIcon(extension.toLowerCase()) : null,
+  )
   ipcMain.handle('open:reveal', async (_event, fileId: unknown) => {
     const mount = platform.mountPath()
     if (!mount || typeof fileId !== 'string') return
