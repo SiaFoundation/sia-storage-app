@@ -70,7 +70,7 @@ async function setupDownloadableFile(
   await app.removeFsFile(file.id, file.type)
   await app.app.fs.deleteMeta(file.id)
 
-  return { file, stored }
+  return { file, stored, data }
 }
 
 describe('Downloads', () => {
@@ -426,6 +426,33 @@ describe('Download priority', () => {
     await Promise.allSettled([holding, ...rest])
     expect(fetched).toHaveBeenCalledWith(target.stored.id)
     expect(await app.app.fs.readMeta(target.file.id)).toBeTruthy()
+  })
+
+  it('a download whose copy arrives while it waits for a slot finishes without transferring', async () => {
+    const { target, fetched, holding, unblock } = await queueBehindBlocker(0)
+
+    const waiting = app.app.downloads.downloadFile(target.file.id, 'user')
+    // No state tells a download waiting in the slot pool from one still
+    // reading its file row, so this gives it time to reach the pool's queue.
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    // As a copy Finder hands back lands: the bytes, then the row.
+    nodeFs.writeFileSync(app.app.fs.uri(target.file).replace('file://', ''), target.data)
+    const now = Date.now()
+    await app.app.fs.upsertMeta({
+      fileId: target.file.id,
+      size: target.file.size,
+      addedAt: now,
+      usedAt: now,
+    })
+
+    unblock()
+    await waiting
+    await holding
+    expect(fetched).not.toHaveBeenCalledWith(target.stored.id)
+    // Done, rather than cleared as a download that found the copy before
+    // queueing is, so the copy was found under the lock.
+    expect(app.app.downloads.getEntry(target.file.id)?.status).toBe('done')
+    expect(await app.app.fs.sizeOnDisk(target.file)).toBe(target.file.size)
   })
 
   it('a background download the queue drops leaves no queued entry behind', async () => {

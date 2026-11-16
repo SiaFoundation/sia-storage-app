@@ -38,6 +38,25 @@ public struct ProviderItem: Decodable, Equatable {
     public var isDirectory: Bool { kind == "dir" }
 }
 
+/// What a write answers: the item's fields, flat, and `stale` when the daemon
+/// discarded the bytes as an unedited copy of a version another one has since
+/// replaced. Decoded apart from `ProviderItem` so no other response carries it.
+public struct WriteResult: Decodable {
+    public let item: ProviderItem
+    /// Finder's copy is the older version, so the system must fetch the
+    /// current one. False when the daemon did not say.
+    public let stale: Bool
+
+    private enum Keys: String, CodingKey { case stale }
+
+    public init(from decoder: Decoder) throws {
+        item = try ProviderItem(from: decoder)
+        stale =
+            try decoder.container(keyedBy: Keys.self).decodeIfPresent(Bool.self, forKey: .stale)
+            ?? false
+    }
+}
+
 public struct ProviderPage: Decodable {
     public let items: [ProviderItem]
     public let cursor: String?

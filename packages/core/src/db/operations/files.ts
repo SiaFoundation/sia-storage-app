@@ -380,15 +380,19 @@ export async function insertFile(
  * One transaction, because a row with no fs record is never picked up by the
  * uploader's scan: a crash between the two would strand the save locally.
  * Returns 'missing' when `replacesId` names no live file, and 'unchanged' when
- * the stack's newest version already holds these bytes. Checked inside the
- * transaction: another device's identical version can arrive while the
- * caller is still adopting the bytes.
+ * the stack's newest version already holds these bytes. Returns 'stale', adding
+ * nothing, when the bytes are the `base` version the writer started from and
+ * the newest version is another. Those bytes are an unedited copy of a version
+ * that has since been replaced, and adding them would roll the file back to
+ * it. Both are checked inside
+ * the transaction: another device's version can arrive while the caller is
+ * still adopting the bytes.
  */
 export async function insertNextVersion(
   db: DatabaseAdapter,
   replacesId: string,
-  version: { id: string; size: number; hash: ContentHash },
-): Promise<'added' | 'unchanged' | 'missing'> {
+  version: { id: string; size: number; hash: ContentHash; base?: string },
+): Promise<'added' | 'unchanged' | 'stale' | 'missing'> {
   return sql.transaction(db, async (tx) => {
     const replaced = await tx.getFirstAsync<{
       name: string
@@ -409,6 +413,7 @@ export async function insertNextVersion(
       replaced.directoryId,
     )
     if (newest?.hash === version.hash) return 'unchanged'
+    if (newest && version.base !== undefined && version.hash === version.base) return 'stale'
     const now = Date.now()
     await insertFile(
       tx,

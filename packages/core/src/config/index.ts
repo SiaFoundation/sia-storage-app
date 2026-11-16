@@ -212,6 +212,9 @@ export const MOUNT_HINT_CHECK_INTERVAL = secondsInMs(10)
 // nothing the system reports, so this only corrects a record the two have
 // drifted apart on, such as a file handed over that the system never took.
 export const MOUNT_FULL_READ_INTERVAL = daysInMs(1)
+// How often the daemon looks for files only the mount holds that are not on
+// the current indexer, to ask the system to hand them back.
+export const MOUNT_RESTORE_INTERVAL = minutesInMs(5)
 // Age threshold for evicting superseded file versions.
 export const FS_EVICTABLE_MIN_AGE_NON_CURRENT = minutesInMs(60) // 1 hour
 // Sync up metadata interval.

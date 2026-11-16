@@ -239,3 +239,57 @@ export async function queryStaleMountStackIds(db: DatabaseAdapter): Promise<stri
   )
   return rows.map((r) => r.stackId)
 }
+
+export type SecondCopy = { fileId: string; type: string; addedAt: number }
+
+/**
+ * Cache copies of versions that have an object on `indexerURL` and that the
+ * mount holds whole, in id order after `after`: those of `fileIds`, or all of
+ * them. Such a version is on the network and in the mount, so its cache copy
+ * is a second copy.
+ */
+export async function querySecondCopies(
+  db: DatabaseAdapter,
+  indexerURL: string,
+  opts: { fileIds?: string[]; after: string | null; limit: number },
+): Promise<SecondCopy[]> {
+  const named = opts.fileIds ? 'AND m.fileId IN (SELECT value FROM json_each(?))' : ''
+  return db.getAllAsync<SecondCopy>(
+    `SELECT f.id AS fileId, f.type, fs.addedAt FROM mount_copies m
+     JOIN fs ON fs.fileId = m.fileId
+     JOIN files f ON f.id = m.fileId
+     WHERE m.whole = 1 AND m.fileId > ? ${named}
+       AND EXISTS (SELECT 1 FROM objects o WHERE o.fileId = m.fileId AND o.indexerURL = ?)
+     ORDER BY m.fileId ASC
+     LIMIT ?`,
+    opts.after ?? '',
+    ...(opts.fileIds ? [JSON.stringify(opts.fileIds)] : []),
+    indexerURL,
+    opts.limit,
+  )
+}
+
+/**
+ * Files the mount holds whole whose shown version has no object on
+ * `indexerURL` and no copy in the cache, oldest use first. The uploader reads
+ * only the cache, so these cannot reach the indexer until the system hands
+ * their bytes back. It happens after the indexer is changed.
+ */
+export async function queryStrandedInMount(
+  db: DatabaseAdapter,
+  indexerURL: string,
+  limit: number,
+): Promise<{ stackId: string; fileId: string }[]> {
+  return db.getAllAsync<{ stackId: string; fileId: string }>(
+    `SELECT m.stackId, m.fileId FROM mount_copies m
+     JOIN files f ON f.id = m.fileId
+     WHERE m.whole = 1 AND ${buildRecordFilter('f')} AND f.lostReason IS NULL
+       AND ${shownRowCondition('f')}
+       AND NOT EXISTS (SELECT 1 FROM fs WHERE fs.fileId = m.fileId)
+       AND NOT EXISTS (SELECT 1 FROM objects o WHERE o.fileId = m.fileId AND o.indexerURL = ?)
+     ORDER BY m.usedAt ASC, m.stackId ASC
+     LIMIT ?`,
+    indexerURL,
+    limit,
+  )
+}

@@ -258,6 +258,24 @@ export type FinderThumbnail = {
   height: number
 }
 
+/**
+ * Has the system drop Finder's copy of a file, as Remove Download in Finder
+ * or another app, or low disk space, does. The extension gets only
+ * `materializedItemsDidChange`, which names no file, so the daemon learns
+ * which file went by reading Finder's materialized set.
+ */
+const FINDER_EVICT_SCRIPT = String.raw`
+ObjC.import('Foundation')
+function run(argv) {
+  const error = Ref()
+  const url = $.NSURL.fileURLWithPath(argv[0])
+  if (!$.NSFileManager.defaultManager.evictUbiquitousItemAtURLError(url, error)) {
+    throw new Error(ObjC.unwrap(error[0].localizedDescription))
+  }
+  return 'ok'
+}
+`
+
 // QLThumbnailGenerator is the service Finder draws its icons through, and for
 // a cloud-only file it asks the File Provider extension rather than
 // downloading. `qlmanage -t` does not: it reads the file, which downloads it.
@@ -655,6 +673,17 @@ export class DesktopDevice extends CliDevice {
       throw new Error(`Thumbnail of ${path} failed: ${out.stderr.toString().trim()}`)
     }
     return JSON.parse(out.stdout.toString()) as FinderThumbnail
+  }
+
+  /** Drops Finder's copy of a file the way the system does on its own, leaving it cloud-only. */
+  finderEvict(path: string): void {
+    const out = Bun.spawnSync(
+      ['osascript', '-l', 'JavaScript', '-e', FINDER_EVICT_SCRIPT, this.finderPath(path)],
+      { timeout: 45_000 },
+    )
+    if (out.exitCode !== 0) {
+      throw new Error(`Evicting ${path} failed: ${out.stderr.toString().trim()}`)
+    }
   }
 
   /** Whether a file in the Finder folder is a placeholder whose bytes have not been downloaded. */

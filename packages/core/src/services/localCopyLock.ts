@@ -6,7 +6,9 @@
  * Finder fetch holds it while it exports the copy. Eviction only ever tries the
  * lock and skips a file that is held: a download can hold it for as long as the
  * transfer takes, and an eviction pass waiting on it would stall every file
- * after it. Other removals, such as a delete, do not take it.
+ * after it. Adopting a copy Finder handed back also only tries it, and drops
+ * the copy when the file is held. Other removals, such as a delete, do not
+ * take it.
  */
 export class LocalCopyLock {
   private readonly tails = new Map<string, Promise<void>>()

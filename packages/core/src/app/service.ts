@@ -1,7 +1,7 @@
 import type { CacheEvictionResult } from '../services/cacheEviction'
 import type { TransferMemoryBudget } from '../services/transferMemoryBudget'
 import type { Account, Host, ObjectsCursor, SdkAdapter } from '../adapters/sdk'
-import type { Mount, MountChanges } from '../adapters/mount'
+import type { Mount, MountChanges, ResendResult } from '../adapters/mount'
 import type { ThumbnailResult } from '../adapters/thumbnail'
 import type {
   Directory,
@@ -17,6 +17,7 @@ import type {
   ImportSource,
   ImportSummary,
   MountCopy,
+  SecondCopy,
   LibraryQueryParams,
   SyncUpObjectRow,
   Tag,
@@ -34,6 +35,7 @@ import type {
   ProviderThumbnail,
   ProviderItem,
   ProviderItemKind,
+  ProviderWriteResult,
   ProviderPage,
   ProviderProgress,
   MountCursorState,
@@ -380,11 +382,13 @@ export interface AppService {
      * version of the file `replacesId` belongs to, with its tags and a local
      * copy record. 'missing' when `replacesId` names no live file, and
      * 'unchanged' when the file's newest version already holds these bytes.
+     * 'stale' when the bytes are `version.base`, the version the writer
+     * started from, and the newest version is another, so nothing is added.
      */
     addVersion(
       replacesId: string,
-      version: { id: string; size: number; hash: ContentHash },
-    ): Promise<'added' | 'unchanged' | 'missing'>
+      version: { id: string; size: number; hash: ContentHash; base?: string },
+    ): Promise<'added' | 'unchanged' | 'stale' | 'missing'>
     /** Renames all versions of a file. */
     renameFile(id: string, newName: string): Promise<void>
     /** Moves all versions of a file to a directory. */
@@ -1144,7 +1148,9 @@ export interface AppService {
      * Places a file's bytes at `destPath`, downloading them first if absent.
      * `destPath` must sit inside the host's handoff directory; bytes never
      * cross the call itself. A host that can read managed storage directly is
-     * handed the path instead, when such a host exists.
+     * handed the path instead, when such a host exists. On a library with a
+     * mount the cache copy stays until the system reports that it holds the
+     * file.
      */
     fetch(id: string, destPath: string): Promise<ProviderFetchResult>
     /**
@@ -1176,8 +1182,18 @@ export interface AppService {
       kind: ProviderItemKind,
       srcPath?: string,
     ): Promise<ProviderItem>
-    /** Replaces a file's bytes from `srcPath` and queues it for upload. */
-    write(id: string, srcPath: string): Promise<ProviderItem>
+    /**
+     * Replaces a file's bytes from `srcPath` and queues it for upload, as a
+     * new version. Bytes the current version already has make no version,
+     * and are kept as its cache copy when it has none and is not on the
+     * current indexer (`mount.resend`).
+     *
+     * `baseVersion` is the content version the caller's copy had before it
+     * changed. Bytes matching it, when the file has a newer version, are a
+     * late copy of the older one, make no version either, and are answered
+     * with `stale`.
+     */
+    write(id: string, srcPath: string, baseVersion?: string | null): Promise<ProviderWriteResult>
     /** Renames and reparents in one call; moves a file's whole version stack. */
     rename(id: string, newParentId: string | null, newName: string): Promise<ProviderItem>
     /** Reversible delete. A folder cascades to the files inside it. */
@@ -1227,6 +1243,8 @@ export interface AppService {
    * and rejects when the adapter could not run.
    */
   mount: {
+    /** Asks the system to hand back the bytes of the files `stackIds` names, as `provider.write` calls. */
+    resend(stackIds: string[], signal?: AbortSignal): Promise<Record<string, ResendResult> | null>
     /**
      * Reads which files the system holds whole: all of them with no `cursor`,
      * or what changed since it.
@@ -1267,6 +1285,13 @@ export interface AppService {
     markWhole(stackIds: string[], usedAt: number): Promise<void>
     /** Rows for files with no visible version, and ranges of a version no longer shown. */
     staleStackIds(): Promise<string[]>
+    /** Cache copies of versions on `indexerURL` that the mount also holds whole, in id order. */
+    secondCopies(
+      indexerURL: string,
+      opts: { fileIds?: string[]; after: string | null; limit: number },
+    ): Promise<SecondCopy[]>
+    /** Files only the mount holds whose shown version has no object on `indexerURL`. */
+    stranded(indexerURL: string, limit: number): Promise<{ stackId: string; fileId: string }[]>
   }
   /** Download management: queue, track, cancel, and read downloaded files. */
   downloads: {
@@ -1496,6 +1521,12 @@ export interface AppServiceInternal {
    * hosts with no mount adapter.
    */
   syncMountIfHinted(signal?: AbortSignal): Promise<void>
+  /**
+   * Asks the system to hand back files only the mount holds that have no
+   * object on the current indexer, so they can upload. A no-op on hosts with
+   * no mount adapter.
+   */
+  restoreFromMount(signal?: AbortSignal): Promise<void>
   /**
    * Aborts the eviction pass running now, whoever started it, and resolves
    * once it has stopped. The daemon calls it before closing the database.

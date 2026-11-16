@@ -230,18 +230,24 @@ bun sim device expect phone --label Menu
 - Check: `call <device> downloads.getState`; `call <device> cache.evict` runs an
   eviction pass now, and `cache.clear` removes every backed-up copy, as Clear
   Local Files does; tables `fs`
-- Finder: on the desktop app, table `mount_copies` records what Finder holds,
-  by the version it holds. The pass reads what the system removed from Finder
+- Finder: on the desktop app a file is kept in one place once it is uploaded.
+  Table `mount_copies` records what Finder holds, by the version it holds, and
+  the daemon removes its cache copy of an uploaded file Finder holds whole
+  (`tidyCopies`). The pass reads what the system removed from Finder
   (`syncMount`, setting `mountCursor`) through the agent the app names in
   setting `mount`, and `cache.bytesOnDevice` counts what both places hold.
-  Opening a file in an app moves its last use forward (`provider.touch`).
+  `isCloudOnly` shows Finder's copy is gone, and `finderEvict` drops one the
+  way the system does on its own. Opening a file in an app moves its last use
+  forward (`provider.touch`). After the indexer is changed, a file only
+  Finder holds comes back into the cache to upload (`mount.resend`).
 - Tests: scenarios `mobile/clear-local-files-keeps-unuploaded`,
   `mobile/stray-copy-removed-on-resume`,
   `sync/converge-and-download`, `mobile/tapped-download-arrives`,
   `sync/small-downloads-beside-large`, `finder/cache-evicts-unused`,
   `finder/cache-keeps-unuploaded`, `finder/cache-evicts-during-opens`,
-  `desktop/cache-evicts-finder-keeps-copies`, `desktop/clear-local-files`,
-  `desktop/finder-open-counts-as-use`; integration `downloads`, `finder-mount`,
+  `desktop/cache-evicts-finder-keeps-copies`, `desktop/finder-drop-leaves-no-copy`,
+  `desktop/clear-local-files`, `desktop/finder-open-counts-as-use`,
+  `desktop/indexer-change-restores-from-finder`; integration `downloads`, `finder-mount`,
   `fs-eviction`, `fs-adopt`, `fs-orphan`, `size-reconcile`
 - Network: `net latency` adds a delay to every call and `net download-rate`
   shares one download speed between every download, the two costs that decide

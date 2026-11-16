@@ -6,6 +6,7 @@ import {
   FS_EVICTABLE_MIN_AGE_NON_CURRENT,
   FS_EVICTION_THUMBNAIL_WAIT,
 } from '../config'
+import { tidyCopies } from './localCopies'
 import { syncMount } from './mountSync'
 
 export type CacheEvictionConfig = {
@@ -40,7 +41,11 @@ export type CacheEvictionResult = {
   processedRows: number
   evicted: number
   evictedFileIds: string[]
-  /** Bytes of the copies this pass removed, by their `fs` row sizes. */
+  /**
+   * Bytes of the copies this pass removed, by their `fs` row sizes. A cache
+   * copy removed because the mount also holds the file is not counted, since
+   * on macOS the two share disk blocks and removing one frees nothing.
+   */
   bytesFreed: number
   currentSize: number
 }
@@ -165,8 +170,8 @@ export function evictionRunner(
  * copy stays only while it is in use, recently used, or not uploaded.
  *
  * On a library with a mount, the folder a file manager shows, the pass first
- * reads which files the system holds there and which it removed on its own
- * (`syncMount`).
+ * reads which files the system removed from it on its own (`syncMount`) and
+ * removes cache copies of files the mount also holds (`tidyCopies`).
  *
  * A current or trashed file is evicted only while it has an object on the
  * current indexer, read per batch and again before each removal. A superseded
@@ -186,7 +191,9 @@ export async function runCacheEviction(
   const thumbnailWait = config?.thumbnailWait ?? FS_EVICTION_THUMBNAIL_WAIT
   const batchSize = config?.batchSize ?? 100
 
+  // Before the total is read: the second step changes what the cache holds.
   await syncMount(app, signal)
+  await tidyCopies(app, { signal })
   const totalSize = await app.fs.calcTotalSize()
 
   logger.info('cacheEviction', 'starting', { totalSize, minAge })

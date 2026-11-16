@@ -9,7 +9,8 @@
  * (`provider.fetch`, `fetchRange`, `create`, `write`), and this file corrects
  * them from the system's own account. A file fetched whole is recorded as
  * partial until that account names it, since the system can give up on a
- * fetch after the bytes were placed for it.
+ * fetch after the bytes were placed for it. Its cache copy is removed once
+ * the row is whole.
  *
  * The system's list of what it holds is read through the adapter
  * (`syncMount`): what changed since a saved cursor on every eviction pass and
