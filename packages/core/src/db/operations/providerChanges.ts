@@ -42,9 +42,19 @@ export type ProviderChangeRows = {
   hasMore: boolean
 }
 
+/**
+ * SQL that is 1 when the version `f` names is on this device: a copy in the
+ * cache, or the mount holding it whole. Used with `fs` left-joined on the
+ * version's id.
+ */
+const ON_DEVICE = `(fs.fileId IS NOT NULL OR EXISTS (
+  SELECT 1 FROM mount_copies mc WHERE mc.fileId = f.id AND mc.whole = 1
+))`
+
 export type ProviderChangeRow = FileRecordRow & {
   stackId: string
-  fsExists: number
+  /** 1 when this version is in the cache or whole in the mount. */
+  onDevice: number
   directoryId: string | null
   feedSeq: number
 }
@@ -60,7 +70,7 @@ export async function queryProviderItem(
   stackId: string,
 ): Promise<ProviderChangeRow | null> {
   const row = await db.getFirstAsync<ProviderChangeRow>(
-    `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq, (fs.fileId IS NOT NULL) AS fsExists
+    `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq, ${ON_DEVICE} AS onDevice
      FROM files f
      LEFT JOIN fs ON fs.fileId = f.id
      WHERE f.stackId = ? AND ${VISIBLE}
@@ -77,7 +87,7 @@ export async function queryProviderRow(
   rowId: string,
 ): Promise<ProviderChangeRow | null> {
   const row = await db.getFirstAsync<ProviderChangeRow>(
-    `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq, (fs.fileId IS NOT NULL) AS fsExists
+    `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq, ${ON_DEVICE} AS onDevice
      FROM files f
      LEFT JOIN fs ON fs.fileId = f.id
      WHERE f.id = ? AND f.kind = 'file'`,
@@ -122,7 +132,7 @@ export async function queryProviderChanges(
   // inside it is still visible is a property of the row.
   const rows = await db.getAllAsync<ProviderChangeRow & { visible: number }>(
     `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq,
-            (fs.fileId IS NOT NULL) AS fsExists,
+            ${ON_DEVICE} AS onDevice,
             (${VISIBLE}) AS visible
      FROM files f
      LEFT JOIN fs ON fs.fileId = f.id
@@ -273,7 +283,7 @@ export async function queryProviderRowsByStackIds(
   const ph = stackIds.map(() => '?').join(',')
   return db.getAllAsync(
     `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq,
-            (fs.fileId IS NOT NULL) AS fsExists
+            ${ON_DEVICE} AS onDevice
      FROM files f INDEXED BY idx_files_stackId
      LEFT JOIN fs ON fs.fileId = f.id
      WHERE f.stackId IN (${ph}) AND ${VISIBLE}`,
@@ -299,7 +309,7 @@ export async function queryProviderFolderFiles(
   const cursorParams = after === null ? [] : [after.nameSortKey, after.nameSortKey, after.id]
   return db.getAllAsync(
     `SELECT ${ROW_COLUMNS}, f.directoryId, f.feedSeq, f.nameSortKey,
-            (fs.fileId IS NOT NULL) AS fsExists
+            ${ON_DEVICE} AS onDevice
      FROM files f
      LEFT JOIN fs ON fs.fileId = f.id
      WHERE ${scope} AND ${VISIBLE} ${cursorCond}

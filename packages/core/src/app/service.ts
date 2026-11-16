@@ -1,6 +1,7 @@
 import type { CacheEvictionResult } from '../services/cacheEviction'
 import type { TransferMemoryBudget } from '../services/transferMemoryBudget'
 import type { Account, Host, ObjectsCursor, SdkAdapter } from '../adapters/sdk'
+import type { Mount } from '../adapters/mount'
 import type { ThumbnailResult } from '../adapters/thumbnail'
 import type {
   Directory,
@@ -15,6 +16,7 @@ import type {
   ImportRow,
   ImportSource,
   ImportSummary,
+  MountCopy,
   LibraryQueryParams,
   SyncUpObjectRow,
   Tag,
@@ -952,6 +954,13 @@ export interface AppService {
     getCacheMinAge(): Promise<number>
     /** Sets that minimum age in ms. */
     setCacheMinAge(value: number): Promise<void>
+    /**
+     * The mount this library is shown in, or null when it has none. The host
+     * app writes it each time it registers the mount. Setting another mount's
+     * id, or null, deletes every record of what the previous one held.
+     */
+    getMount(): Promise<Mount | null>
+    setMount(value: Mount | null): Promise<void>
     /** Returns the current log level. */
     getLogLevel(): Promise<string>
     /** Sets the log level. */
@@ -1192,6 +1201,43 @@ export interface AppService {
      * returns without waiting for downloads in progress, which carry on.
      */
     retryThumbnails(signal?: AbortSignal): Promise<void>
+    /**
+     * Records that the user opened these files in the mount now. The system
+     * reads its own copy without asking this device, so the eviction pass
+     * would otherwise rank a file opened daily by when it was last downloaded.
+     */
+    touch(stackIds: string[]): Promise<void>
+  }
+  /**
+   * The record of what the mount holds: the folder a file manager shows for
+   * this library, where the operating system keeps its own copy of each file
+   * opened or created there. Empty on a device with no mount.
+   */
+  mountCopies: {
+    read(stackId: string): Promise<MountCopy | null>
+    /** Records that the system holds `fileId` whole under `stackId`. */
+    upsertWhole(copy: {
+      stackId: string
+      fileId: string
+      bytes: number
+      usedAt: number
+    }): Promise<void>
+    /** Records a range of `fileId` the system now holds. */
+    addRange(range: {
+      stackId: string
+      fileId: string
+      fileSize: number
+      bytes: number
+      usedAt: number
+    }): Promise<void>
+    /** Deletes the rows for `stackIds` and returns those deleted. */
+    delete(stackIds: string[]): Promise<MountCopy[]>
+    deleteAll(): Promise<void>
+    touch(stackIds: string[], usedAt: number): Promise<void>
+    /** Moves the row for the version `fileId` to `stackId`, after a rename merged its stack into that one. */
+    rekey(fileId: string, stackId: string): Promise<void>
+    /** Bytes the mount holds of versions with no copy in the cache. */
+    onlyBytes(): Promise<number>
   }
   /** Download management: queue, track, cancel, and read downloaded files. */
   downloads: {
@@ -1253,6 +1299,11 @@ export interface AppService {
      * running at the time finishes first.
      */
     clear(): Promise<CacheEvictionResult | undefined>
+    /**
+     * Bytes of this library's files on this device: the cache, plus what the
+     * mount holds of versions with no copy in the cache.
+     */
+    bytesOnDevice(): Promise<number>
   }
   /** Share URL operations: resolve, preview, pin, and create share links. */
   shares: {

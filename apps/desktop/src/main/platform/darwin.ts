@@ -97,6 +97,11 @@ export function createDarwinIntegration(): PlatformIntegration {
   let state: ShellState = 'absent'
   let displayName: string | null = null
   let domainId: string | null = null
+  /** Whether the last `start` confirmed the domain is registered. */
+  let registered = false
+  /** False when the last `start` registered the domain but could not list
+   *  domains to confirm it. */
+  let confirmed = true
 
   return {
     shellPaths(config: DesktopConfig): ShellPaths {
@@ -119,8 +124,8 @@ export function createDarwinIntegration(): PlatformIntegration {
       state = 'starting'
       displayName = config.displayName
       domainId = config.domainId
-      let registered = false
-      let confirmed = true
+      registered = false
+      confirmed = true
       try {
         await runAgent(['register', config.domainId, config.displayName])
       } catch (e) {
@@ -167,6 +172,8 @@ export function createDarwinIntegration(): PlatformIntegration {
       state = 'absent'
       displayName = null
       domainId = null
+      registered = false
+      confirmed = true
     },
 
     discard: async (id) => agentInstalled() && (await removeDomain(id)),
@@ -187,5 +194,10 @@ export function createDarwinIntegration(): PlatformIntegration {
     // Null unless mounted: the directory appears before the domain serves and
     // outlives one that failed, so its presence alone proves nothing.
     mountPath: () => (displayName && state === 'mounted' ? findMount(displayName) : null),
+
+    // An unconfirmed register counts. `start` runs once per launch, so a null
+    // here would leave the daemon recording none of Finder's copies until the
+    // app is next launched.
+    mount: () => (domainId && (registered || !confirmed) ? { id: domainId } : null),
   }
 }

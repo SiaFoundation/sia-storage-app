@@ -53,3 +53,32 @@ describe('setIndexerURL', () => {
     expect(calls).toBe(1)
   })
 })
+
+describe('setMount', () => {
+  it('keeps the previous mount when the cleanup fails, and runs it again on a retry', async () => {
+    let calls = 0
+    let failNext = false
+    const settings = buildSettingsNamespace(
+      memoryStorage(),
+      caches,
+      undefined,
+      undefined,
+      async () => {
+        calls++
+        if (failNext) {
+          failNext = false
+          throw new Error('database suspended')
+        }
+      },
+    )
+    await settings.setMount({ id: 'first' })
+    failNext = true
+
+    await expect(settings.setMount({ id: 'next' })).rejects.toThrow('database suspended')
+    expect(await settings.getMount()).toEqual({ id: 'first' })
+
+    await settings.setMount({ id: 'next' })
+    expect(calls).toBe(2)
+    expect(await settings.getMount()).toEqual({ id: 'next' })
+  })
+})

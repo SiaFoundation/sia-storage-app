@@ -1,3 +1,4 @@
+import type { Mount } from '../../adapters/mount'
 import type { StorageAdapter } from '../../adapters/storage'
 import {
   DEFAULT_INDEXER_URL,
@@ -8,6 +9,8 @@ import {
 import { uniqueId } from '../../lib/uniqueId'
 import type { AppCaches, AppService } from '../service'
 
+const MOUNT_KEY = 'mount'
+
 /**
  * Builds the settings namespace: typed getters/setters backed by key-value storage.
  *
@@ -15,13 +18,29 @@ import type { AppCaches, AppService } from '../service'
  * a file counts as uploaded is relative to it, and the file browser has to
  * re-read every file's upload state. If it throws, the previous URL is stored
  * again and the error is rethrown.
+ *
+ * `onMountRemoved` runs when the mount is cleared or replaced by another, to
+ * delete the record of what the previous one held, which lives in the
+ * database rather than in key-value storage. If it throws, the previous mount
+ * is stored again and the error is rethrown.
  */
 export function buildSettingsNamespace(
   storage: StorageAdapter,
   caches: AppCaches,
   onIndexerURLChanged: () => Promise<void> = async () => {},
   cacheMinAgeMs: number = FS_EVICTABLE_MIN_AGE,
+  onMountRemoved: () => Promise<void> = async () => {},
 ): AppService['settings'] {
+  async function readMount(): Promise<Mount | null> {
+    const raw = await storage.getItem(MOUNT_KEY)
+    if (!raw) return null
+    try {
+      const value = JSON.parse(raw) as Partial<Mount>
+      if (typeof value.id === 'string' && value.id !== '') return { id: value.id }
+    } catch {}
+    return null
+  }
+
   async function getBool(key: string, defaultValue: boolean): Promise<boolean> {
     const raw = await storage.getItem(key)
     return raw === null ? defaultValue : raw === 'true'
@@ -92,6 +111,24 @@ export function buildSettingsNamespace(
         throw new Error(`Cache minimum age must be milliseconds of 0 or more, got ${v}`)
       }
       await setNum('cacheMinAge', Math.floor(v))
+    },
+    getMount: readMount,
+    setMount: async (v) => {
+      if (v !== null && !v.id) throw new Error('A mount needs an identifier')
+      const previous = await readMount()
+      if (v === null) await storage.deleteItem(MOUNT_KEY)
+      else await storage.setItem(MOUNT_KEY, JSON.stringify(v))
+      // What another mount held says nothing about this one, and a library
+      // with no mount holds nothing there.
+      if (!previous || previous.id === v?.id) return
+      // A failure keeps the old mount, so a retry with the same mount counts as
+      // a change and runs the cleanup again instead of returning above.
+      try {
+        await onMountRemoved()
+      } catch (e) {
+        await storage.setItem(MOUNT_KEY, JSON.stringify(previous))
+        throw e
+      }
     },
     getLogLevel: () => getStr('logLevel', 'debug'),
     setLogLevel: (v) => setStr('logLevel', v),

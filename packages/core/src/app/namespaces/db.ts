@@ -987,6 +987,16 @@ export function buildDbNamespaces(
       markAllNeedsSyncUp: () => ops.markAllObjectsNeedsSyncUp(db),
     },
     fs: fsNamespace,
+    mountCopies: {
+      read: (stackId) => ops.readMountCopy(db, stackId),
+      upsertWhole: (copy) => ops.upsertWholeMountCopy(db, copy),
+      addRange: (range) => ops.addMountRange(db, range),
+      delete: (stackIds) => ops.deleteMountCopies(db, stackIds),
+      deleteAll: () => ops.deleteAllMountCopies(db),
+      touch: (stackIds, usedAt) => ops.touchMountCopies(db, stackIds, usedAt),
+      rekey: (fileId, stackId) => ops.rekeyMountCopy(db, fileId, stackId),
+      onlyBytes: () => ops.queryMountOnlyBytes(db),
+    },
     library: {
       fileCount: () => ops.queryLibraryFileCount(db),
       mediaCount: () => ops.queryMediaFileCount(db),
