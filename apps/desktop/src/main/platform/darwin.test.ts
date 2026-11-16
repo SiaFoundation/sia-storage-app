@@ -3,19 +3,22 @@ import { beforeEach, describe, expect, it, mock } from 'bun:test'
 /*
  * Covers which helper command each kind of stop runs. Signing out and quitting
  * differ in exactly one way that matters, and getting it wrong leaves the
- * account's file names and downloaded contents in the system's copy.
+ * account's file names and downloaded contents in the system's copy. Also
+ * covers which domain the daemon is told about.
  *
  * The helper is mocked rather than run: it is a signed bundle that talks to
  * fileproviderd, and loading the real module pulls in Electron.
  */
 const calls: string[][] = []
 let fails = false
+let listFails = false
 
 mock.module('./agent', () => ({
   agentInstalled: () => true,
   runAgent: async (args: string[]) => {
     calls.push(args)
     if (fails) throw new Error('helper refused')
+    if (listFails && args[0] === 'list') throw new Error('helper refused')
     // start() re-reads the list to confirm the registration stuck.
     if (args[0] === 'list') return { ok: true, domains: ['sia-dev'] }
     return { ok: true }
@@ -73,5 +76,41 @@ describe('stopping the mount', () => {
     // Reporting absent here would let the library wipe run while the system
     // still holds its copy of this account's files.
     expect(platform.status()).not.toBe('absent')
+  })
+})
+
+describe('the Finder domain the daemon is told about', () => {
+  beforeEach(() => {
+    calls.length = 0
+    fails = false
+    listFails = false
+  })
+
+  it('names the registered domain once the mount is up', async () => {
+    const platform = await mounted()
+
+    expect(platform.mount()).toEqual({ id: 'sia-dev' })
+  })
+
+  it('names the domain when it registered but the check that it stuck failed', async () => {
+    listFails = true
+    const platform = await mounted()
+
+    expect(platform.mount()).toEqual({ id: 'sia-dev' })
+  })
+
+  it('names none when registering failed', async () => {
+    fails = true
+    const platform = await mounted()
+
+    expect(platform.mount()).toBeNull()
+  })
+
+  it('names none once quitting has hidden the mount', async () => {
+    const platform = await mounted()
+
+    await platform.stop()
+
+    expect(platform.mount()).toBeNull()
   })
 })

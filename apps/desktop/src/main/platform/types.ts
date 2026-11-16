@@ -8,6 +8,7 @@
  * call identically, so nothing here knows what a File Provider is.
  */
 
+import type { Mount } from '@siastorage/core/adapters'
 import type { DesktopConfig } from '../config'
 
 /**
@@ -61,4 +62,6 @@ export interface PlatformIntegration {
   status(): ShellState
   /** Where the OS mounted us, for "open in file manager". Null until mounted. */
   mountPath(): string | null
+  /** The registered mount, once `start` has registered it. Null when nothing is registered. */
+  mount(): Mount | null
 }

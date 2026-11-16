@@ -197,6 +197,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       caches.libraryVersion.invalidate()
     },
     adapters.cacheMinAgeMs,
+    () => service.mountCopies.deleteAll(),
   )
   const authNamespace = buildAuthNamespace(adapters.secrets, adapters.crypto, adapters.sdkAuth)
 
@@ -292,6 +293,8 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     cache: {
       evict: () => eviction.evict(),
       clear: () => eviction.clear(),
+      bytesOnDevice: async () =>
+        (await service.fs.calcTotalSize()) + (await service.mountCopies.onlyBytes()),
     },
     shares: sharesNamespace,
     connection: {

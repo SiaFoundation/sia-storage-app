@@ -75,7 +75,7 @@ export type ProviderItem = {
   /** An indexer object exists for this file. */
   uploaded: boolean
   uploading: boolean
-  /** The bytes are present in managed storage. */
+  /** This version's bytes are on this device: in the cache, or whole in the mount. */
   downloaded: boolean
   downloading: boolean
   /** 0..1, meaningful only while uploading or downloading. */
