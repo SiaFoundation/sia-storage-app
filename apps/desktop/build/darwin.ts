@@ -57,10 +57,24 @@ export function daemonRuntimeName(appName: string): string {
   return `${appName} Sync`
 }
 
+/**
+ * The file name of the domain agent's second copy, installed bare in
+ * `Contents/MacOS`, which the daemon runs to act on the Finder domain. The
+ * system finds a File Provider through the calling process's main bundle,
+ * and only from here is that the app, which holds the extension. From the
+ * helper bundle every per-domain call fails. Bare, it shows in Activity
+ * Monitor under this name, as the daemon does.
+ */
+export function finderAgentName(appName: string): string {
+  return `${appName} Finder Agent`
+}
+
 export type BuildResult = {
   appPath: string
   appexPath: string
   agentPath: string
+  /** The bare agent executable in `Contents/MacOS`. */
+  finderAgentPath: string
   resourcesPath: string
   frameworksPath: string
   /** The bundled Bun runtime the daemon runs under. */
@@ -119,6 +133,8 @@ export async function build(env: BuildEnv, options: BuildOptions = {}): Promise<
   await compileShared(swiftBuild)
   await compileExtension(join(appexContents, 'MacOS', 'SiaFileProvider'), swiftBuild)
   await compileAgent(join(agentContents, 'MacOS', AGENT_NAME))
+  const finderAgentPath = join(contents, 'MacOS', finderAgentName(env.appName))
+  cpSync(join(agentContents, 'MacOS', AGENT_NAME), finderAgentPath)
   writeFileSync(join(agentContents, 'Info.plist'), agentInfoPlist(env, stamp))
 
   writeFileSync(join(contents, 'Info.plist'), appInfoPlist(env, executable, stamp))
@@ -132,6 +148,7 @@ export async function build(env: BuildEnv, options: BuildOptions = {}): Promise<
     appPath,
     appexPath: join(contents, 'PlugIns', 'SiaFileProvider.appex'),
     agentPath,
+    finderAgentPath,
     resourcesPath: resources,
     frameworksPath: frameworks,
     runtimePath,
@@ -176,6 +193,7 @@ async function installApp(
         extensionBundleId: env.extBundleId,
         daemonBuild,
         daemonRuntime: daemonRuntimeName(env.appName),
+        finderAgent: finderAgentName(env.appName),
         ...(env.updateChannel
           ? {
               updates: {

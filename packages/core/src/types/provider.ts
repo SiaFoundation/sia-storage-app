@@ -170,3 +170,13 @@ export type ProviderHello = {
    */
   library: string
 }
+
+/** Where the last read of the mount's files ended, saved only after a read that succeeded. */
+export type MountCursorState = {
+  /** The mount the cursor belongs to. */
+  mountId: string
+  /** The adapter's cursor, to read only what changed after it. */
+  cursor: string
+  /** When the mount's files were last read whole. */
+  fullAt: number
+}

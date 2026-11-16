@@ -1,8 +1,8 @@
 // Entry point for the domain agent. One verb, one line of JSON, then exit.
 //
-// Compiled together with Domain.swift into a single module, so there is nothing
-// to import here. SwiftPM builds the same file set minus this one as a library,
-// which is how the tests reach it.
+// Compiled together with the other files in this directory into a single
+// module, so there is nothing to import here. SwiftPM builds the same file set
+// minus this one as a library, which is how the tests reach it.
 
 import Foundation
 

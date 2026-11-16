@@ -59,7 +59,7 @@ function fakeApp(opts: {
         return true
       },
     },
-    settings: { getIndexerURL: async () => opts.indexer() },
+    settings: { getIndexerURL: async () => opts.indexer(), getMount: async () => null },
     localObjects: {
       countForFileOnIndexer: async (fileId: string, indexerURL: string) =>
         opts.objects[fileId]?.includes(indexerURL) ? 1 : 0,

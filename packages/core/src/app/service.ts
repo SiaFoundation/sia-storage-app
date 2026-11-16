@@ -1,7 +1,7 @@
 import type { CacheEvictionResult } from '../services/cacheEviction'
 import type { TransferMemoryBudget } from '../services/transferMemoryBudget'
 import type { Account, Host, ObjectsCursor, SdkAdapter } from '../adapters/sdk'
-import type { Mount } from '../adapters/mount'
+import type { Mount, MountChanges } from '../adapters/mount'
 import type { ThumbnailResult } from '../adapters/thumbnail'
 import type {
   Directory,
@@ -36,6 +36,7 @@ import type {
   ProviderItemKind,
   ProviderPage,
   ProviderProgress,
+  MountCursorState,
 } from '../types/provider'
 import type { ShareFile, ShareLink, ShareLinkMode } from '../types/shareLinks'
 import type { AdoptFileHashed, AdoptFilePlain, ImportCopyResult } from '../services/fsFileUri'
@@ -961,6 +962,9 @@ export interface AppService {
      */
     getMount(): Promise<Mount | null>
     setMount(value: Mount | null): Promise<void>
+    /** Where the last read of the mount's files ended, or null before the first. */
+    getMountCursor(): Promise<MountCursorState | null>
+    setMountCursor(value: MountCursorState | null): Promise<void>
     /** Returns the current log level. */
     getLogLevel(): Promise<string>
     /** Sets the log level. */
@@ -1202,6 +1206,13 @@ export interface AppService {
      */
     retryThumbnails(signal?: AbortSignal): Promise<void>
     /**
+     * The shell's notice that the system wrote files into the mount or
+     * removed them, for a system that does not say which. The daemon reads
+     * the mount's files early on its next check, no sooner than a minute
+     * after its last early read, and once no pass is running.
+     */
+    mountChanged(): Promise<void>
+    /**
      * Records that the user opened these files in the mount now. The system
      * reads its own copy without asking this device, so the eviction pass
      * would otherwise rank a file opened daily by when it was last downloaded.
@@ -1209,10 +1220,20 @@ export interface AppService {
     touch(stackIds: string[]): Promise<void>
   }
   /**
-   * The record of what the mount holds: the folder a file manager shows for
-   * this library, where the operating system keeps its own copy of each file
-   * opened or created there. Empty on a device with no mount.
+   * The mount: the folder a file manager shows for this library, where the
+   * operating system keeps its own copy of each file opened or created
+   * there. These calls reach the system through the host's adapter. Each
+   * resolves null when the library has no mount or the host has no adapter,
+   * and rejects when the adapter could not run.
    */
+  mount: {
+    /**
+     * Reads which files the system holds whole: all of them with no `cursor`,
+     * or what changed since it.
+     */
+    changes(cursor: string | null, signal?: AbortSignal): Promise<MountChanges | null>
+  }
+  /** The record of what the mount holds. Empty on a device with no mount. */
   mountCopies: {
     read(stackId: string): Promise<MountCopy | null>
     /** Records that the system holds `fileId` whole under `stackId`. */
@@ -1230,14 +1251,22 @@ export interface AppService {
       bytes: number
       usedAt: number
     }): Promise<void>
-    /** Deletes the rows for `stackIds` and returns those deleted. */
-    delete(stackIds: string[]): Promise<MountCopy[]>
+    /** Deletes the rows for `stackIds`, keeping any used at or after `usedBefore`, and returns those deleted. */
+    delete(stackIds: string[], usedBefore?: number): Promise<MountCopy[]>
     deleteAll(): Promise<void>
     touch(stackIds: string[], usedAt: number): Promise<void>
     /** Moves the row for the version `fileId` to `stackId`, after a rename merged its stack into that one. */
     rekey(fileId: string, stackId: string): Promise<void>
     /** Bytes the mount holds of versions with no copy in the cache. */
     onlyBytes(): Promise<number>
+    wholeStackIds(): Promise<string[]>
+    /**
+     * Records that the system holds each of `stackIds` whole, as the version
+     * the file manager shows for it. A row already there keeps its last use.
+     */
+    markWhole(stackIds: string[], usedAt: number): Promise<void>
+    /** Rows for files with no visible version, and ranges of a version no longer shown. */
+    staleStackIds(): Promise<string[]>
   }
   /** Download management: queue, track, cancel, and read downloaded files. */
   downloads: {
@@ -1418,6 +1447,7 @@ export type DatabaseNamespaces = Omit<
   | 'sync'
   | 'uploads'
   | 'provider'
+  | 'mount'
   | 'downloads'
   | 'cache'
   | 'shares'
@@ -1459,6 +1489,13 @@ export interface AppServiceInternal {
    * its single flight, so a request over the socket joins a scheduled pass.
    */
   evictCache(signal?: AbortSignal): Promise<CacheEvictionResult | undefined>
+  /**
+   * Reads the mount's files now, through the same single flight as the
+   * eviction pass, when the shell said files changed, no such read ran
+   * in the last minute and no pass is running. A no-op otherwise, and on
+   * hosts with no mount adapter.
+   */
+  syncMountIfHinted(signal?: AbortSignal): Promise<void>
   /**
    * Aborts the eviction pass running now, whoever started it, and resolves
    * once it has stopped. The daemon calls it before closing the database.

@@ -1,11 +1,13 @@
 import type { SdkAuthAdapters } from '../../adapters/auth'
 import type { CryptoAdapter } from '../../adapters/crypto'
 import type { DatabaseAdapter } from '../../adapters/db'
+import type { MountAdapter } from '../../adapters/mount'
 import type { ObjectsCursor, SdkAdapter } from '../../adapters/sdk'
 import type { StorageAdapter } from '../../adapters/storage'
 import type { ThumbnailAdapter } from '../../adapters/thumbnail'
 import type { FsIOAdapter } from '../../services/fsFileUri'
 import { LocalCopyLock } from '../../services/localCopyLock'
+import { MountHint, syncMount } from '../../services/mountSync'
 import { type MemoryReader, TransferMemoryBudget } from '../../services/transferMemoryBudget'
 import type { UploaderAdapters, UploadManager } from '../../services/uploader'
 import { restampAllFiles } from '../../db/operations/providerChanges'
@@ -60,6 +62,8 @@ export interface AppServiceAdapters {
   usedAtUpdateIntervalMs?: number
   /** The cache's minimum age until `cacheMinAge` is set. Left out, `FS_EVICTABLE_MIN_AGE`. */
   cacheMinAgeMs?: number
+  /** Reaches the operating system about the mount. Only a host with a mount passes one. */
+  mount?: MountAdapter
 }
 
 /** The result of creating an AppService: the public service, internal APIs, and upload manager. */
@@ -178,6 +182,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
 
   const transferBudget = new TransferMemoryBudget(adapters.readMemory ?? (() => null))
   const localCopyLock = new LocalCopyLock()
+  const mountHint = new MountHint()
   const downloadsNamespace = buildDownloadsNamespace(
     adapters.db,
     adapters.fsIO,
@@ -288,7 +293,15 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       downloadObject: adapters.downloadObject,
       transferBudget,
       localCopyLock,
+      mountHint,
     }),
+    mount: {
+      changes: async (cursor, signal) => {
+        const mount = await settingsNamespace.getMount()
+        if (!mount || !adapters.mount) return null
+        return adapters.mount.changes(mount, cursor, signal)
+      },
+    },
     downloads: downloadsNamespace,
     cache: {
       evict: () => eviction.evict(),
@@ -338,6 +351,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
   const eviction = evictionRunner(
     (config, signal) => runCacheEviction(service, config, signal),
     () => configuredCacheEviction(service),
+    (signal) => syncMount(service, signal),
   )
 
   const internal: AppServiceInternal = {
@@ -355,6 +369,12 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     withTransaction,
     events,
     evictCache: (signal) => eviction.evict(signal),
+    syncMountIfHinted: async (signal) => {
+      // A running pass may be past its read of the mount's files, so the hint
+      // waits for the next check rather than being spent on it.
+      if (!adapters.mount || eviction.busy() || !mountHint.take(Date.now())) return
+      await eviction.walk(signal)
+    },
     stopEviction: () => eviction.stop(),
   }
 

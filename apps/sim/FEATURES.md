@@ -231,8 +231,9 @@ bun sim device expect phone --label Menu
   eviction pass now, and `cache.clear` removes every backed-up copy, as Clear
   Local Files does; tables `fs`
 - Finder: on the desktop app, table `mount_copies` records what Finder holds,
-  by the version it holds, for the mount the app names in setting `mount`,
-  and `cache.bytesOnDevice` counts what both places hold.
+  by the version it holds. The pass reads what the system removed from Finder
+  (`syncMount`, setting `mountCursor`) through the agent the app names in
+  setting `mount`, and `cache.bytesOnDevice` counts what both places hold.
   Opening a file in an app moves its last use forward (`provider.touch`).
 - Tests: scenarios `mobile/clear-local-files-keeps-unuploaded`,
   `mobile/stray-copy-removed-on-resume`,

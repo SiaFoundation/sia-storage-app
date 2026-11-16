@@ -60,10 +60,26 @@ export type ProviderChangeRow = FileRecordRow & {
 }
 
 /**
+ * SQL that holds when the row `alias` names is the one the file manager shows for
+ * its stack, picked as `queryProviderItem` picks it. A query that removes or
+ * counts a copy in the mount uses this, so it acts on the same row the file
+ * manager shows.
+ */
+export function shownRowCondition(alias: string): string {
+  return `${alias}.id = (
+    SELECT s.id FROM files s
+    WHERE s.stackId = ${alias}.stackId AND ${buildRecordFilter('s')}
+    ORDER BY s.updatedAt DESC, s.id DESC
+    LIMIT 1
+  )`
+}
+
+/**
  * The current version of the file the shell names by `stackId`, or null
  * when no visible file carries it: trashed, tombstoned, or merged into
  * another. Newest first: a batch insert leaves a new version current beside
  * the old one until its transaction recalculates the stack.
+ * `shownRowCondition` picks the same row, so the two change together.
  */
 export async function queryProviderItem(
   db: DatabaseAdapter,

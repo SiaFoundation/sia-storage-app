@@ -37,7 +37,7 @@ describe('a device with a Finder folder', () => {
     macHandoff = nodeFs.mkdtempSync(path.join(os.tmpdir(), 'finder-mount-mac-'))
     peerHandoff = nodeFs.mkdtempSync(path.join(os.tmpdir(), 'finder-mount-peer-'))
     finder = createFakeFinder(macHandoff)
-    mac = createTestApp(shared, { handoffDir: macHandoff })
+    mac = createTestApp(shared, { handoffDir: macHandoff, mount: finder.adapter })
     peer = createTestApp(shared, { handoffDir: peerHandoff })
     await mac.start()
     await peer.start()
@@ -89,7 +89,7 @@ describe('a device with a Finder folder', () => {
   }
 
   describe('where a file is kept', () => {
-    it('records a file opened in Finder as handed over, not yet as held whole', async () => {
+    it('records a file opened in Finder as held whole once the system lists it', async () => {
       const bytes = bytesOf('a')
       const id = await fromPeer('a.bin', bytes)
 
@@ -99,6 +99,11 @@ describe('a device with a Finder folder', () => {
       // The system can still give up on the fetch, so the file is not whole yet.
       expect(await mountRow(id)).toMatchObject({ fileId, whole: false })
       expect(await cached(fileId)).toBe(true)
+      expect(await mac.app.cache.bytesOnDevice()).toBe(bytes.length)
+      await mac.app.cache.evict()
+
+      expect(await mountRow(id)).toMatchObject({ fileId, bytes: bytes.length, whole: true })
+      expect((await mac.app.provider.item(id))?.downloaded).toBe(true)
       expect(await mac.app.cache.bytesOnDevice()).toBe(bytes.length)
     })
 
@@ -140,11 +145,13 @@ describe('a device with a Finder folder', () => {
     it('forgets what a mount held once the mount is removed', async () => {
       const id = await fromPeer('e.bin', bytesOf('e'))
       await finder.open(id)
+      await mac.app.cache.evict()
       expect(await mountRow(id)).not.toBeNull()
 
       await mac.app.settings.setMount(null)
 
       expect(await mountRow(id)).toBeNull()
+      expect(await mac.app.settings.getMountCursor()).toBeNull()
     })
   })
 
@@ -190,9 +197,10 @@ describe('a device with a Finder folder', () => {
       const secondId = await versionOf(mac, id)
       expect((await mountRow(id))?.fileId).not.toBe(secondId)
       expect(await finder.followChanges()).toEqual([id])
+      await mac.app.cache.evict()
 
       expect(finder.held.get(id)?.bytes).toEqual(next)
-      expect(await mountRow(id)).toMatchObject({ fileId: secondId, bytes: 180 })
+      expect(await mountRow(id)).toMatchObject({ fileId: secondId, bytes: 180, whole: true })
     })
 
     it('keeps one record, for the version shown, when a rename merges two files', async () => {
@@ -200,10 +208,12 @@ describe('a device with a Finder folder', () => {
       const moved = await inFinder('moved.bin', bytesOf('m', 130))
 
       const merged = await mac.app.provider.rename(moved.id, null, 'kept.bin')
+      await mac.app.cache.evict()
 
       // One file is left, the renamed version is the one it shows, and the
       // record names that version under the id the file now has.
       expect(await mountRow(merged.id)).toMatchObject({ fileId: moved.fileId, bytes: 130 })
+      expect(await mac.app.mountCopies.wholeStackIds()).toEqual([merged.id])
     })
 
     it('forgets a file trashed in Finder', async () => {
@@ -216,7 +226,7 @@ describe('a device with a Finder folder', () => {
   })
 
   describe('reading by ranges', () => {
-    it('records what Finder read of a file, and never calls it whole from ranges alone', async () => {
+    it('records what Finder read of a file, and calls it whole once the system says so', async () => {
       const bytes = bytesOf('r', 1000)
       const id = await fromPeer('r.bin', bytes)
       const fileId = await versionOf(mac, id)
@@ -237,7 +247,165 @@ describe('a device with a Finder folder', () => {
       expect(finder.held.get(id)?.bytes).toEqual(bytes)
       // Every byte is in, but only the system can say it holds the file whole.
       expect(await mountRow(id)).toMatchObject({ fileId, bytes: 1000, whole: false })
+
+      await mac.app.cache.evict()
+
+      expect(await mountRow(id)).toMatchObject({ fileId, bytes: 1000, whole: true })
+      expect((await mac.app.provider.item(id))?.downloaded).toBe(true)
       expect(await cached(fileId)).toBe(false)
+    })
+
+    it('keeps a range of the new version read while a pass removes the old one', async () => {
+      const id = await fromPeer('s.bin', bytesOf('1', 1000))
+      await finder.readRange(id, 0, 400)
+      const next = bytesOf('2', 1000)
+      const staged = path.join(peerHandoff, 'stage-s2')
+      nodeFs.writeFileSync(staged, next)
+      await peer.app.provider.write(id, staged)
+      await uploaded(mac, id, next)
+      const nextId = await versionOf(mac, id)
+      // Finder reads the new version after the pass found the old range stale
+      // and before it deleted it.
+      const lookup = mac.app.mountCopies.staleStackIds
+      mac.app.mountCopies.staleStackIds = async () => {
+        const stale = await lookup()
+        expect(stale).toEqual([id])
+        await finder.readRange(id, 0, 400)
+        return stale
+      }
+
+      await mac.app.cache.evict()
+
+      expect(await mountRow(id)).toMatchObject({ fileId: nextId, bytes: 400, whole: false })
+    })
+  })
+
+  describe("following the system's own removals", () => {
+    it('forgets a file the system dropped', async () => {
+      const { id } = await inFinder('u.bin', bytesOf('u', 250))
+      // The first read is a full one and saves the place to read changes from.
+      await mac.app.cache.evict()
+      expect(await mac.app.cache.bytesOnDevice()).toBe(250)
+
+      await finder.drop(id)
+      await mac.app.cache.evict()
+
+      expect(await mountRow(id)).toBeNull()
+    })
+
+    it('reads the changes early when the extension says files changed, at most once a minute', async () => {
+      const first = await inFinder('v1.bin', bytesOf('1'))
+      const second = await inFinder('v2.bin', bytesOf('2'))
+      // The first read is a full one and saves the place to read changes from.
+      await mac.app.cache.evict()
+
+      await finder.drop(first.id)
+      await mac.internal.syncMountIfHinted()
+      expect(await mountRow(first.id)).toBeNull()
+
+      await finder.drop(second.id)
+      await mac.internal.syncMountIfHinted()
+      expect(await mountRow(second.id)).not.toBeNull()
+    })
+
+    it('forgets a file Finder opened and dropped again between two reads', async () => {
+      const id = await fromPeer('o.bin', bytesOf('o'))
+      // The first read is a full one and saves the place to read changes from.
+      await mac.app.cache.evict()
+
+      await finder.open(id)
+      await finder.drop(id)
+      // Opened before the next read began, which a fast test can put in the
+      // same millisecond.
+      await mac.app.mountCopies.touch([id], LONG_AGO())
+      await mac.app.cache.evict()
+
+      expect(await mountRow(id)).toBeNull()
+    })
+
+    it('keeps the record of a file Finder opened again after dropping it', async () => {
+      const id = await fromPeer('w.bin', bytesOf('w'))
+      await finder.open(id)
+      await mac.app.cache.evict()
+
+      await finder.drop(id)
+      await finder.open(id)
+      await mac.app.cache.evict()
+
+      expect(await mountRow(id)).toMatchObject({ whole: true })
+    })
+
+    it("corrects the record from the system's full list", async () => {
+      const taken = await inFinder('x1.bin', bytesOf('1'))
+      const untracked = await inFinder('x2.bin', bytesOf('2', 120))
+      // A file handed over that the system never took, and one it holds that
+      // nothing recorded.
+      finder.held.delete(taken.id)
+      await mac.app.mountCopies.touch([taken.id], LONG_AGO())
+      await mac.app.mountCopies.delete([untracked.id])
+      await mac.app.settings.setMountCursor(null)
+
+      await mac.app.cache.evict()
+
+      expect(await mountRow(taken.id)).toBeNull()
+      expect(await mountRow(untracked.id)).toMatchObject({ fileId: untracked.fileId, bytes: 120 })
+    })
+
+    it('takes the full list the system gives when it will not read changes from the saved place', async () => {
+      const { id } = await inFinder('x3.bin', bytesOf('3'))
+      await mac.app.cache.evict()
+      finder.held.delete(id)
+      await mac.app.mountCopies.touch([id], LONG_AGO())
+      finder.expireCursor()
+
+      await mac.app.cache.evict()
+
+      expect(await mountRow(id)).toBeNull()
+    })
+
+    it('reads the full list again a day after the last one, though changes still read', async () => {
+      const { id } = await inFinder('x4.bin', bytesOf('4'))
+      await mac.app.cache.evict()
+      // Gone with no change listed for it, which only a full list shows.
+      finder.held.delete(id)
+      await mac.app.mountCopies.touch([id], LONG_AGO())
+      const saved = await mac.app.settings.getMountCursor()
+      if (!saved) throw new Error('the first pass saved no cursor')
+      await mac.app.settings.setMountCursor({ ...saved, fullAt: Date.now() - 2 * ONE_DAY })
+
+      await mac.app.cache.evict()
+
+      expect(await mountRow(id)).toBeNull()
+    })
+  })
+
+  describe('files trashed while Finder holds them', () => {
+    it('forgets a file whose folder was trashed in Finder on the next pass', async () => {
+      const folder = await mac.app.provider.create(null, 'Docs', 'dir')
+      const file = await finder.create(folder.id, 'in-docs.bin', bytesOf('d'))
+      expect(await mountRow(file.id)).not.toBeNull()
+
+      await finder.trash(folder.id)
+      // Trashing a folder records nothing for the files inside it.
+      expect(await mountRow(file.id)).not.toBeNull()
+      await mac.app.cache.evict()
+
+      expect(await mountRow(file.id)).toBeNull()
+    })
+
+    it('forgets a file another device trashed once the Mac has synced the trash', async () => {
+      const { id } = await inFinder('t.bin', bytesOf('t'))
+      await uploaded(peer, id)
+
+      await peer.app.files.trashFile(await versionOf(peer, id))
+      await waitForCondition(async () => (await mac.app.provider.item(id)) === null, {
+        timeout: 30_000,
+        message: 'the Mac to sync the trash',
+      })
+      expect(await mountRow(id)).not.toBeNull()
+      await mac.app.cache.evict()
+
+      expect(await mountRow(id)).toBeNull()
     })
   })
 })
