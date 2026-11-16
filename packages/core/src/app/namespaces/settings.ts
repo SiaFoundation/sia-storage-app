@@ -1,4 +1,5 @@
 import type { Mount } from '../../adapters/mount'
+import type { MountCursorState } from '../../types/provider'
 import type { StorageAdapter } from '../../adapters/storage'
 import {
   DEFAULT_INDEXER_URL,
@@ -10,6 +11,7 @@ import { uniqueId } from '../../lib/uniqueId'
 import type { AppCaches, AppService } from '../service'
 
 const MOUNT_KEY = 'mount'
+const MOUNT_CURSOR_KEY = 'mountCursor'
 
 /**
  * Builds the settings namespace: typed getters/setters backed by key-value storage.
@@ -36,7 +38,27 @@ export function buildSettingsNamespace(
     if (!raw) return null
     try {
       const value = JSON.parse(raw) as Partial<Mount>
-      if (typeof value.id === 'string' && value.id !== '') return { id: value.id }
+      if (typeof value.id === 'string' && value.id !== '') {
+        return typeof value.adapterConfig === 'string'
+          ? { id: value.id, adapterConfig: value.adapterConfig }
+          : { id: value.id }
+      }
+    } catch {}
+    return null
+  }
+
+  async function readMountCursor(): Promise<MountCursorState | null> {
+    const raw = await storage.getItem(MOUNT_CURSOR_KEY)
+    if (!raw) return null
+    try {
+      const v = JSON.parse(raw) as Partial<MountCursorState>
+      if (
+        typeof v.mountId === 'string' &&
+        typeof v.cursor === 'string' &&
+        typeof v.fullAt === 'number'
+      ) {
+        return { mountId: v.mountId, cursor: v.cursor, fullAt: v.fullAt }
+      }
     } catch {}
     return null
   }
@@ -121,6 +143,7 @@ export function buildSettingsNamespace(
       // What another mount held says nothing about this one, and a library
       // with no mount holds nothing there.
       if (!previous || previous.id === v?.id) return
+      await storage.deleteItem(MOUNT_CURSOR_KEY)
       // A failure keeps the old mount, so a retry with the same mount counts as
       // a change and runs the cleanup again instead of returning above.
       try {
@@ -129,6 +152,11 @@ export function buildSettingsNamespace(
         await storage.setItem(MOUNT_KEY, JSON.stringify(previous))
         throw e
       }
+    },
+    getMountCursor: readMountCursor,
+    setMountCursor: async (v) => {
+      if (v === null) await storage.deleteItem(MOUNT_CURSOR_KEY)
+      else await storage.setItem(MOUNT_CURSOR_KEY, JSON.stringify(v))
     },
     getLogLevel: () => getStr('logLevel', 'debug'),
     setLogLevel: (v) => setStr('logLevel', v),

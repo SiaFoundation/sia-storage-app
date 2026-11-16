@@ -6,6 +6,7 @@ import {
   FS_EVICTABLE_MIN_AGE_NON_CURRENT,
   FS_EVICTION_THUMBNAIL_WAIT,
 } from '../config'
+import { syncMount } from './mountSync'
 
 export type CacheEvictionConfig = {
   /** How long an uploaded current file is kept after its last use. Defaults to `FS_EVICTABLE_MIN_AGE`. */
@@ -61,12 +62,15 @@ export async function configuredCacheEviction(app: AppService): Promise<CacheEvi
 }
 
 /**
- * Runs one eviction pass at a time, for the scheduled pass, `cache.evict` and
- * `cache.clear`. An `evict` while any pass runs gets that pass's result, so a
- * pass requested over the socket during the scheduled one does not start a
- * second pass over the same rows. A `clear` while a clear runs gets its
- * result. A `clear` while an `evict` runs waits for it and then clears, since
- * that pass keeps the recently used files a clear has to remove.
+ * Runs one pass at a time over the cache: the scheduled pass, `cache.evict`,
+ * `cache.clear`, and the early read of the mount's files (`walk`), which
+ * frees nothing. An `evict` while an evicting pass runs gets that pass's
+ * result, so a pass requested over the socket during the scheduled one does
+ * not start a second pass over the same rows. An `evict` while a walk runs
+ * waits for it and then starts its own. A `clear` while a clear runs gets its
+ * result, and while anything else runs waits for it and then clears, since
+ * an evict keeps the recently used files a clear has to remove. A `walk`
+ * starts only when nothing runs, and its caller checks `busy` first.
  *
  * Each pass runs on a signal of its own, which any caller's signal aborts. A
  * caller that joined a pass someone else started still stops it, so the
@@ -82,25 +86,36 @@ export function evictionRunner(
     signal: AbortSignal,
   ) => Promise<CacheEvictionResult | undefined>,
   configured: () => Promise<CacheEvictionConfig>,
+  walk: (signal: AbortSignal) => Promise<unknown> = async () => {},
 ): {
   evict(signal?: AbortSignal): Promise<CacheEvictionResult | undefined>
   clear(): Promise<CacheEvictionResult | undefined>
+  walk(signal?: AbortSignal): Promise<void>
+  /** Whether any pass is running now. */
+  busy(): boolean
   stop(): Promise<void>
 } {
+  type Kind = 'evict' | 'clear' | 'walk'
   type Pass = {
-    clearing: boolean
+    kind: Kind
     done: Promise<CacheEvictionResult | undefined>
     controller: AbortController
   }
   let running: Pass | null = null
   let stopped = false
-  const start = (clearing: boolean): Pass => {
+  const start = (kind: Kind): Pass => {
     const controller = new AbortController()
-    const done: Promise<CacheEvictionResult | undefined> = (async () =>
-      run(clearing ? EVICT_ALL_BACKED_UP : await configured(), controller.signal))().finally(() => {
+    const pass = async () => {
+      if (kind === 'walk') {
+        await walk(controller.signal)
+        return undefined
+      }
+      return run(kind === 'clear' ? EVICT_ALL_BACKED_UP : await configured(), controller.signal)
+    }
+    const done: Promise<CacheEvictionResult | undefined> = pass().finally(() => {
       if (running?.done === done) running = null
     })
-    running = { clearing, done, controller }
+    running = { kind, done, controller }
     return running
   }
   const join = (pass: Pass, signal?: AbortSignal) => {
@@ -113,12 +128,22 @@ export function evictionRunner(
     return pass.done
   }
   return {
-    evict: async (signal) => (stopped ? undefined : join(running ?? start(false), signal)),
-    clear: async () => {
-      while (running && !running.clearing) await running.done.catch(() => undefined)
+    evict: async (signal) => {
+      // A walk frees nothing, so joining one would skip this pass.
+      while (running?.kind === 'walk') await running.done.catch(() => undefined)
       if (stopped) return undefined
-      return join(running ?? start(true))
+      return join(running ?? start('evict'), signal)
     },
+    clear: async () => {
+      while (running && running.kind !== 'clear') await running.done.catch(() => undefined)
+      if (stopped) return undefined
+      return join(running ?? start('clear'))
+    },
+    walk: async (signal) => {
+      if (stopped || running) return
+      await join(start('walk'), signal)
+    },
+    busy: () => running !== null,
     stop: async () => {
       stopped = true
       const pass = running
@@ -138,6 +163,11 @@ export function evictionRunner(
  *      `thumbnailWait` after its copy was added.
  * A pass removes every copy that qualifies, whatever the cache's size, so a
  * copy stays only while it is in use, recently used, or not uploaded.
+ *
+ * On a library with a mount, the folder a file manager shows, the pass first
+ * reads which files the system holds there and which it removed on its own
+ * (`syncMount`).
+ *
  * A current or trashed file is evicted only while it has an object on the
  * current indexer, read per batch and again before each removal. A superseded
  * version needs an object on any indexer, since the uploader never sends one.
@@ -156,6 +186,7 @@ export async function runCacheEviction(
   const thumbnailWait = config?.thumbnailWait ?? FS_EVICTION_THUMBNAIL_WAIT
   const batchSize = config?.batchSize ?? 100
 
+  await syncMount(app, signal)
   const totalSize = await app.fs.calcTotalSize()
 
   logger.info('cacheEviction', 'starting', { totalSize, minAge })

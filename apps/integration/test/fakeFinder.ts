@@ -5,11 +5,13 @@
  * It does what macOS does with a File Provider domain. It keeps its own copy
  * of each file opened or created in the folder, one version per file. It
  * takes a fetched file out of the handoff directory. It fetches a file again
- * when the library reports a new version of one it holds.
+ * when the library reports a new version of one it holds. It removes copies
+ * on its own, and answers what a mount adapter asks: list what you hold.
  *
  * Every call into the app goes through `app.provider`, as the extension's
  * calls do, so a test built on this takes the same paths the real one takes.
  */
+import type { MountAdapter, MountChanges } from '@siastorage/core/adapters'
 import type { ProviderItem } from '@siastorage/core/types'
 import * as nodeFs from 'fs'
 import * as path from 'path'
@@ -22,6 +24,10 @@ type Held = { bytes: Buffer; version: string }
 export function createFakeFinder(handoffDir: string) {
   /** Whole copies, by the id the app names each file by. */
   const held = new Map<string, Held>()
+  const log: { seq: number; id: string; removed: boolean }[] = []
+  let seq = 0
+  /** Cursors older than this are refused, as macOS refuses an expired anchor. */
+  let readableFrom = 0
   /** Ranges read of files not held whole. `served` marks each byte read so far. */
   const partial = new Map<string, { bytes: Buffer; served: Uint8Array; version: string }>()
   let device: TestApp | null = null
@@ -33,6 +39,11 @@ export function createFakeFinder(handoffDir: string) {
 
   function keep(id: string, bytes: Buffer, version: string): void {
     held.set(id, { bytes, version })
+    log.push({ seq: ++seq, id, removed: false })
+  }
+
+  function drop(id: string): void {
+    if (held.delete(id)) log.push({ seq: ++seq, id, removed: true })
   }
 
   function stage(bytes: Buffer): string {
@@ -41,18 +52,43 @@ export function createFakeFinder(handoffDir: string) {
     return staged
   }
 
-  /** Downloads a file whole and takes it out of the handoff directory. */
+  /**
+   * Downloads a file whole and takes it out of the handoff directory. The app
+   * hears that the folder holds it only as a hint to read the list again.
+   */
   async function fetch(id: string): Promise<Buffer> {
     const dest = path.join(handoffDir, `fetch-${crypto.randomUUID()}`)
     const { item } = await app().provider.fetch(id, dest)
     const bytes = nodeFs.readFileSync(dest)
     nodeFs.rmSync(dest)
     keep(item.id, bytes, item.contentVersion)
+    await app().provider.mountChanged()
     return bytes
   }
 
+  const adapter: MountAdapter = {
+    async changes(_mount, cursor): Promise<MountChanges> {
+      if (cursor === null || Number(cursor) < readableFrom) {
+        return { cursor: String(seq), full: [...held.keys()] }
+      }
+      // The last event per file, as the Finder agent reports them, so a file
+      // opened and dropped since the cursor is listed only as removed.
+      const last = new Map<string, boolean>()
+      for (const entry of log) if (entry.seq > Number(cursor)) last.set(entry.id, entry.removed)
+      const ids = (removed: boolean) =>
+        [...last].filter(([, gone]) => gone === removed).map(([id]) => id)
+      return { cursor: String(seq), added: ids(false), removed: ids(true) }
+    },
+  }
+
   return {
+    adapter,
     held,
+
+    /** Has the next read of changes from any cursor saved so far answer with the full list. */
+    expireCursor(): void {
+      readableFrom = seq + 1
+    },
 
     /** Registers the mount with `testApp` and drives it from here on. */
     async attach(testApp: TestApp): Promise<void> {
@@ -84,8 +120,9 @@ export function createFakeFinder(handoffDir: string) {
       const bytes = nodeFs.readFileSync(dest).subarray(served.offset, served.offset + served.bytes)
       nodeFs.rmSync(dest)
       // The system keeps the ranges of one version, and holds the file whole
-      // once it has every byte. Ranges can overlap and repeat, so a count of
-      // bytes served would call a file whole with its tail never read.
+      // once it has every byte, which it reports only as a change to its list.
+      // Ranges can overlap and repeat, so a count of bytes served would call a
+      // file whole with its tail never read.
       const known = partial.get(id)
       const size = served.item.size
       const parts =
@@ -102,6 +139,7 @@ export function createFakeFinder(handoffDir: string) {
       if (parts.served.every((b) => b === 1)) {
         partial.delete(id)
         keep(id, parts.bytes, parts.version)
+        await app().provider.mountChanged()
       }
       return { bytes, item: served.item }
     },
@@ -142,6 +180,12 @@ export function createFakeFinder(handoffDir: string) {
         }
       }
       return fetched
+    },
+
+    /** Removes a copy the way the system does on its own, with no word to the app but a hint. */
+    async drop(id: string): Promise<void> {
+      drop(id)
+      await app().provider.mountChanged()
     },
   }
 }

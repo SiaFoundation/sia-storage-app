@@ -1,3 +1,4 @@
+import type { MountAdapter } from '@siastorage/core/adapters'
 import type {
   DatabaseAdapter,
   SQLParam,
@@ -127,6 +128,8 @@ export interface TestAppOptions {
   crypto?: { sha256: (data: ArrayBuffer) => Promise<string> }
   detectMimeType?: (path: string, name?: string) => Promise<string | null>
   readMemory?: MemoryReader
+  /** Stands in for the operating system's side of a mount, such as the macOS Finder agent. */
+  mount?: MountAdapter
   /**
    * The link pass as a phone runs it: on its own interval, slower than sync,
    * and listing the indexer only every few minutes. By default every test
@@ -299,6 +302,7 @@ export function createTestApp(
     thumbnailWaitMs: options?.thumbnailWaitMs,
     thumbnailRetryBackoffMs: options?.thumbnailRetryBackoffMs,
     readMemory: options?.readMemory,
+    mount: options?.mount,
     storage,
     secrets,
     crypto,

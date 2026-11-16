@@ -10,12 +10,14 @@
  * answered from either table.
  *
  * The system writes and removes these bytes on its own, so a row is a record
- * of what it was last seen holding. No query here is used to decide that
- * bytes are safe to delete from the network's point of view. That rests on
- * the `objects` table alone.
+ * of what it was last seen holding. A read of the system's own list corrects
+ * it. No query here is used to decide that bytes are safe to delete from the
+ * network's point of view. That rests on the `objects` table alone.
  */
 import type { DatabaseAdapter } from '../../adapters/db'
 import * as sql from '../sql'
+import { buildRecordFilter } from './library'
+import { shownRowCondition } from './providerChanges'
 
 export type MountCopy = {
   stackId: string
@@ -104,23 +106,33 @@ export async function addMountRange(
   )
 }
 
-/** Deletes the rows for `stackIds` and returns the ones deleted. */
+/**
+ * Deletes the rows for `stackIds` and returns the ones deleted. With
+ * `usedBefore`, a row used at or after it stays: the system read that file
+ * again after it was seen without it, so it may hold it once more.
+ */
 export async function deleteMountCopies(
   db: DatabaseAdapter,
   stackIds: string[],
+  usedBefore?: number,
 ): Promise<MountCopy[]> {
   if (stackIds.length === 0) return []
+  const before = usedBefore ?? Number.MAX_SAFE_INTEGER
   const ids = JSON.stringify(stackIds)
   let rows: MountCopyRow[] = []
   await sql.transaction(db, async (tx) => {
     rows = await tx.getAllAsync<MountCopyRow>(
       `SELECT m.stackId, m.fileId, m.bytes, m.whole, m.usedAt FROM json_each(?) j
-       JOIN mount_copies m ON m.stackId = j.value`,
+       JOIN mount_copies m ON m.stackId = j.value
+       WHERE m.usedAt < ?`,
       ids,
+      before,
     )
     await tx.runAsync(
-      'DELETE FROM mount_copies WHERE stackId IN (SELECT value FROM json_each(?))',
+      `DELETE FROM mount_copies
+       WHERE stackId IN (SELECT value FROM json_each(?)) AND usedAt < ?`,
       ids,
+      before,
     )
   })
   return rows.map(toCopy)
@@ -170,4 +182,60 @@ export async function queryMountOnlyBytes(db: DatabaseAdapter): Promise<number> 
      WHERE NOT EXISTS (SELECT 1 FROM fs WHERE fs.fileId = m.fileId)`,
   )
   return row?.total ?? 0
+}
+
+/** Stack ids of the rows recorded as whole, for comparing with the system's full list. */
+export async function queryWholeMountStackIds(db: DatabaseAdapter): Promise<string[]> {
+  const rows = await db.getAllAsync<{ stackId: string }>(
+    'SELECT stackId FROM mount_copies WHERE whole = 1',
+  )
+  return rows.map((r) => r.stackId)
+}
+
+/**
+ * Records that the system holds each of `stackIds` whole, as the version the
+ * file manager shows for it. A stack with no visible file is left out. A row
+ * already there keeps its last use, and a new one gets `usedAt`. A whole row
+ * for the shown version is left as it is.
+ */
+export async function markMountCopiesWhole(
+  db: DatabaseAdapter,
+  stackIds: string[],
+  usedAt: number,
+): Promise<void> {
+  await db.runAsync(
+    `INSERT INTO mount_copies (stackId, fileId, bytes, whole, usedAt)
+     SELECT f.stackId, f.id, f.size, 1, ? FROM json_each(?) j
+     CROSS JOIN files f INDEXED BY idx_files_stackId ON f.stackId = j.value
+     WHERE ${buildRecordFilter('f')} AND ${shownRowCondition('f')}
+     ON CONFLICT(stackId) DO UPDATE SET
+       fileId = excluded.fileId, bytes = excluded.bytes, whole = 1
+     WHERE mount_copies.whole = 0 OR mount_copies.fileId != excluded.fileId`,
+    usedAt,
+    JSON.stringify(stackIds),
+  )
+}
+
+/**
+ * Rows that no longer describe anything the system holds: a file with no
+ * visible version, which the system deletes its copy of, and ranges of a
+ * version that is no longer the one shown, which the system discards when
+ * the content version changes. A whole row for an older version stays until
+ * the system fetches the new one, since those bytes are still on disk.
+ */
+export async function queryStaleMountStackIds(db: DatabaseAdapter): Promise<string[]> {
+  const rows = await db.getAllAsync<{ stackId: string }>(
+    `SELECT m.stackId FROM mount_copies m
+     WHERE NOT EXISTS (
+       SELECT 1 FROM files f WHERE f.stackId = m.stackId AND ${buildRecordFilter('f')}
+     ) OR (
+       m.whole = 0 AND m.fileId != (
+         SELECT s.id FROM files s
+         WHERE s.stackId = m.stackId AND ${buildRecordFilter('s')}
+         ORDER BY s.updatedAt DESC, s.id DESC
+         LIMIT 1
+       )
+     )`,
+  )
+  return rows.map((r) => r.stackId)
 }

@@ -8,12 +8,12 @@
  * reconnects, so start never branches on the current state.
  */
 
-import { readdirSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { DesktopConfig } from '../config'
 import { log } from '../log'
-import { agentInstalled, runAgent } from './agent'
+import { agentInstalled, finderAgentPath, runAgent } from './agent'
 import type { PlatformIntegration, ShellConfig, ShellPaths, ShellState, StopOptions } from './types'
 
 /** How long a quit waits on the helper. It is not cancelled, so a slow hide
@@ -198,6 +198,11 @@ export function createDarwinIntegration(): PlatformIntegration {
     // An unconfirmed register counts. `start` runs once per launch, so a null
     // here would leave the daemon recording none of Finder's copies until the
     // app is next launched.
-    mount: () => (domainId && (registered || !confirmed) ? { id: domainId } : null),
+    mount: () => {
+      const agentPath = finderAgentPath()
+      return domainId && (registered || !confirmed) && agentPath && existsSync(agentPath)
+        ? { id: domainId, adapterConfig: agentPath }
+        : null
+    },
   }
 }

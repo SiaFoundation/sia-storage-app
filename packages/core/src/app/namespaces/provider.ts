@@ -36,6 +36,7 @@ import type { FileRecord, ThumbSize } from '../../types/files'
 import type { AppService, AppServiceInternal } from '../service'
 import type { TransferMemoryBudget } from '../../services/transferMemoryBudget'
 import type { LocalCopyLock } from '../../services/localCopyLock'
+import type { MountHint } from '../../services/mountSync'
 import type { DownloadPriority } from '../stores'
 import type { DownloadObjectAdapter } from './downloads'
 import { ANCHOR_START, formatAnchor, parseAnchor, type ProviderAnchor } from '../providerAnchor'
@@ -110,6 +111,8 @@ export type ProviderNamespaceDeps = {
   downloadObject: DownloadObjectAdapter
   transferBudget: TransferMemoryBudget
   localCopyLock: LocalCopyLock
+  /** The integration's notice that the mount's files changed, read by the daemon's scheduler. */
+  mountHint: MountHint
 }
 
 /** Transfer flags for a batch of files, resolved in one pass over the library. */
@@ -1372,6 +1375,10 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       // The system now knows these bytes by the merged file's id.
       if (updated.id !== id) await service.mountCopies.rekey(file.id, updated.id)
       return updated
+    },
+
+    async mountChanged() {
+      deps.mountHint.hint()
     },
 
     async touch(stackIds) {

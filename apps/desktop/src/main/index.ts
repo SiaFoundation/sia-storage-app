@@ -103,10 +103,10 @@ if (!app.requestSingleInstanceLock()) {
   let quitting: Promise<void> | null = null
 
   /**
-   * Tells the daemon which mount its library is shown in, once the mount
-   * comes up and on every connect after. A call that fails keeps the last one
-   * recorded. Without it the daemon keeps no record of what the file manager
-   * holds.
+   * Tells the daemon which mount its library is shown in, and what its
+   * adapter needs to reach the system about it, once the mount comes up and
+   * on every connect after. A call that fails keeps the last one recorded.
+   * Without it the daemon keeps no record of what the file manager holds.
    */
   async function recordMount(): Promise<void> {
     const mount = platform.mount()

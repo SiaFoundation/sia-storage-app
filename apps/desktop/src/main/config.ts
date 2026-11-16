@@ -33,6 +33,11 @@ export type DesktopConfig = {
    */
   daemonRuntime?: string
   /**
+   * The Finder agent's file name in `Contents/MacOS`, `<app name> Finder
+   * Agent`. Absent in a checkout, which has no bundle to hold it.
+   */
+  finderAgent?: string
+  /**
    * Where this build looks for its own updates. Absent unless packaging set
    * `SIA_UPDATE_CHANNEL`, which beta and prod do and dev and test do not by
    * default, and from a source run.
