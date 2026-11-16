@@ -104,7 +104,13 @@ public final class SiaItem: NSObject, NSFileProviderItem {
                 .allowsReparenting, .allowsDeleting,
             ]
         }
-        return [.allowsReading, .allowsWriting, .allowsRenaming, .allowsReparenting, .allowsDeleting]
+        // `.allowsEvicting` is deprecated in favour of content policy. On
+        // macOS 27, `evictItem` failed with `nonEvictable` for items the system
+        // had listed without it, and the daemon's eviction relies on that call.
+        return [
+            .allowsReading, .allowsWriting, .allowsRenaming, .allowsReparenting, .allowsDeleting,
+            .allowsEvicting,
+        ]
     }
 
     // Finder's cloud badge, and whether the system may evict Finder's copy, come

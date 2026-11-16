@@ -9,7 +9,7 @@
 
 import { useApp } from '@siastorage/core/app'
 import { useShareLinks, useTrashCount, useUploadSpeed } from '@siastorage/core/stores'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Footer } from './Footer'
 import { DoneMark, ROW, Row, Section, SubRow } from './Group'
 import {
@@ -43,7 +43,7 @@ import { StatusLine } from './StatusLine'
 import { UpdateNotice } from './UpdateNotice'
 import { useAppInfo } from './useAppInfo'
 import { useConfirm } from './useConfirm'
-import { useLocalCache, useStatus } from './useStatus'
+import { useClearState, useLocalCache, useStatus } from './useStatus'
 
 export function Details({
   onShowLinks,
@@ -53,7 +53,8 @@ export function Details({
   onShowTrash: () => void
 }) {
   const status = useStatus()
-  const localCache = useLocalCache()
+  const clearState = useClearState()
+  const localCache = useLocalCache(clearState.data?.running ? 1_000 : 30_000)
   const links = useShareLinks({ revalidateOnFocus: false })
   const trash = useTrashCount()
   const info = useAppInfo()
@@ -114,7 +115,7 @@ export function Details({
           {localCacheBreakdown(localCache).map((line) => (
             <SubRow key={line.id} id={line.id} label={line.label} value={line.value} />
           ))}
-          <ClearLocalFiles bytes={localCache.bytes} onDone={setClearNotice} />
+          <ClearLocalFiles bytes={localCache.bytes} state={clearState} onDone={setClearNotice} />
           <button
             type="button"
             className={`${ROW} w-full cursor-default border-none bg-transparent text-left text-label [font-family:inherit] enabled:hover:bg-divider`}
@@ -200,36 +201,54 @@ export function Details({
 type Notice = { text: string; error: boolean }
 
 /**
- * Clear Local Files, as mobile has under Settings. It removes this Mac's copy
- * of every file already uploaded, and takes a second click, as Empty Trash
- * does. A file Finder has downloaded keeps its Finder copy, which on APFS
- * shares its blocks with ours, so that space frees only once Finder drops its
- * copy too.
+ * Clear Local Files, as mobile has under Settings, behind a second click as
+ * Empty Trash is. It removes every uploaded file's copy from this computer:
+ * the daemon deletes its own, and has Finder drop the ones Finder holds. A
+ * file open in another app keeps Finder's copy.
+ *
+ * Finder takes a moment per file, so a clear can run for minutes. It runs in
+ * the daemon, and this row reads its state, so the clear carries on while the
+ * window closes, and a window opened meanwhile shows it running.
  */
 function ClearLocalFiles({
   bytes,
+  state,
   onDone,
 }: {
   bytes: number | null
+  state: ReturnType<typeof useClearState>
   onDone: (notice: Notice | null) => void
 }) {
   const app = useApp()
   const [confirming, setConfirming] = useConfirm()
-  const [clearing, setClearing] = useState(false)
+  // The finished count when this window started a clear. The first read
+  // after that with no clear running ends the wait, and the clear was this
+  // window's when the count moved past it. A daemon that restarted mid-clear
+  // starts its count again and reads as a failed clear.
+  const [finishedBefore, setFinishedBefore] = useState<number | null>(null)
+  const clearing = finishedBefore !== null || (state.data?.running ?? false)
+
+  useEffect(() => {
+    if (finishedBefore === null || !state.data || state.data.running) return
+    setFinishedBefore(null)
+    const freed = state.data.finished > finishedBefore ? state.data.lastBytesFreed : null
+    onDone(
+      freed === null
+        ? { text: 'Could not clear local files. Try again.', error: true }
+        : { text: `Removed ${formatBytes(freed)} from this Mac.`, error: false },
+    )
+  }, [finishedBefore, state.data, onDone])
 
   const clear = async () => {
-    setClearing(true)
     onDone(null)
     try {
-      const result = await app.cache.clear()
-      onDone({
-        text: `Removed ${formatBytes(result?.bytesFreed ?? 0)} from this Mac. Files downloaded in Finder keep using space until you choose Remove Download there.`,
-        error: false,
-      })
+      const started = await app.cache.startClear()
+      // The returned state shows the clear running, so the wait above holds
+      // until a later read shows it ended.
+      void state.mutate(started)
+      setFinishedBefore(started.finished)
     } catch {
       onDone({ text: 'Could not clear local files. Try again.', error: true })
-    } finally {
-      setClearing(false)
     }
   }
 

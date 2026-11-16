@@ -25,11 +25,19 @@ const BATCH = 100
 /**
  * Removes the cache copies that are second copies: those of `fileIds`, or
  * every one when none are named. A no-op on a library with no mount.
+ *
+ * `thumbnailWait` is how long after its copy was added a file of a type that
+ * gets thumbnails keeps the copy while they are not all made, 0 for no wait,
+ * and defaults to `FS_EVICTION_THUMBNAIL_WAIT`. An eviction pass passes its
+ * own. A clear passes 0, so it frees the mount's copy of such a file rather
+ * than deleting the cache copy, which on macOS frees nothing while the mount
+ * holds the same bytes.
  */
 export async function tidyCopies(
   app: AppService,
-  opts: { fileIds?: string[]; signal?: AbortSignal } = {},
+  opts: { fileIds?: string[]; signal?: AbortSignal; thumbnailWait?: number } = {},
 ): Promise<void> {
+  const thumbnailWait = opts.thumbnailWait ?? FS_EVICTION_THUMBNAIL_WAIT
   if (opts.fileIds?.length === 0 || !(await app.settings.getMount())) return
   let removed = 0
   let after: string | null = null
@@ -41,7 +49,7 @@ export async function tidyCopies(
     })
     for (const copy of copies) {
       if (opts.signal?.aborted) break
-      if (await remove(app, copy)) removed++
+      if (await remove(app, copy, thumbnailWait)) removed++
     }
     if (copies.length < BATCH) break
     after = copies[copies.length - 1].fileId
@@ -58,9 +66,9 @@ export async function tidyCopies(
  * download or a fetch holds is skipped rather than waited for, and the next
  * pass reaches it.
  */
-async function remove(app: AppService, copy: SecondCopy): Promise<boolean> {
+async function remove(app: AppService, copy: SecondCopy, thumbnailWait: number): Promise<boolean> {
   try {
-    if (await thumbnailsPending(app, copy)) return false
+    if (await thumbnailsPending(app, copy, thumbnailWait)) return false
     // The batch was read against the indexer current at the time. After a
     // switch since then this version may not be on the new one, and the
     // uploader, which reads only the cache, could never send it there.
@@ -76,13 +84,17 @@ async function remove(app: AppService, copy: SecondCopy): Promise<boolean> {
 /**
  * Whether the thumbnail scanner may still want this copy. It makes a file's
  * thumbnails from the cache copy, and a file added in the mount can upload
- * within seconds, before the scanner has reached it. The wait is the cache
- * limit's own, `FS_EVICTION_THUMBNAIL_WAIT` from when the copy was added, so
- * a file whose thumbnail always fails still loses its second copy.
+ * within seconds, before the scanner has reached it. The wait is the
+ * eviction pass's own, `thumbnailWait` from when the copy was added, so a
+ * file whose thumbnail always fails still loses its second copy.
  */
-async function thumbnailsPending(app: AppService, copy: SecondCopy): Promise<boolean> {
+async function thumbnailsPending(
+  app: AppService,
+  copy: SecondCopy,
+  thumbnailWait: number,
+): Promise<boolean> {
   if (!app.thumbnails.allowedTypes.includes(copy.type)) return false
-  if (Date.now() - copy.addedAt >= FS_EVICTION_THUMBNAIL_WAIT) return false
+  if (Date.now() - copy.addedAt >= thumbnailWait) return false
   const sizes = await app.thumbnails.getSizesForFile(copy.fileId)
   return ThumbSizes.some((size) => !sizes.includes(size))
 }

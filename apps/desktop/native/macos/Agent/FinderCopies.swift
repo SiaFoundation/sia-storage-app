@@ -16,6 +16,9 @@ public protocol FinderCopies {
 }
 
 public protocol FinderDomainCopies: Sendable {
+    /// The system's answer for one item: nil when it was evicted or held no
+    /// content. An unknown item answers nil too, or `noSuchItem`.
+    func evict(itemId: String) async -> Error?
     /// Asks the system to call the extension's `modifyItem` with the item's
     /// contents. Nil when it took the request. An item whose contents Finder
     /// does not hold answers `NSUbiquitousFileUnavailableError`.
@@ -37,6 +40,14 @@ public struct SystemFinderCopies: FinderCopies {
 
 private struct SystemDomainCopies: FinderDomainCopies, @unchecked Sendable {
     let manager: NSFileProviderManager
+
+    func evict(itemId: String) async -> Error? {
+        await withCheckedContinuation { continuation in
+            manager.evictItem(identifier: NSFileProviderItemIdentifier(itemId)) {
+                continuation.resume(returning: $0)
+            }
+        }
+    }
 
     func resend(itemId: String) async -> Error? {
         await withCheckedContinuation { continuation in

@@ -3,6 +3,7 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import {
   createFinderAgent,
+  parseEvictResults,
   parseMaterialized,
   parseResendResults,
 } from '../../src/daemon/finderAgent'
@@ -25,8 +26,8 @@ describe('the Finder agent runner', () => {
 
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }))
 
-  /** A signed agent that lists one file, then one removal. */
-  function fakeExec(opts: { identifier?: string } = {}) {
+  /** A signed agent that evicts everything except the ids in `busy`. */
+  function fakeExec(opts: { identifier?: string; busy?: string[] } = {}) {
     const calls: string[][] = []
     const exec = async (file: string, args: string[]) => {
       calls.push([file, ...args])
@@ -41,10 +42,23 @@ describe('the Finder agent runner', () => {
         fs.writeFileSync(out, JSON.stringify(answer))
         return { stdout: '{"ok":true}', stderr: '' }
       }
-      throw new Error(`the fake agent has no verb ${verb}`)
+      const results = ids.map((id) => ({
+        id,
+        result: opts.busy?.includes(id) ? 'busy' : 'evicted',
+      }))
+      fs.writeFileSync(out, JSON.stringify({ results }))
+      return { stdout: '{"ok":true}', stderr: '' }
     }
     return { exec, calls }
   }
+
+  it("reads each item's result from the file the agent wrote", async () => {
+    const { exec } = fakeExec({ busy: ['b'] })
+
+    const results = await createFinderAgent({ exec }).dehydrate(domain(), ['a', 'b'])
+
+    expect(results).toEqual({ a: 'done', b: 'busy' })
+  })
 
   it('refuses to run a program not signed as a Finder agent', async () => {
     const { exec, calls } = fakeExec({ identifier: 'com.apple.rm' })
@@ -84,6 +98,22 @@ describe('the Finder agent runner', () => {
       .catch((e: Error) => e)
 
     expect((error as Error).message).toBe('Finder could not list its downloads now')
+  })
+
+  it('reads every answer but evicted and refused as busy, and skips entries without an id', () => {
+    expect(
+      parseEvictResults(
+        JSON.stringify({
+          results: [
+            { id: 'a', result: 'linked' },
+            { id: 'b', result: 'unsynced' },
+            { id: 'c', result: 'gone' },
+            { id: 'd', result: 'refused' },
+            { result: 'evicted' },
+          ],
+        }),
+      ),
+    ).toEqual({ a: 'busy', b: 'busy', c: 'busy', d: 'refused' })
   })
 
   it('reads a resend as asked, not hydrated or failed', () => {

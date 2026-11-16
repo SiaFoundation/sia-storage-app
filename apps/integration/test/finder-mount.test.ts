@@ -23,6 +23,7 @@ import { generateTestFiles, waitForCondition } from './utils'
 
 const ONE_DAY = 24 * 60 * 60_000
 const LONG_AGO = () => Date.now() - 30 * ONE_DAY
+const ONE_HOUR = 60 * 60_000
 const sha = (bytes: Uint8Array) => toContentHash(createHash('sha256').update(bytes).digest('hex'))
 const bytesOf = (label: string, size = 100) => Buffer.alloc(size, label)
 
@@ -93,6 +94,11 @@ describe('a device with a Finder folder', () => {
       message: `${name} to lose its cache copy once uploaded`,
     })
     return { id: item.id, fileId }
+  }
+
+  /** Makes every uploaded copy old enough to go on the next pass. */
+  async function noMinimumAge(): Promise<void> {
+    await mac.app.settings.setCacheMinAge(0)
   }
 
   describe('where a file is kept', () => {
@@ -464,6 +470,169 @@ describe('a device with a Finder folder', () => {
     })
   })
 
+  describe('freeing copies nobody uses', () => {
+    it('clears a photo Finder holds whole from both places while its thumbnails are not made', async () => {
+      // Not a JPEG inside, so its thumbnails are never made.
+      const bytes = bytesOf('p', 300)
+      const item = await finder.create(null, 'broken.jpg', bytes)
+      const fileId = await versionOf(mac, item.id)
+      await uploaded(mac, item.id)
+      await mac.app.cache.evict()
+      expect(await cached(fileId)).toBe(true)
+
+      const result = await mac.app.cache.clear()
+
+      expect(finder.held.has(item.id)).toBe(false)
+      expect(await mountRow(item.id)).toBeNull()
+      expect(await cached(fileId)).toBe(false)
+      expect(result?.bytesFreed).toBe(300)
+      expect(await mac.app.cache.bytesOnDevice()).toBe(0)
+    })
+
+    it('frees the copies unused past the hold from both places, and keeps one used within it', async () => {
+      await mac.app.settings.setCacheMinAge(ONE_HOUR)
+      const oldest = await inFinder('y1.bin', bytesOf('1'))
+      const [middle] = await mac.addFiles(generateTestFiles(1, { startId: 50, sizeBytes: 100 }))
+      await waitForCondition(
+        async () => (await mac.app.localObjects.getRefsForFile(middle.id)).length > 0,
+        { timeout: 30_000, message: 'the added file to upload' },
+      )
+      const newest = await inFinder('y3.bin', bytesOf('3'))
+      await mac.app.mountCopies.touch([oldest.id], LONG_AGO())
+      await mac.app.fs.upsertMeta({
+        fileId: middle.id,
+        size: middle.size,
+        addedAt: LONG_AGO() + ONE_DAY,
+        usedAt: LONG_AGO() + ONE_DAY,
+      })
+
+      const result = await mac.app.cache.evict()
+
+      expect(finder.asked).toEqual([oldest.id])
+      expect(finder.held.has(oldest.id)).toBe(false)
+      expect(await mountRow(oldest.id)).toBeNull()
+      expect(await cached(middle.id)).toBe(false)
+      expect(finder.held.has(newest.id)).toBe(true)
+      expect(result).toMatchObject({ evicted: 2, bytesFreed: 200 })
+      expect(await mac.app.cache.bytesOnDevice()).toBe(100)
+    })
+
+    it('asks Finder about no file used within the hold', async () => {
+      await mac.app.settings.setCacheMinAge(ONE_HOUR)
+      await inFinder('z1.bin', bytesOf('1'))
+      await inFinder('z2.bin', bytesOf('2'))
+
+      const result = await mac.app.cache.evict()
+
+      expect(finder.asked).toEqual([])
+      expect(result?.evicted).toBe(0)
+    })
+
+    it('keeps a file waiting to upload, in the cache and in Finder', async () => {
+      await noMinimumAge()
+      mac.setConnected(false)
+      const item = await finder.create(null, 'aa.bin', bytesOf('a'))
+      const fileId = await versionOf(mac, item.id)
+
+      await mac.app.cache.evict()
+
+      expect(finder.asked).toEqual([])
+      expect(await cached(fileId)).toBe(true)
+      expect(finder.held.has(item.id)).toBe(true)
+    })
+
+    it('counts and frees what Finder read by ranges', async () => {
+      await noMinimumAge()
+      const id = await fromPeer('ab.bin', bytesOf('r', 1000))
+      await finder.readRange(id, 0, 400)
+
+      const result = await mac.app.cache.evict()
+
+      expect(finder.asked).toEqual([id])
+      expect(await mountRow(id)).toBeNull()
+      expect(result?.bytesFreed).toBe(400)
+
+      // After the removal, the rest of the file is all Finder holds of it.
+      await finder.readRange(id, 400, 600)
+      expect(finder.held.has(id)).toBe(false)
+      expect(await mountRow(id)).toMatchObject({ bytes: 600, whole: false })
+    })
+
+    it('leaves a file Finder has open in place, and frees it on a later pass once it is closed', async () => {
+      await noMinimumAge()
+      const { id } = await inFinder('ac.bin', bytesOf('a'))
+      finder.answers.set(id, 'busy')
+
+      const kept = await mac.app.cache.evict()
+      expect(kept?.bytesFreed).toBe(0)
+      expect(await mountRow(id)).not.toBeNull()
+
+      finder.answers.delete(id)
+      const freed = await mac.app.cache.evict()
+
+      expect(finder.asked).toEqual([id, id])
+      expect(await mountRow(id)).toBeNull()
+      expect(freed?.bytesFreed).toBe(100)
+    })
+
+    it('leaves Finder its copies for the next pass when Finder cannot be asked, and still frees the cache', async () => {
+      await noMinimumAge()
+      const older = await inFinder('ac2.bin', bytesOf('o'))
+      await mac.app.mountCopies.touch([older.id], LONG_AGO())
+      const [newer] = await mac.addFiles(generateTestFiles(1, { startId: 60, sizeBytes: 100 }))
+      await waitForCondition(
+        async () => (await mac.app.localObjects.getRefsForFile(newer.id)).length > 0,
+        { timeout: 30_000, message: 'the added file to upload' },
+      )
+      finder.adapter.dehydrate = async () => {
+        throw new Error('the app is gone')
+      }
+
+      const result = await mac.app.cache.evict()
+
+      expect(result?.evictedFileIds).toEqual([newer.id])
+      expect(await cached(newer.id)).toBe(false)
+      expect(await mountRow(older.id)).not.toBeNull()
+    })
+
+    it('keeps the record of a file opened again while Finder was being asked', async () => {
+      await noMinimumAge()
+      const { id } = await inFinder('ad.bin', bytesOf('a'))
+      const dehydrate = finder.adapter.dehydrate
+      // The user reopens the file after the system removed it and before its
+      // answer is applied.
+      finder.adapter.dehydrate = async (mount, stackIds, signal) => {
+        const answers = await dehydrate(mount, stackIds, signal)
+        await new Promise((resolve) => setTimeout(resolve, 5))
+        await finder.open(id)
+        return answers
+      }
+
+      await mac.app.cache.evict()
+      expect(finder.held.has(id)).toBe(true)
+      finder.adapter.dehydrate = dehydrate
+      await mac.app.settings.setCacheMinAge(ONE_HOUR)
+      // The next read lists the file as held again.
+      await mac.app.cache.evict()
+
+      expect(finder.held.has(id)).toBe(true)
+      expect(await mountRow(id)).toMatchObject({ whole: true })
+    })
+
+    it('counts a file opened in Finder as used, so only the unopened one goes', async () => {
+      await mac.app.settings.setCacheMinAge(ONE_HOUR)
+      const opened = await inFinder('ae1.bin', bytesOf('1'))
+      const unopened = await inFinder('ae2.bin', bytesOf('2'))
+      await mac.app.mountCopies.touch([opened.id, unopened.id], LONG_AGO())
+
+      await finder.open(opened.id)
+      await mac.app.cache.evict()
+
+      expect(finder.asked).toEqual([unopened.id])
+      expect(finder.held.has(opened.id)).toBe(true)
+    })
+  })
+
   describe('after the indexer is changed', () => {
     it('brings a file only Finder holds back into the cache, and it uploads again', async () => {
       const bytes = bytesOf('n', 200)
@@ -560,6 +729,18 @@ describe('a device with a Finder folder', () => {
       expect(await finder.followChanges()).toEqual([id])
       expect(finder.held.get(id)?.bytes).toEqual(next)
       expect(await mountRow(id)).toMatchObject({ fileId: await versionOf(mac, id) })
+    })
+
+    it('does not ask Finder to drop a file that is not on the new indexer', async () => {
+      await noMinimumAge()
+      const { id } = await inFinder('ag.bin', bytesOf('g'))
+      mac.setConnected(false)
+      await mac.app.settings.setIndexerURL('https://next.indexer')
+
+      await mac.app.cache.evict()
+
+      expect(finder.asked).toEqual([])
+      expect(finder.held.has(id)).toBe(true)
     })
 
     it('forgets a file Finder turns out not to hold', async () => {

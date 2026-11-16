@@ -8,6 +8,7 @@ import {
 } from '../config'
 import { tidyCopies } from './localCopies'
 import { syncMount } from './mountSync'
+import { evictUnusedMountCopies } from './unusedMountCopies'
 
 export type CacheEvictionConfig = {
   /** How long an uploaded current file is kept after its last use. Defaults to `FS_EVICTABLE_MIN_AGE`. */
@@ -37,14 +38,28 @@ export const EVICT_ALL_BACKED_UP: CacheEvictionConfig = {
   thumbnailWait: 0,
 }
 
+/** Whether a clear is running, for a window that shows it in progress. */
+export type ClearState = {
+  /** True from when a clear is asked for, including while it waits for a pass, until it ends. */
+  running: boolean
+  /**
+   * Clear passes that ended since the process started. A window compares it
+   * with the count when it started a clear, to tell that one has ended.
+   */
+  finished: number
+  /** Bytes the last clear pass to end freed. Null before the first ends, or when it failed. */
+  lastBytesFreed: number | null
+}
+
 export type CacheEvictionResult = {
   processedRows: number
   evicted: number
   evictedFileIds: string[]
   /**
-   * Bytes of the copies this pass removed, by their `fs` row sizes. A cache
-   * copy removed because the mount also holds the file is not counted, since
-   * on macOS the two share disk blocks and removing one frees nothing.
+   * Bytes this pass freed: the `fs` row sizes of the cache copies it deleted,
+   * and the recorded bytes of the mount copies the system removed for it,
+   * which for a file read by ranges is the bytes served. A range the system
+   * had already dropped on its own is counted too, since nothing reports it.
    */
   bytesFreed: number
   currentSize: number
@@ -75,7 +90,9 @@ export async function configuredCacheEviction(app: AppService): Promise<CacheEvi
  * waits for it and then starts its own. A `clear` while a clear runs gets its
  * result, and while anything else runs waits for it and then clears, since
  * an evict keeps the recently used files a clear has to remove. A `walk`
- * starts only when nothing runs, and its caller checks `busy` first.
+ * starts only when nothing runs, and its caller checks `busy` first. A clear
+ * can take minutes on a large library, so `clearState` lets a window that
+ * did not wait for it show it running and what it freed.
  *
  * Each pass runs on a signal of its own, which any caller's signal aborts. A
  * caller that joined a pass someone else started still stops it, so the
@@ -96,6 +113,7 @@ export function evictionRunner(
   evict(signal?: AbortSignal): Promise<CacheEvictionResult | undefined>
   clear(): Promise<CacheEvictionResult | undefined>
   walk(signal?: AbortSignal): Promise<void>
+  clearState(): ClearState
   /** Whether any pass is running now. */
   busy(): boolean
   stop(): Promise<void>
@@ -108,6 +126,9 @@ export function evictionRunner(
   }
   let running: Pass | null = null
   let stopped = false
+  let clears = 0
+  let finished = 0
+  let lastBytesFreed: number | null = null
   const start = (kind: Kind): Pass => {
     const controller = new AbortController()
     const pass = async () => {
@@ -120,6 +141,20 @@ export function evictionRunner(
     const done: Promise<CacheEvictionResult | undefined> = pass().finally(() => {
       if (running?.done === done) running = null
     })
+    // Counted on the pass rather than per caller, so a clear that joins a
+    // running one does not count it twice.
+    if (kind === 'clear') {
+      done.then(
+        (result) => {
+          lastBytesFreed = result?.bytesFreed ?? null
+          finished++
+        },
+        () => {
+          lastBytesFreed = null
+          finished++
+        },
+      )
+    }
     running = { kind, done, controller }
     return running
   }
@@ -140,10 +175,16 @@ export function evictionRunner(
       return join(running ?? start('evict'), signal)
     },
     clear: async () => {
-      while (running && running.kind !== 'clear') await running.done.catch(() => undefined)
-      if (stopped) return undefined
-      return join(running ?? start('clear'))
+      clears++
+      try {
+        while (running && running.kind !== 'clear') await running.done.catch(() => undefined)
+        if (stopped) return undefined
+        return await join(running ?? start('clear'))
+      } finally {
+        clears--
+      }
     },
+    clearState: () => ({ running: clears > 0, finished, lastBytesFreed }),
     walk: async (signal) => {
       if (stopped || running) return
       await join(start('walk'), signal)
@@ -160,12 +201,14 @@ export function evictionRunner(
 }
 
 /**
- * Evicts cached files in three passes:
+ * Evicts local copies in four passes:
  *   1. Trashed pre-pass: uploaded files the user has trashed, no age gate.
  *   2. Non-current pre-pass: superseded versions past `minAgeNonCurrent`.
  *   3. Unused pass: uploaded current files not used for `minAge`, oldest use
  *      first, skipping a file whose thumbnails are not made yet for up to
  *      `thumbnailWait` after its copy was added.
+ *   4. On a library with a mount, the mount's copies of uploaded current files
+ *      not used for `minAge` (`evictUnusedMountCopies`).
  * A pass removes every copy that qualifies, whatever the cache's size, so a
  * copy stays only while it is in use, recently used, or not uploaded.
  *
@@ -179,7 +222,9 @@ export function evictionRunner(
  *
  * Suspension signal policy: accepts AbortSignal. Each pass holds a sequence
  * of disk + DB writes; checks the signal between batches and between rows
- * so a mid-eviction abort releases promptly before the DB gate closes.
+ * so a mid-eviction abort releases promptly before the DB gate closes. An
+ * abort during a call to the system loses that call's answers, and the next
+ * pass's read of the mount corrects the rows.
  */
 export async function runCacheEviction(
   app: AppService,
@@ -192,8 +237,9 @@ export async function runCacheEviction(
   const batchSize = config?.batchSize ?? 100
 
   // Before the total is read: the second step changes what the cache holds.
+  const mount = await app.settings.getMount()
   await syncMount(app, signal)
-  await tidyCopies(app, { signal })
+  await tidyCopies(app, { signal, thumbnailWait })
   const totalSize = await app.fs.calcTotalSize()
 
   logger.info('cacheEviction', 'starting', { totalSize, minAge })
@@ -204,33 +250,41 @@ export async function runCacheEviction(
   let bytesFreed = 0
   const evictedFileIds: string[] = []
 
-  async function evictBatch(
-    rows: EvictionRow[],
-    options?: { anyIndexer?: boolean },
-  ): Promise<void> {
-    for (const { fileId, size, type } of rows) {
-      if (signal?.aborted) return
-      try {
-        // The batch was read against the indexer current at the time. After a
-        // switch since then, this file may have no object on the new one, and
-        // the uploader, which reads only local copies, could never send it there.
-        if (!options?.anyIndexer) {
-          const indexerURL = await app.settings.getIndexerURL()
-          if ((await app.localObjects.countForFileOnIndexer(fileId, indexerURL)) === 0) continue
+  /** Counts a removed copy. The cache total never held a mount copy. */
+  function recordEvicted(copy: { fileId: string; size: number }, store: 'cache' | 'mount'): void {
+    if (store === 'cache') currentSize -= copy.size
+    bytesFreed += copy.size
+    evicted++
+    evictedFileIds.push(copy.fileId)
+  }
+
+  /**
+   * Deletes one cache copy, and resolves whether it went. A copy a download
+   * or a Finder export holds is used now, so it is skipped this pass rather
+   * than waited for.
+   */
+  async function removeCopy(row: EvictionRow, anyIndexer = false): Promise<boolean> {
+    try {
+      // The batch was read against the indexer current at the time. After a
+      // switch since then, this file may have no object on the new one, and
+      // the uploader, which reads only local copies, could never send it there.
+      if (!anyIndexer) {
+        const indexerURL = await app.settings.getIndexerURL()
+        if ((await app.localObjects.countForFileOnIndexer(row.fileId, indexerURL)) === 0) {
+          return false
         }
-        // A download or a Finder export holds the file. It is used now, so it
-        // is skipped this pass rather than waited for.
-        if (!(await app.fs.removeFile({ id: fileId, type }, { skipIfLocked: true }))) continue
-        currentSize -= size
-        bytesFreed += size
-        evicted++
-        evictedFileIds.push(fileId)
-      } catch (e) {
-        logger.error('cacheEviction', 'remove_failed', {
-          fileId,
-          error: e as Error,
-        })
       }
+      return await app.fs.removeFile({ id: row.fileId, type: row.type }, { skipIfLocked: true })
+    } catch (e) {
+      logger.error('cacheEviction', 'remove_failed', { fileId: row.fileId, error: e as Error })
+      return false
+    }
+  }
+
+  async function evictBatch(rows: EvictionRow[], anyIndexer = false): Promise<void> {
+    for (const row of rows) {
+      if (signal?.aborted) return
+      if (await removeCopy(row, anyIndexer)) recordEvicted(row, 'cache')
     }
   }
 
@@ -262,7 +316,7 @@ export async function runCacheEviction(
     )
     if (nonCurrent.length === 0) break
     afterNonCurrent = cursorAfter(nonCurrent)
-    await evictBatch(nonCurrent, { anyIndexer: true })
+    await evictBatch(nonCurrent, true)
     processedRows += nonCurrent.length
     if (nonCurrent.length < batchSize) break
   }
@@ -285,6 +339,17 @@ export async function runCacheEviction(
     await evictBatch(candidates)
     processedRows += candidates.length
     if (candidates.length < batchSize) break
+  }
+
+  // Pass 4: the mount's copies unused for the hold time. After pass 3, so a
+  // version whose cache copy just went is a candidate.
+  if (mount && !signal?.aborted) {
+    processedRows += await evictUnusedMountCopies(app, {
+      minAge,
+      batchSize,
+      evicted: (copy) => recordEvicted(copy, 'mount'),
+      signal,
+    })
   }
 
   // List rows carry the on-device flag from the query itself, so clearing

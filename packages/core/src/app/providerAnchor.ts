@@ -9,8 +9,10 @@
  * against: a wiped and recreated
  * library restarts the sequence near zero, and without the epoch a stale
  * anchor holding a large old sequence would read as "nothing changed"
- * forever instead of expiring. Every segment is colon-free (epoch and id
- * are base36), so a plain split is unambiguous.
+ * forever instead of expiring. The provider namespace appends its item
+ * format to the epoch, so a format change expires every anchor too. Every
+ * segment is colon-free (the epoch is base36 and the format after a dot, and
+ * the id is base36), so a plain split is unambiguous.
  */
 import type { ProviderChangeCursor } from '../db/operations'
 

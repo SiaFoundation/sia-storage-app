@@ -200,18 +200,27 @@ function useNotBackedUpBytes() {
  * Bytes of the library's files on this computer, which is the daemon's cache
  * plus what the file manager's folder holds on its own, and the size of the
  * copies not backed up yet. Nothing invalidates a key when a download lands,
- * so the size also refreshes on a timer.
+ * so the size also refreshes on a timer, every `refreshMs`, which a window
+ * showing a clear shortens to show it go down.
  */
-export function useLocalCache(): LocalCache {
+export function useLocalCache(refreshMs = 30_000): LocalCache {
   const app = useApp()
   const bytes = useSWR(app.caches.library.key('localCacheBytes'), () => app.cache.bytesOnDevice(), {
-    refreshInterval: 30_000,
+    refreshInterval: refreshMs,
   })
   const notBackedUp = useNotBackedUpBytes()
   return {
     bytes: bytes.data ?? null,
     notUploadedBytes: notBackedUp ?? null,
   }
+}
+
+/** Whether a clear is running, re-read every second while one is. */
+export function useClearState() {
+  const app = useApp()
+  return useSWR('cache.clearState', () => app.cache.clearState(), {
+    refreshInterval: (state) => (state?.running ? 1_000 : 0),
+  })
 }
 
 function useFolderCount(): number {
