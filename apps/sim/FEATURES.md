@@ -229,13 +229,15 @@ bun sim device expect phone --label Menu
   `download`, `config`
 - Check: `call <device> downloads.getState`; `call <device> cache.evict` runs an
   eviction pass now, and `cache.clear` removes every backed-up copy, as Clear
-  Local Files does; tables `fs`
+  Local Files does. The window starts it with `cache.startClear` and follows
+  `cache.clearState`; tables `fs`
 - Finder: on the desktop app a file is kept in one place once it is uploaded.
   Table `mount_copies` records what Finder holds, by the version it holds, and
   the daemon removes its cache copy of an uploaded file Finder holds whole
   (`tidyCopies`). The pass reads what the system removed from Finder
-  (`syncMount`, setting `mountCursor`) through the agent the app names in
-  setting `mount`, and `cache.bytesOnDevice` counts what both places hold.
+  (`syncMount`, setting `mountCursor`), counts Finder's bytes in
+  `cache.bytesOnDevice`, and has Finder drop the copies unused past the hold
+  time through the agent the app names in setting `mount` (`mount.dehydrate`).
   `isCloudOnly` shows Finder's copy is gone, and `finderEvict` drops one the
   way the system does on its own. Opening a file in an app moves its last use
   forward (`provider.touch`). After the indexer is changed, a file only
@@ -245,7 +247,7 @@ bun sim device expect phone --label Menu
   `sync/converge-and-download`, `mobile/tapped-download-arrives`,
   `sync/small-downloads-beside-large`, `finder/cache-evicts-unused`,
   `finder/cache-keeps-unuploaded`, `finder/cache-evicts-during-opens`,
-  `desktop/cache-evicts-finder-keeps-copies`, `desktop/finder-drop-leaves-no-copy`,
+  `desktop/cache-evicts-finder-copies`, `desktop/finder-drop-leaves-no-copy`,
   `desktop/clear-local-files`, `desktop/finder-open-counts-as-use`,
   `desktop/indexer-change-restores-from-finder`; integration `downloads`, `finder-mount`,
   `fs-eviction`, `fs-adopt`, `fs-orphan`, `size-reconcile`

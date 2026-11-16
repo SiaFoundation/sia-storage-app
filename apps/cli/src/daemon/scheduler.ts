@@ -88,9 +88,8 @@ export function initializeScheduler(app: CliApp): { scheduler: ServiceScheduler 
       worker: whenConnected(() => runPruneSlabs(app.service, app.internal)),
     },
     {
-      // The configured hold time. When the Finder folder also holds a file,
-      // its copy and ours share disk blocks, so removing ours frees space only
-      // once Finder drops its copy.
+      // The configured hold time. Where Finder also holds files, the pass
+      // asks Finder to drop the ones unused for that long.
       name: 'cacheEviction',
       interval: FS_EVICTION_FREQUENCY_DAEMON,
       worker: async (signal: AbortSignal) => {

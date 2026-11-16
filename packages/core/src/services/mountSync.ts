@@ -19,9 +19,9 @@
  * A wrong row is never dangerous. A whole row for a file the mount no longer
  * holds overstates what is on the device until the next full read. Ranges the
  * system dropped on its own are named by no read, so their row stays until
- * the file's version changes. A missing row understates the device until the
- * next read adds it. Whether bytes may be removed rests on the `objects`
- * table.
+ * the file's version changes or a dehydrate of it answers done. A missing row
+ * understates the device until the next read adds it. Whether bytes may be
+ * removed rests on the `objects` table.
  */
 import { logger } from '@siastorage/logger'
 import type { MountChanges } from '../adapters/mount'
@@ -106,7 +106,7 @@ export async function syncMount(app: AppService, signal?: AbortSignal): Promise<
   }
 
   if (full !== null) {
-    await applyFullList(app, full, readStart, fullAt)
+    await applyFullList(app, full, readStart)
     fullAt = readStart
   }
 
@@ -139,15 +139,11 @@ async function read(
  * kept, since a full list never names a file the system holds only ranges of.
  *
  * A file first seen here may have been held for a long time, and nothing
- * says when it was last used, so it gets the previous full read's time, or 0
- * before the first.
+ * says when it was last used, so it is held from this read. Dated earlier,
+ * every Finder file found on the first read after an update would be evicted
+ * by the same pass.
  */
-async function applyFullList(
-  app: AppService,
-  fullIds: string[],
-  readStart: number,
-  previousFullAt: number,
-): Promise<void> {
+async function applyFullList(app: AppService, fullIds: string[], readStart: number): Promise<void> {
   const listed = new Set(fullIds)
   const known = new Set(await app.mountCopies.wholeStackIds())
   await app.mountCopies.delete(
@@ -156,6 +152,6 @@ async function applyFullList(
   )
   await app.mountCopies.markWhole(
     fullIds.filter((stackId) => !known.has(stackId)),
-    previousFullAt,
+    readStart,
   )
 }

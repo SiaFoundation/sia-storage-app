@@ -6,13 +6,18 @@
  * of each file opened or created in the folder, one version per file. It
  * takes a fetched file out of the handoff directory. It fetches a file again
  * when the library reports a new version of one it holds. It removes copies
- * on its own, and answers the two things a mount adapter asks: list what you
- * hold, hand these files back.
+ * on its own, and answers the three things a mount adapter asks: remove these
+ * copies, list what you hold, hand these files back.
  *
  * Every call into the app goes through `app.provider`, as the extension's
  * calls do, so a test built on this takes the same paths the real one takes.
  */
-import type { MountAdapter, MountChanges, ResendResult } from '@siastorage/core/adapters'
+import type {
+  DehydrateResult,
+  MountAdapter,
+  MountChanges,
+  ResendResult,
+} from '@siastorage/core/adapters'
 import type { ProviderItem, ProviderWriteResult } from '@siastorage/core/types'
 import * as nodeFs from 'fs'
 import * as path from 'path'
@@ -29,6 +34,10 @@ export function createFakeFinder(handoffDir: string) {
   let seq = 0
   /** Cursors older than this are refused, as macOS refuses an expired anchor. */
   let readableFrom = 0
+  /** Every id a dehydrate asked about, in order. */
+  const asked: string[] = []
+  /** What a dehydrate answers for an id instead of removing its copy. */
+  const answers = new Map<string, DehydrateResult>()
   /** Ranges read of files not held whole. `served` marks each byte read so far. */
   const partial = new Map<string, { bytes: Buffer; served: Uint8Array; version: string }>()
   /** Writes a resend started, which arrive on their own as the system's do. */
@@ -47,7 +56,9 @@ export function createFakeFinder(handoffDir: string) {
     log.push({ seq: ++seq, id, removed: false })
   }
 
+  /** Removes the file's copy, whole or in ranges, as the system's eviction does. */
   function drop(id: string): void {
+    partial.delete(id)
     if (held.delete(id)) log.push({ seq: ++seq, id, removed: true })
   }
 
@@ -72,6 +83,17 @@ export function createFakeFinder(handoffDir: string) {
   }
 
   const adapter: MountAdapter = {
+    async dehydrate(mount, stackIds) {
+      if (mount.id !== MOUNT.id) throw new Error('no mount named that is registered')
+      asked.push(...stackIds)
+      const results: Record<string, DehydrateResult> = {}
+      for (const id of stackIds) {
+        results[id] = answers.get(id) ?? 'done'
+        if (results[id] === 'done') drop(id)
+      }
+      return results
+    },
+
     async resend(_mount, stackIds) {
       const results: Record<string, ResendResult> = {}
       for (const id of stackIds) {
@@ -108,6 +130,8 @@ export function createFakeFinder(handoffDir: string) {
   return {
     adapter,
     held,
+    asked,
+    answers,
 
     /** Has the next read of changes from any cursor saved so far answer with the full list. */
     expireCursor(): void {

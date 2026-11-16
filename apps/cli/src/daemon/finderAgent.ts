@@ -1,6 +1,7 @@
 /*
- * The mount adapter for macOS. It runs the desktop app's Finder agent to read
- * which files Finder holds, and to have Finder hand a file's bytes back.
+ * The mount adapter for macOS. It runs the desktop app's Finder agent to
+ * remove Finder's copies of files, to read which files Finder holds, and to
+ * have Finder hand a file's bytes back.
  *
  * The agent is an executable the app ships in `Contents/MacOS`, where the
  * system lets it act on the app's File Provider domain, and the app records
@@ -21,13 +22,26 @@
  * Each call writes its answer to a file the daemon names rather than to
  * stdout, so a large answer never meets `execFile`'s output buffer limit.
  */
-import type { Mount, MountAdapter, MountChanges, ResendResult } from '@siastorage/core/adapters'
+import type {
+  DehydrateResult,
+  Mount,
+  MountAdapter,
+  MountChanges,
+  ResendResult,
+} from '@siastorage/core/adapters'
 import { logger } from '@siastorage/logger'
 import { execFile } from 'node:child_process'
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+/**
+ * A call evicts at most `MOUNT_DEHYDRATE_BATCH` items, `Evict.concurrency` at a
+ * time in the agent, each waiting a fixed time in fileproviderd however large
+ * the file is, so a full call ends far inside this. A timeout loses every
+ * result in the call.
+ */
+const EVICT_TIMEOUT_MS = 60_000
 const VERIFY_TIMEOUT_MS = 20_000
 /**
  * A full read of the materialized set takes time in proportion to the files
@@ -36,6 +50,17 @@ const VERIFY_TIMEOUT_MS = 20_000
 const WALK_TIMEOUT_MS = 5 * 60_000
 /** The code signing identifier the app's packaging gives the agent, after the app's bundle id. */
 const AGENT_IDENTIFIER_SUFFIX = '.finder-agent'
+
+/**
+ * The agent's eviction answers the core tells apart. `busy` (a process has
+ * the file open), `linked` (more than one hard link), `unsynced` (local edits
+ * not handed over yet) and `failed` all mean the file stays for now, which
+ * the core calls `busy`.
+ */
+const RESULTS: Readonly<Record<string, DehydrateResult>> = {
+  evicted: 'done',
+  refused: 'refused',
+}
 
 /** A resend only asks the system to schedule work, so it answers at once. */
 const RESEND_TIMEOUT_MS = 60_000
@@ -130,6 +155,19 @@ export function createFinderAgent(opts: { exec?: Run } = {}): MountAdapter {
   }
 
   return {
+    async dehydrate(mount: Mount, stackIds: string[], signal?: AbortSignal) {
+      if (stackIds.length === 0) return {}
+      return call(
+        mount,
+        'evict',
+        stackIds,
+        EVICT_TIMEOUT_MS,
+        signal,
+        parseEvictResults,
+        'Finder could not remove these downloads now',
+      )
+    },
+
     async resend(mount: Mount, stackIds: string[], signal?: AbortSignal) {
       if (stackIds.length === 0) return {}
       return call(
@@ -170,6 +208,26 @@ export function parseMaterialized(text: string): MountChanges {
     added: ids('added'),
     removed: ids('removed'),
   }
+}
+
+/**
+ * Reads the agent's `{ results: [{ id, result }] }`, dropping entries it
+ * cannot read. Any answer other than `evicted` or `refused` reads as `busy`,
+ * and the agent's own name for it goes to the log.
+ */
+export function parseEvictResults(text: string): Record<string, DehydrateResult> {
+  const parsed = JSON.parse(text) as { results?: unknown }
+  if (!Array.isArray(parsed.results)) throw new Error('The Finder agent wrote no results')
+  const results: Record<string, DehydrateResult> = {}
+  const kept: Record<string, number> = {}
+  for (const entry of parsed.results as { id?: unknown; result?: unknown }[]) {
+    if (typeof entry?.id === 'string' && typeof entry.result === 'string') {
+      results[entry.id] = RESULTS[entry.result] ?? 'busy'
+      if (!RESULTS[entry.result]) kept[entry.result] = (kept[entry.result] ?? 0) + 1
+    }
+  }
+  if (Object.keys(kept).length > 0) logger.info('finderAgent', 'evict_kept', kept)
+  return results
 }
 
 /** Reads the agent's `{ results: [{ id, result }] }` for a resend. */
