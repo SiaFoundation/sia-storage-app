@@ -58,7 +58,8 @@ Swift is here only where the OS requires it: the sandboxed extension, which
 cannot be Electron, and the helper bundle carrying the entitlement to add the
 Finder domain. A second copy of that helper sits bare in `Contents/MacOS`, with
 no entitlements, as the Finder agent the daemon runs to read which files
-Finder holds, since per-domain calls work only from a process whose main bundle is the app.
+Finder holds and have Finder hand a file's bytes back, since
+per-domain calls work only from a process whose main bundle is the app.
 New surface goes in TypeScript.
 
 ## Releases

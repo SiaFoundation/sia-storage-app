@@ -738,6 +738,55 @@ final class ContainerArgumentTests: XCTestCase {
     }
 }
 
+final class WriteResultTests: XCTestCase {
+    private func decode(_ extra: String) throws -> WriteResult {
+        let json = """
+            {"id":"f1","parentId":null,"name":"a.txt","kind":"file","mimeType":"text/plain",
+             "size":3,"createdAt":0,"modifiedAt":0,"contentVersion":"sha256:new",
+             "metadataVersion":"m","uploaded":true,"uploading":false,"downloaded":false,
+             "downloading":false,"progress":0\(extra)}
+            """
+        return try JSONDecoder().decode(WriteResult.self, from: Data(json.utf8))
+    }
+
+    func testAStaleWriteHasTheSystemFetchTheCurrentVersion() throws {
+        let result = try decode(#","stale":true"#)
+
+        XCTAssertTrue(result.stale)
+        XCTAssertEqual(result.item.contentVersion, "sha256:new")
+    }
+
+    func testAnOrdinarySaveFetchesNothing() throws {
+        let result = try decode("")
+
+        XCTAssertFalse(result.stale)
+        XCTAssertEqual(result.item.id, "f1")
+    }
+}
+
+final class WriteArgumentTests: XCTestCase {
+    func testAWritePassesTheContentVersionFinderStartedFrom() {
+        let base = NSFileProviderItemVersion(
+            contentVersion: Data("sha256:abc".utf8), metadataVersion: Data("m".utf8))
+
+        let args = FileProviderExtension.writeArgs("f1", "/handoff/stage/x", base: base)
+
+        XCTAssertEqual(args.count, 3)
+        XCTAssertEqual(args[0] as? String, "f1")
+        XCTAssertEqual(args[1] as? String, "/handoff/stage/x")
+        XCTAssertEqual(args[2] as? String, "sha256:abc")
+    }
+
+    func testAContentVersionThatIsNotTextIsPassedAsNull() {
+        let base = NSFileProviderItemVersion(
+            contentVersion: Data([0xFF, 0xFE]), metadataVersion: Data("m".utf8))
+
+        let args = FileProviderExtension.writeArgs("f1", "/handoff/stage/x", base: base)
+
+        XCTAssertTrue(args[2] is NSNull)
+    }
+}
+
 final class AvailabilityTests: XCTestCase {
     func testFirstFailureArmsTheGracePeriod() async {
         let availability = Availability(grace: 5)

@@ -268,6 +268,15 @@ export function buildDownloadsNamespace(
         // Cancelled while it waited for the lock. The adapter opens the file
         // for writing before it reads the signal, which would truncate it.
         if (controller.signal.aborted) return false
+        // Checked again under the lock: a copy Finder handed back can be
+        // adopted while this download waited for its slot, and the adapter's
+        // truncating open would destroy it.
+        if (
+          (await fsIO.size(fileId, file.type)).value === file.size &&
+          (await ops.readFsMeta(db, fileId))
+        ) {
+          return true
+        }
         await downloadObject.download({
           file: { id: fileId, type: file.type, size: file.size },
           object: objects[0],

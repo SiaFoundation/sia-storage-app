@@ -10,6 +10,7 @@ import { yieldToEventLoop } from '../lib/yieldToEventLoop'
 import type { FileRecord, ThumbSize } from '../types/files'
 import { ThumbSizes } from '../types/files'
 import { retypeFile } from './retypeFile'
+import { tidyCopies } from './localCopies'
 
 async function writeThumbnailToStorage(
   app: AppService,
@@ -628,6 +629,11 @@ export class ThumbnailScanner {
         total: summary.processedCandidates + summary.skippedErrorCooldown.length,
       })
       await this.logOverallProgress()
+      // A file added in the mount, the folder a file manager shows, keeps a
+      // cache copy after it uploads only for these thumbnails to be made
+      // from. With them made, that copy is a second copy.
+      const produced = [...new Set(summary.produced.map((p) => p.originalId))]
+      await tidyCopies(app, { fileIds: produced })
     } catch (e) {
       logger.error('thumbnailScanner', 'scan_error', { error: e as Error })
     }

@@ -125,6 +125,14 @@ export type ProviderProgress = {
   total: number | null
 }
 
+/**
+ * What a write answers: the file as it now is. `stale` is set when the bytes
+ * were the version the writer started from and the file has a newer one, so
+ * they were discarded. The writer's copy is then the older version, and the
+ * shell must have the system fetch the current one.
+ */
+export type ProviderWriteResult = ProviderItem & { stale?: true }
+
 /** Result of placing a file's bytes at a caller-supplied path. */
 export type ProviderFetchResult = {
   bytes: number

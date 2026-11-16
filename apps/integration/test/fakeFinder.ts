@@ -6,13 +6,14 @@
  * of each file opened or created in the folder, one version per file. It
  * takes a fetched file out of the handoff directory. It fetches a file again
  * when the library reports a new version of one it holds. It removes copies
- * on its own, and answers what a mount adapter asks: list what you hold.
+ * on its own, and answers the two things a mount adapter asks: list what you
+ * hold, hand these files back.
  *
  * Every call into the app goes through `app.provider`, as the extension's
  * calls do, so a test built on this takes the same paths the real one takes.
  */
-import type { MountAdapter, MountChanges } from '@siastorage/core/adapters'
-import type { ProviderItem } from '@siastorage/core/types'
+import type { MountAdapter, MountChanges, ResendResult } from '@siastorage/core/adapters'
+import type { ProviderItem, ProviderWriteResult } from '@siastorage/core/types'
 import * as nodeFs from 'fs'
 import * as path from 'path'
 import type { TestApp } from './app'
@@ -30,6 +31,10 @@ export function createFakeFinder(handoffDir: string) {
   let readableFrom = 0
   /** Ranges read of files not held whole. `served` marks each byte read so far. */
   const partial = new Map<string, { bytes: Buffer; served: Uint8Array; version: string }>()
+  /** Writes a resend started, which arrive on their own as the system's do. */
+  const resends: Promise<ProviderWriteResult>[] = []
+  /** While set, the writes a resend starts wait for it. */
+  let resendGate: Promise<void> | null = null
   let device: TestApp | null = null
 
   const app = () => {
@@ -67,6 +72,25 @@ export function createFakeFinder(handoffDir: string) {
   }
 
   const adapter: MountAdapter = {
+    async resend(_mount, stackIds) {
+      const results: Record<string, ResendResult> = {}
+      for (const id of stackIds) {
+        const copy = held.get(id)
+        results[id] = copy ? 'asked' : 'not-hydrated'
+        if (!copy) continue
+        // As the extension's modifyItem does, with the version Finder held as
+        // the base.
+        const gate = resendGate
+        resends.push(
+          (async () => {
+            await gate
+            return app().provider.write(id, stage(copy.bytes), copy.version)
+          })(),
+        )
+      }
+      return results
+    },
+
     async changes(_mount, cursor): Promise<MountChanges> {
       if (cursor === null || Number(cursor) < readableFrom) {
         return { cursor: String(seq), full: [...held.keys()] }
@@ -153,7 +177,7 @@ export function createFakeFinder(handoffDir: string) {
 
     /** Saves new bytes over a file in the folder. */
     async save(id: string, bytes: Buffer): Promise<ProviderItem> {
-      const item = await app().provider.write(id, stage(bytes))
+      const item = await app().provider.write(id, stage(bytes), held.get(id)?.version)
       keep(item.id, bytes, item.contentVersion)
       return item
     },
@@ -186,6 +210,26 @@ export function createFakeFinder(handoffDir: string) {
     async drop(id: string): Promise<void> {
       drop(id)
       await app().provider.mountChanged()
+    },
+
+    /**
+     * Holds the writes the next resends start until the returned function
+     * runs, as the system takes its own time to deliver them.
+     */
+    holdResends(): () => void {
+      let release!: () => void
+      resendGate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      return () => {
+        resendGate = null
+        release()
+      }
+    },
+
+    /** Waits for the writes a resend started, and returns what each answered. */
+    async settle(): Promise<ProviderWriteResult[]> {
+      return Promise.all(resends.splice(0))
     },
   }
 }

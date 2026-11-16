@@ -19,8 +19,9 @@ applyTo: 'packages/core/**'
   folder, recorded in `fs` with one row per version. The mount is the folder a file
   manager shows, where the operating system keeps its own copy, recorded in
   `mount_copies` with one row per file. A version waiting to upload is always in the
-  cache, since the uploader reads nothing else. Code that asks whether a file is on the
-  device reads both.
+  cache, since the uploader reads nothing else, and an uploaded version the mount holds
+  whole has no cache copy (`src/services/localCopies.ts`). Code that asks whether a file
+  is on the device reads both.
 - The Rust port in `crates/sia-storage-core` matches the SQLite schema and the indexer
   wire format byte for byte. A schema or encoding change here that is not mirrored
   there breaks cross-client sync.

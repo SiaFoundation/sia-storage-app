@@ -22,6 +22,7 @@ export type {
   ProviderItemKind,
   ProviderPage,
   ProviderProgress,
+  ProviderWriteResult,
 } from './provider'
 export {
   DIRECTORY_ID_PREFIX,

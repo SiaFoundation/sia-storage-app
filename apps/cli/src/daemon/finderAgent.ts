@@ -1,6 +1,6 @@
 /*
  * The mount adapter for macOS. It runs the desktop app's Finder agent to read
- * which files Finder holds.
+ * which files Finder holds, and to have Finder hand a file's bytes back.
  *
  * The agent is an executable the app ships in `Contents/MacOS`, where the
  * system lets it act on the app's File Provider domain, and the app records
@@ -21,7 +21,7 @@
  * Each call writes its answer to a file the daemon names rather than to
  * stdout, so a large answer never meets `execFile`'s output buffer limit.
  */
-import type { Mount, MountAdapter, MountChanges } from '@siastorage/core/adapters'
+import type { Mount, MountAdapter, MountChanges, ResendResult } from '@siastorage/core/adapters'
 import { logger } from '@siastorage/logger'
 import { execFile } from 'node:child_process'
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
@@ -36,6 +36,9 @@ const VERIFY_TIMEOUT_MS = 20_000
 const WALK_TIMEOUT_MS = 5 * 60_000
 /** The code signing identifier the app's packaging gives the agent, after the app's bundle id. */
 const AGENT_IDENTIFIER_SUFFIX = '.finder-agent'
+
+/** A resend only asks the system to schedule work, so it answers at once. */
+const RESEND_TIMEOUT_MS = 60_000
 
 type Run = (
   file: string,
@@ -127,6 +130,19 @@ export function createFinderAgent(opts: { exec?: Run } = {}): MountAdapter {
   }
 
   return {
+    async resend(mount: Mount, stackIds: string[], signal?: AbortSignal) {
+      if (stackIds.length === 0) return {}
+      return call(
+        mount,
+        'resend',
+        stackIds,
+        RESEND_TIMEOUT_MS,
+        signal,
+        parseResendResults,
+        'Finder could not hand these files back now',
+      )
+    },
+
     changes: (mount: Mount, cursor: string | null, signal?: AbortSignal) =>
       call(
         mount,
@@ -154,4 +170,18 @@ export function parseMaterialized(text: string): MountChanges {
     added: ids('added'),
     removed: ids('removed'),
   }
+}
+
+/** Reads the agent's `{ results: [{ id, result }] }` for a resend. */
+export function parseResendResults(text: string): Record<string, ResendResult> {
+  const parsed = JSON.parse(text) as { results?: unknown }
+  if (!Array.isArray(parsed.results)) throw new Error('The Finder agent wrote no results')
+  const results: Record<string, ResendResult> = {}
+  for (const entry of parsed.results as { id?: unknown; result?: unknown }[]) {
+    if (typeof entry?.id === 'string' && typeof entry.result === 'string') {
+      results[entry.id] =
+        entry.result === 'asked' || entry.result === 'not-hydrated' ? entry.result : 'failed'
+    }
+  }
+  return results
 }

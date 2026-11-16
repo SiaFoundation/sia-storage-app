@@ -29,6 +29,7 @@ import { retry } from '../lib/retry'
 import { SlotPool } from '../lib/slotPool'
 import { TransferSpeedTracker } from '../lib/transferSpeed'
 import { uploadPeakBytes } from './transferMemoryBudget'
+import { tidyCopies } from './localCopies'
 import { uniqueId } from '../lib/uniqueId'
 import type { FileRecordRow } from '../types/files'
 
@@ -1664,6 +1665,12 @@ export class UploadManager {
       this.app.uploads.removeMany(
         successfulFileIds.filter((id) => this.app.uploads.getEntry(id)?.batchId === batch.batchId),
       )
+      // A version now on the indexer needs no cache copy when the mount, the
+      // folder a file manager shows, holds it too. A file added there is in
+      // both until this point.
+      await tidyCopies(this.app, { fileIds: successfulFileIds }).catch((e) => {
+        logger.error('uploadManager', 'tidy_failed', { error: e as Error })
+      })
     }
 
     return successfulFileIds

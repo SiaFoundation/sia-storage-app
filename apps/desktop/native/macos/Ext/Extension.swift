@@ -532,7 +532,7 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
     }
 
     public func modifyItem(
-        _ item: NSFileProviderItem, baseVersion _: NSFileProviderItemVersion,
+        _ item: NSFileProviderItem, baseVersion: NSFileProviderItemVersion,
         changedFields: NSFileProviderItemFields, contents: URL?,
         options _: NSFileProviderModifyItemOptions = [], request _: NSFileProviderRequest,
         completionHandler: @escaping (
@@ -544,6 +544,10 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
             do {
                 try await ready()
                 var latest: ProviderItem?
+                // Set when the daemon kept none of the bytes because they were
+                // an older version, so the system fetches the current one
+                // rather than label its old copy with the new version.
+                var fetchContents = false
 
                 fpLog.debug(
                     "modify \(item.itemIdentifier.rawValue, privacy: .public) fields=\(changedFields.rawValue, privacy: .public)"
@@ -556,11 +560,13 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
                     }
                     let path = try handoff.stage(contents)
                     staged = path
-                    latest = try await rpc.callDecoding(
-                        ProviderItem.self, Channel.write,
-                        [item.itemIdentifier.rawValue, path],
+                    let written = try await rpc.callDecoding(
+                        WriteResult.self, Channel.write,
+                        Self.writeArgs(item.itemIdentifier.rawValue, path, base: baseVersion),
                         receiveTimeout: Rpc.transferTimeout)
                     staged = nil
+                    latest = written.item
+                    fetchContents = written.stale
                 }
                 if changedFields.contains(.filename) || changedFields.contains(.parentItemIdentifier)
                 {
@@ -592,7 +598,7 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
                     return
                 }
                 fpLog.debug("modify ok \(latest.id, privacy: .public)")
-                completionHandler(SiaItem(latest), [], false, nil)
+                completionHandler(SiaItem(latest), [], fetchContents, nil)
             } catch {
                 if let staged { handoff.discard(staged) }
                 fpLog.failure("modify failed", error)
@@ -624,6 +630,16 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
     /// The mount root has no row, so it is passed as null rather than by id.
     static func containerArg(_ identifier: NSFileProviderItemIdentifier) -> Any {
         identifier == .rootContainer ? NSNull() : identifier.rawValue
+    }
+
+    /// The arguments of a write. The base content version is the one Finder's
+    /// copy had before this change, which `SiaItem` set from the daemon's
+    /// content hash. Once the daemon has a newer version, bytes equal to this
+    /// base are a late hand-back of the older one, such as a resend after an
+    /// indexer change, and the daemon adds no version for them.
+    static func writeArgs(_ id: String, _ path: String, base: NSFileProviderItemVersion) -> [Any] {
+        let content: Any = String(data: base.contentVersion, encoding: .utf8) ?? NSNull()
+        return [id, path, content]
     }
 }
 

@@ -7,6 +7,8 @@ import type { StorageAdapter } from '../../adapters/storage'
 import type { ThumbnailAdapter } from '../../adapters/thumbnail'
 import type { FsIOAdapter } from '../../services/fsFileUri'
 import { LocalCopyLock } from '../../services/localCopyLock'
+import { tidyCopies } from '../../services/localCopies'
+import { type RestoreAsk, restoreFromMount } from '../../services/mountRestore'
 import { MountHint, syncMount } from '../../services/mountSync'
 import { type MemoryReader, TransferMemoryBudget } from '../../services/transferMemoryBudget'
 import type { UploaderAdapters, UploadManager } from '../../services/uploader'
@@ -296,6 +298,11 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       mountHint,
     }),
     mount: {
+      resend: async (stackIds, signal) => {
+        const mount = await settingsNamespace.getMount()
+        if (!mount || !adapters.mount) return null
+        return adapters.mount.resend(mount, stackIds, signal)
+      },
       changes: async (cursor, signal) => {
         const mount = await settingsNamespace.getMount()
         if (!mount || !adapters.mount) return null
@@ -348,10 +355,16 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     caches,
   }
 
+  // When each file the system was asked to hand back was asked for, and when
+  // it may be asked for again.
+  const restoreAsks = new Map<string, RestoreAsk>()
   const eviction = evictionRunner(
     (config, signal) => runCacheEviction(service, config, signal),
     () => configuredCacheEviction(service),
-    (signal) => syncMount(service, signal),
+    async (signal) => {
+      await syncMount(service, signal)
+      await tidyCopies(service, { signal })
+    },
   )
 
   const internal: AppServiceInternal = {
@@ -375,6 +388,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
       if (!adapters.mount || eviction.busy() || !mountHint.take(Date.now())) return
       await eviction.walk(signal)
     },
+    restoreFromMount: (signal) => restoreFromMount(service, restoreAsks, signal),
     stopEviction: () => eviction.stop(),
   }
 

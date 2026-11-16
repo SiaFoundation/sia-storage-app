@@ -894,6 +894,40 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     await getService().mountCopies.upsertWhole({ stackId, fileId, bytes, usedAt: Date.now() })
   }
 
+  /**
+   * Keeps bytes the system handed back as the cache copy of `row`, when they
+   * are its bytes and it needs them: it has no cache copy and no object on
+   * the current indexer, so the uploader could not otherwise send it
+   * (`mountRestore.ts`). Resolves true when the file at `stagedUri` was kept.
+   *
+   * Runs under the file's local copy lock, and gives up when something holds
+   * it. A download of the file opens its cache path with a truncating write
+   * once it has the lock, so bytes adopted outside it could be cut short or
+   * replaced, and the uploader would send what was left. The file is asked
+   * for again on a later restore pass if it still needs the bytes.
+   */
+  async function restoreCopy(
+    row: ProviderChangeRow,
+    stagedUri: string,
+    staged: { size: number; hash: string },
+  ): Promise<boolean> {
+    const adoptFile = fsIO.adoptFile?.bind(fsIO)
+    if (row.hash !== staged.hash || !(await mounted()) || !adoptFile) return false
+    const service = getService()
+    const restored = await deps.localCopyLock.tryRun(row.id, async () => {
+      if ((await service.fs.readMeta(row.id)) !== null) return false
+      const indexerURL = await service.settings.getIndexerURL()
+      if ((await service.localObjects.countForFileOnIndexer(row.id, indexerURL)) > 0) return false
+      await adoptFile({ id: row.id, type: row.type }, stagedUri, { hash: false })
+      const now = Date.now()
+      await service.fs.upsertMeta({ fileId: row.id, size: staged.size, addedAt: now, usedAt: now })
+      return true
+    })
+    if (!restored.ran || !restored.value) return false
+    await service.uploader.enqueueByIds([row.id])
+    return true
+  }
+
   /** Reads one item. Hoisted because other verbs read back through it. */
   async function item(id: string): Promise<ProviderItem | null> {
     const service = getService()
@@ -1109,8 +1143,8 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       if (await mounted()) {
         // Recorded as bytes handed over, not as a whole copy. The system can
         // give up on a fetch after the file was placed for it, so the row
-        // becomes whole only once the system lists the file among those it
-        // holds.
+        // becomes whole, and the cache copy goes, only once the system lists
+        // the file among those it holds.
         await getService().mountCopies.addRange({
           stackId: row.stackId,
           fileId,
@@ -1290,7 +1324,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
      * hash. A new row has no object yet, so the uploader's scan retries it
      * after a restart or a failed attempt, and the item reads as not uploaded.
      */
-    async write(id, srcPath) {
+    async write(id, srcPath, baseVersion) {
       const service = getService()
       const source = requireHandoffPath(srcPath)
       if (!fsIO.adoptFile) throw new Error('This host cannot take ownership of a file by path')
@@ -1304,6 +1338,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
           id: versionId,
           size: adopted.size,
           hash: adopted.hash,
+          base: baseVersion ?? undefined,
         })
       } catch (e) {
         // No row names the adopted bytes, and the daemon runs no orphan sweep,
@@ -1311,11 +1346,31 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
         await fsIO.remove(versionId, replaced.type).catch(() => {})
         throw e
       }
-      if (outcome !== 'added') {
+      if (outcome === 'stale') {
+        // A hand-back of the version Finder last had, arriving after another
+        // device's version replaced it, as a resend after an indexer change
+        // can. The bytes are that older version, so they are discarded, and
+        // `stale` has the shell tell macOS to fetch the current version. The
+        // mount row keeps naming the older version, which is what Finder
+        // holds until that fetch records the new one.
         await fsIO.remove(versionId, replaced.type)
+        const current = await item(id)
+        if (!current) throw new Error(`No file with id ${id}`)
+        return { ...current, stale: true }
+      }
+      if (outcome !== 'added') {
         // Apps often rewrite a file without changing it. A version per such
         // save would upload and bill the same bytes again.
         const current = outcome === 'unchanged' ? await ops.queryProviderItem(db, id) : null
+        const stagedUri = fsIO.uri(versionId, replaced.type)
+        const kept =
+          current !== null &&
+          (await restoreCopy(current, stagedUri, adopted).catch(async (e) => {
+            // As above: nothing else would ever remove the staged bytes.
+            await fsIO.remove(versionId, replaced.type).catch(() => {})
+            throw e
+          }))
+        if (!kept) await fsIO.remove(versionId, replaced.type)
         const unchanged = current ? await item(id) : null
         if (!current || !unchanged) throw new Error(`No file with id ${id}`)
         // The system holds exactly the bytes the current version has.
