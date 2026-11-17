@@ -216,6 +216,7 @@ export {
   queryObjectsForFile,
   queryObjectsForFiles,
   querySyncUpObjects,
+  queryVersionUploadState,
   type SyncUpObjectRow,
   upsertManyObjects,
 } from './localObjects'

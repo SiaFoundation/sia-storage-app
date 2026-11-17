@@ -542,9 +542,9 @@ function buildFileRecordsQuery(
 
   // Last, because SQLite checks these subquery terms in the order written,
   // and with thumbnails included and old versions excluded this one looks up
-  // each thumbnail's original. The upload poll and the waiting-to-upload
-  // counts scan every row, and the object and local-copy checks above are
-  // single index lookups that rule out most rows first.
+  // each thumbnail's original. The counts of current files waiting to upload
+  // scan every row, and the object and local-copy checks above are single
+  // index lookups that rule out most rows first.
   whereClauses.push(
     buildRecordFilter(tableAlias, {
       includeThumbnails,
@@ -1342,7 +1342,7 @@ export async function readFileByNameInUnfiled(
 export async function queryUnuploadedFileCount(db: DatabaseAdapter): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f
-     WHERE ${buildRecordFilter('f')}
+     WHERE ${buildRecordFilter('f', { includeOldVersions: true })}
        AND NOT EXISTS (SELECT 1 FROM objects o WHERE o.fileId = f.id)
        AND EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id)`,
   )
@@ -1353,15 +1353,15 @@ export async function queryUnuploadedFileCount(db: DatabaseAdapter): Promise<num
  * Total bytes of unuploaded local files. Drives the paced import throttle:
  * background-source copies defer when this pending-local total is high, and
  * the same total is subtracted from device free space. Same predicate as
- * `queryUnuploadedFileCount`. The fs EXISTS clause is what keeps the
- * throttle honest: it matches the uploader's own candidate filter, and a
- * file whose local bytes are gone (lost before upload) can never drain, so
- * counting it would pace imports against a backlog that never shrinks.
+ * `queryUnuploadedFileCount`. Older versions count, since the uploader sends
+ * those too. The fs EXISTS clause keeps the throttle honest: a file whose
+ * local bytes are gone (lost before upload) can never drain, so counting it
+ * would pace imports against a backlog that never shrinks.
  */
 export async function queryUnuploadedFileBytes(db: DatabaseAdapter): Promise<number> {
   const row = await db.getFirstAsync<{ totalBytes: number }>(
     `SELECT COALESCE(SUM(f.size), 0) as totalBytes FROM files f
-     WHERE ${buildRecordFilter('f')}
+     WHERE ${buildRecordFilter('f', { includeOldVersions: true })}
        AND NOT EXISTS (SELECT 1 FROM objects o WHERE o.fileId = f.id)
        AND EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id)`,
   )

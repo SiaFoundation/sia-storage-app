@@ -27,6 +27,38 @@ export async function queryObjectRefsForFile(
   return rows.map(localObjectRefFromStorageRow)
 }
 
+/**
+ * A version's object on one indexer, and whether it can still upload: it has
+ * a local copy and is not marked lost. One statement reads both, because an
+ * upload can finish and cache eviction drop the local copy between two
+ * separate reads, which would show a version with neither and no way to
+ * upload when it has an object.
+ */
+export async function queryVersionUploadState(
+  db: DatabaseAdapter,
+  fileId: string,
+  indexerURL: string,
+): Promise<{ ref: LocalObjectRef | undefined; canUpload: boolean } | null> {
+  const row = await db.getFirstAsync<
+    { [K in keyof LocalObjectRefRow]: LocalObjectRefRow[K] | null } & { canUpload: number }
+  >(
+    `SELECT o.id, o.fileId, o.indexerURL, o.createdAt, o.updatedAt,
+       (f.lostReason IS NULL AND EXISTS (SELECT 1 FROM fs WHERE fs.fileId = f.id)) AS canUpload
+     FROM files f
+     LEFT JOIN objects o ON o.fileId = f.id AND o.indexerURL = ?
+     WHERE f.id = ?
+     LIMIT 1`,
+    indexerURL,
+    fileId,
+  )
+  if (!row) return null
+  const { canUpload, ...ref } = row
+  return {
+    ref: ref.id === null ? undefined : localObjectRefFromStorageRow(ref as LocalObjectRefRow),
+    canUpload: canUpload === 1,
+  }
+}
+
 export async function queryObjectsForFile(
   db: DatabaseAdapter,
   fileId: string,

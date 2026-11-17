@@ -72,8 +72,9 @@ export function summarizeUploads(entries: UploadEntry[]): Uploads {
 
 /**
  * Files waiting to upload: queued, or on the device with no copy on the
- * network and not being sent. `filesNotUploaded` counts current, untrashed
- * files only, the ones the uploader takes, and includes the files in flight.
+ * network and not being sent. `filesNotUploaded` counts untrashed files the
+ * uploader takes, older versions included where the caller counts them, and
+ * includes the files in flight.
  * The two counts are read at different moments, so neither bounds the other.
  */
 export function filesWaitingToUpload(uploads: Uploads, filesNotUploaded: number): number {
