@@ -1,9 +1,9 @@
 import { defineScenario } from '../../src/scenario'
 
 export default defineScenario({
-  name: 'an eviction pass with no cache limit left keeps every file not yet uploaded',
+  name: 'an eviction pass with no hold time keeps every file not yet uploaded',
   description:
-    'The network holds the Mac’s uploads while it adds 5 files. With the cache limit at 0 and no minimum age, an eviction pass removes none of them, since their only copy is the Mac’s. Once uploads go through, the files reach the network.',
+    'The network holds the Mac’s uploads while it adds 5 files. With no hold time, an eviction pass removes none of them, since their only copy is the Mac’s. Once uploads go through, the files reach the network.',
   devices: { mac: 'cli' },
   async run({ devices, network, seed, converge, step, precondition, checkEqual }) {
     const mac = devices.mac
@@ -15,10 +15,7 @@ export default defineScenario({
       (await mac.library()).every((f) => !f.uploaded),
     )
 
-    await step('the cache limit is 0 with no minimum age', async () => {
-      await mac.cli('config', 'set', 'cacheMaxBytes', '0')
-      await mac.cli('config', 'set', 'cacheMinAge', '0')
-    })
+    await step('the hold time is 0', () => mac.cli('config', 'set', 'cacheMinAge', '0'))
     await step('one eviction pass runs', () => mac.call('cache.evict'))
 
     const cached = (await mac.sql<{ fileId: string }>('SELECT fileId FROM fs')).map((r) => r.fileId)

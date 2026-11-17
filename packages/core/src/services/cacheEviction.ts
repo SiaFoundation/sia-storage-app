@@ -5,12 +5,10 @@ import {
   FS_EVICTABLE_MIN_AGE,
   FS_EVICTABLE_MIN_AGE_NON_CURRENT,
   FS_EVICTION_THUMBNAIL_WAIT,
-  FS_MAX_BYTES,
 } from '../config'
 
 export type CacheEvictionConfig = {
-  maxBytes?: number
-  /** Age gate for the LRU cap-driven pass. Defaults to `FS_EVICTABLE_MIN_AGE`. */
+  /** How long an uploaded current file is kept after its last use. Defaults to `FS_EVICTABLE_MIN_AGE`. */
   minAge?: number
   /** Age gate for the non-current pre-pass. Defaults to `FS_EVICTABLE_MIN_AGE_NON_CURRENT`. */
   minAgeNonCurrent?: number
@@ -24,18 +22,14 @@ export type CacheEvictionConfig = {
 }
 
 /**
- * Evicts every local copy whose bytes are safely on the network, rather than
- * trimming back to the cap.
+ * Evicts every local copy whose bytes are safely on the network.
  *
- * The scheduled scan exists to hold the cache under `FS_MAX_BYTES`, so it skips
- * the LRU pass entirely while under that and spares anything used recently. A
- * user asking to clear local files is asking for neither gate: with no cap and
- * no age threshold, every backed-up file is a candidate, including one whose
- * thumbnails are not made yet. Local-only files are still kept, because that
- * guard lives in the queries rather than here.
+ * The scheduled pass spares a file used within the hold time and one whose
+ * thumbnails are not made yet. A user asking to clear local files is asking
+ * for neither, so every backed-up file is a candidate. Local-only files are
+ * still kept, because that guard lives in the queries rather than here.
  */
 export const EVICT_ALL_BACKED_UP: CacheEvictionConfig = {
-  maxBytes: 0,
   minAge: 0,
   minAgeNonCurrent: 0,
   thumbnailWait: 0,
@@ -61,13 +55,9 @@ function cursorAfter(rows: EvictionRow[]): EvictionCursor {
   return { usedAt: last.usedAt, fileId: last.fileId }
 }
 
-/** The cap and minimum age the user configured, for the scheduled pass. */
+/** The hold time the user configured, for the scheduled pass. */
 export async function configuredCacheEviction(app: AppService): Promise<CacheEvictionConfig> {
-  const [maxBytes, minAge] = await Promise.all([
-    app.settings.getCacheMaxBytes(),
-    app.settings.getCacheMinAge(),
-  ])
-  return { maxBytes: maxBytes ?? Number.POSITIVE_INFINITY, minAge }
+  return { minAge: await app.settings.getCacheMinAge() }
 }
 
 /**
@@ -143,9 +133,11 @@ export function evictionRunner(
  * Evicts cached files in three passes:
  *   1. Trashed pre-pass: uploaded files the user has trashed, no age gate.
  *   2. Non-current pre-pass: superseded versions past `minAgeNonCurrent`.
- *   3. LRU loop: oldest uploaded files past `minAge`, only while over `maxBytes`,
- *      skipping a file whose thumbnails are not made yet for up to
+ *   3. Unused pass: uploaded current files not used for `minAge`, oldest use
+ *      first, skipping a file whose thumbnails are not made yet for up to
  *      `thumbnailWait` after its copy was added.
+ * A pass removes every copy that qualifies, whatever the cache's size, so a
+ * copy stays only while it is in use, recently used, or not uploaded.
  * A current or trashed file is evicted only while it has an object on the
  * current indexer, read per batch and again before each removal. A superseded
  * version needs an object on any indexer, since the uploader never sends one.
@@ -159,7 +151,6 @@ export async function runCacheEviction(
   config?: CacheEvictionConfig,
   signal?: AbortSignal,
 ): Promise<CacheEvictionResult | undefined> {
-  const maxBytes = config?.maxBytes ?? FS_MAX_BYTES
   const minAge = config?.minAge ?? FS_EVICTABLE_MIN_AGE
   const minAgeNonCurrent = config?.minAgeNonCurrent ?? FS_EVICTABLE_MIN_AGE_NON_CURRENT
   const thumbnailWait = config?.thumbnailWait ?? FS_EVICTION_THUMBNAIL_WAIT
@@ -167,7 +158,7 @@ export async function runCacheEviction(
 
   const totalSize = await app.fs.calcTotalSize()
 
-  logger.info('cacheEviction', 'starting', { totalSize, limit: maxBytes })
+  logger.info('cacheEviction', 'starting', { totalSize, minAge })
 
   let currentSize = totalSize
   let processedRows = 0
@@ -177,11 +168,10 @@ export async function runCacheEviction(
 
   async function evictBatch(
     rows: EvictionRow[],
-    options?: { stopWhenUnderCap?: boolean; anyIndexer?: boolean },
+    options?: { anyIndexer?: boolean },
   ): Promise<void> {
     for (const { fileId, size, type } of rows) {
       if (signal?.aborted) return
-      if (options?.stopWhenUnderCap && currentSize <= maxBytes) return
       try {
         // The batch was read against the indexer current at the time. After a
         // switch since then, this file may have no object on the new one, and
@@ -223,8 +213,7 @@ export async function runCacheEviction(
   }
 
   // Pass 2: superseded file versions past the short grace. They can never
-  // become current again, so keeping them cached wastes space regardless of
-  // whether the cap is exceeded.
+  // become current again, so they wait only this grace rather than the hold.
   let afterNonCurrent: EvictionCursor | null = null
   while (!signal?.aborted) {
     const thresholdUsedAt = Date.now() - minAgeNonCurrent
@@ -240,9 +229,9 @@ export async function runCacheEviction(
     if (nonCurrent.length < batchSize) break
   }
 
-  // Pass 3: LRU while over cap.
+  // Pass 3: current files unused for the hold time.
   let afterCandidates: EvictionCursor | null = null
-  while (!signal?.aborted && currentSize > maxBytes) {
+  while (!signal?.aborted) {
     const thresholdUsedAt = Date.now() - minAge
     const candidates = await app.fs.evictionCandidates(
       await app.settings.getIndexerURL(),
@@ -255,7 +244,7 @@ export async function runCacheEviction(
     )
     if (candidates.length === 0) break
     afterCandidates = cursorAfter(candidates)
-    await evictBatch(candidates, { stopWhenUnderCap: true })
+    await evictBatch(candidates)
     processedRows += candidates.length
     if (candidates.length < batchSize) break
   }

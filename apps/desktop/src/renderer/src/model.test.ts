@@ -616,52 +616,51 @@ describe('the indexer the tray names', () => {
 
 const cache = (over: Partial<LocalCache>): LocalCache => ({
   bytes: 0,
-  maxBytes: 4_000_000_000,
   notUploadedBytes: 0,
   ...over,
 })
 
 describe('localCacheLabel', () => {
-  it('shows what the cache holds against its limit', () => {
-    expect(localCacheLabel(cache({ bytes: 1_200_000_000, maxBytes: 4_000_000_000 }))).toBe(
-      `${formatBytes(1_200_000_000)} of ${formatBytes(4_000_000_000)}`,
-    )
+  it('shows what the cache holds', () => {
+    expect(localCacheLabel(cache({ bytes: 1_200_000_000 }))).toBe(formatBytes(1_200_000_000))
   })
 
-  it('says when there is no limit', () => {
-    expect(localCacheLabel(cache({ bytes: 1_200_000_000, maxBytes: null }))).toBe(
-      `${formatBytes(1_200_000_000)}, no limit`,
-    )
-  })
-
-  it('shows a dash until both values have loaded', () => {
-    expect(localCacheLabel(cache({ bytes: null, maxBytes: 4_000_000_000 }))).toBe('-')
-    expect(localCacheLabel(cache({ bytes: 10, maxBytes: undefined }))).toBe('-')
+  it('shows a dash until the size has loaded', () => {
+    expect(localCacheLabel(cache({ bytes: null }))).toBe('-')
   })
 })
 
 describe('localCacheBreakdown', () => {
-  const over = { bytes: 36_000_000, maxBytes: 20_000_000 }
+  it('splits the cache into what has no backup and what was used recently', () => {
+    expect(localCacheBreakdown(cache({ bytes: 36_000_000, notUploadedBytes: 19_000_000 }))).toEqual(
+      [
+        { id: 'cache-not-backed-up', label: 'Not backed up', value: formatBytes(19_000_000) },
+        { id: 'cache-recently-used', label: 'Recently used', value: formatBytes(17_000_000) },
+      ],
+    )
+  })
 
-  it('splits a cache over its limit into what has no backup and what was used recently', () => {
-    expect(localCacheBreakdown(cache({ ...over, notUploadedBytes: 19_000_000 }))).toEqual([
-      { id: 'cache-not-backed-up', label: 'Not backed up', value: formatBytes(19_000_000) },
-      { id: 'cache-recently-used', label: 'Recently used', value: formatBytes(17_000_000) },
+  it('shows the split for a small cache too', () => {
+    expect(localCacheBreakdown(cache({ bytes: 1_000, notUploadedBytes: 400 }))).toEqual([
+      { id: 'cache-not-backed-up', label: 'Not backed up', value: formatBytes(400) },
+      { id: 'cache-recently-used', label: 'Recently used', value: formatBytes(600) },
     ])
   })
 
   it('leaves out a part that is empty', () => {
-    expect(localCacheBreakdown(cache(over)).map((l) => l.id)).toEqual(['cache-recently-used'])
+    expect(localCacheBreakdown(cache({ bytes: 36_000_000 })).map((l) => l.id)).toEqual([
+      'cache-recently-used',
+    ])
     expect(
-      localCacheBreakdown(cache({ ...over, notUploadedBytes: 36_000_000 })).map((l) => l.id),
+      localCacheBreakdown(cache({ bytes: 36_000_000, notUploadedBytes: 36_000_000 })).map(
+        (l) => l.id,
+      ),
     ).toEqual(['cache-not-backed-up'])
+    expect(localCacheBreakdown(cache({ bytes: 0 }))).toEqual([])
   })
 
-  it('shows nothing under the limit, with no limit, or while any value loads', () => {
-    expect(localCacheBreakdown(cache({ bytes: 1_000, notUploadedBytes: 500 }))).toEqual([])
-    expect(localCacheBreakdown(cache({ bytes: 9e12, maxBytes: null }))).toEqual([])
-    expect(localCacheBreakdown(cache({ ...over, bytes: null }))).toEqual([])
-    expect(localCacheBreakdown(cache({ ...over, notUploadedBytes: null }))).toEqual([])
-    expect(localCacheBreakdown(cache({ ...over, maxBytes: undefined }))).toEqual([])
+  it('shows nothing while either size loads', () => {
+    expect(localCacheBreakdown(cache({ bytes: null, notUploadedBytes: 5 }))).toEqual([])
+    expect(localCacheBreakdown(cache({ bytes: 5, notUploadedBytes: null }))).toEqual([])
   })
 })

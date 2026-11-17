@@ -31,24 +31,14 @@ afterEach(() => {
 })
 
 describe('cache settings over the daemon socket', () => {
-  it('defaults to a 4 GB cap and a one-hour minimum age', async () => {
-    expect(await call('ds:settings:getCacheMaxBytes')).toBe(4_000_000_000)
+  it('defaults to a one-hour hold and stores another', async () => {
     expect(await call('ds:settings:getCacheMinAge')).toBe(3_600_000)
+
+    await call('ds:settings:setCacheMinAge', 0)
+    expect(await call('ds:settings:getCacheMinAge')).toBe(0)
   })
 
-  it('stores a cap, and off reads back as no cap', async () => {
-    await call('ds:settings:setCacheMaxBytes', 10_000_000_000)
-    expect(await call('ds:settings:getCacheMaxBytes')).toBe(10_000_000_000)
-
-    await call('ds:settings:setCacheMaxBytes', null)
-    expect(await call('ds:settings:getCacheMaxBytes')).toBeNull()
-
-    await call('ds:settings:setCacheMaxBytes', 0)
-    expect(await call('ds:settings:getCacheMaxBytes')).toBe(0)
-  })
-
-  it('refuses a negative cap or age', async () => {
-    await expect(call('ds:settings:setCacheMaxBytes', -1)).rejects.toThrow(/0 or more/)
+  it('refuses a negative hold', async () => {
     await expect(call('ds:settings:setCacheMinAge', -1)).rejects.toThrow(/0 or more/)
   })
 })

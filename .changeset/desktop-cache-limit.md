@@ -3,4 +3,4 @@ desktop: minor
 cli: minor
 ---
 
-The files cached on this computer are kept under 4 GB by removing backed-up files that have not been used for an hour, and they download again when opened.
+Backed-up files cached on this computer are removed once they have gone an hour unused, and they download again when opened.

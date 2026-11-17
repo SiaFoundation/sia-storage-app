@@ -3,4 +3,4 @@ cli: minor
 desktop: minor
 ---
 
-`sia config set cacheMaxBytes` and `sia config set cacheMinAge` change how much the local cache may hold and how long a file must go unused before it can be removed, and the status window shows how much is cached against the limit, with how much of it hasn't uploaded yet and so stays until it does.
+`sia config set cacheMinAge` changes how long a file must go unused before its local copy is removed, and the status window shows how much is cached, with how much of it hasn't uploaded yet and so stays until it does.

@@ -948,11 +948,7 @@ export interface AppService {
     getMaxDownloads(): Promise<number>
     /** Sets the maximum concurrent download slots. */
     setMaxDownloads(value: number): Promise<void>
-    /** Returns the local cache cap in bytes, or null when the cap is off. */
-    getCacheMaxBytes(): Promise<number | null>
-    /** Sets the local cache cap in bytes, or turns it off with null. */
-    setCacheMaxBytes(value: number | null): Promise<void>
-    /** Returns how long a file must go unused before the cap may evict it, in ms. */
+    /** Returns how long an uploaded file must go unused before eviction removes its local copy, in ms. */
     getCacheMinAge(): Promise<number>
     /** Sets that minimum age in ms. */
     setCacheMinAge(value: number): Promise<void>
@@ -1236,14 +1232,14 @@ export interface AppService {
   /** The local file cache. */
   cache: {
     /**
-     * Runs one eviction pass now, with the configured cap and minimum age.
+     * Runs one eviction pass now, with the configured hold time.
      * While a pass is already running, resolves with that pass's result rather
      * than starting a second one.
      */
     evict(): Promise<CacheEvictionResult | undefined>
     /**
      * Removes the local copy of every file already uploaded to the current
-     * indexer, however recently used and whatever the cap, as Clear local
+     * indexer, however recently used, as Clear local
      * files does on mobile. Files not uploaded yet are kept. A scheduled pass
      * running at the time finishes first.
      */

@@ -39,7 +39,7 @@ export async function stopFsEvictionScanner(): Promise<void> {
  * rather than to eviction itself: iOS's background CPU budget, and a minimum
  * interval between runs, `minInterval` or an hour. `force` bypasses both.
  *
- * `config` replaces the cap and age thresholds the passes use; see
+ * `config` replaces the age thresholds the passes use; see
  * [runCacheEviction] for what each pass evicts. Files not yet uploaded are
  * never evicted.
  */
@@ -106,11 +106,10 @@ export async function runFsEvictionScanner(
 /**
  * Removes every local copy whose bytes are safely on the network.
  *
- * The scheduled scan exists to hold the cache under a cap and spares anything
- * recently used, so on a device below that cap it deletes almost nothing. A
- * user asking to clear local files wants neither gate. Files not yet uploaded
- * are still kept: that guard is in the eviction queries, not in the thresholds
- * dropped here.
+ * The scheduled scan spares anything used within the hold time, and a user
+ * asking to clear local files wants that gone too. Files not yet uploaded
+ * are still kept, because that guard is in the eviction queries, not in the
+ * thresholds dropped here.
  */
 export async function clearBackedUpFsFiles(
   opts: { signal?: AbortSignal } = {},
@@ -134,10 +133,10 @@ export async function clearBackedUpFsFiles(
  * never gets one. Imported copies are written with `usedAt` 0, so once
  * uploaded they are the first copies an eviction pass takes.
  *
- * Under storage pressure the importer stops copying until space frees, and
- * keeping the cache at its cap is no longer enough. The cap drops to zero, so
- * every uploaded original unused for the minimum age goes. That takes every
+ * Every uploaded original unused for the hold time goes, which takes every
  * imported copy nobody has opened and keeps what the user opened recently.
+ * Under storage pressure, where the importer stops copying until space frees,
+ * the pass uses the default hold even when settings hold files longer.
  * Thumbnails stay, because this pass never removes the thumbnail of a
  * current file, and an original waits until its thumbnails are made, for up
  * to a day.
@@ -148,7 +147,7 @@ export function evictDuringImport(opts: {
 }): Promise<CacheEvictionResult | undefined> {
   return runFsEvictionScanner({
     minInterval: FS_EVICTION_IMPORT_FREQUENCY,
-    config: opts.underStoragePressure ? { maxBytes: 0 } : undefined,
+    config: opts.underStoragePressure ? {} : undefined,
     signal: opts.signal,
   })
 }

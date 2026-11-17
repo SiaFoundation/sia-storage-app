@@ -6,7 +6,7 @@ const NAMES = ['one.bin', 'two.bin', 'three.bin']
 export default defineScenario({
   name: 'evicting the cache on the Mac leaves Finder its copies, and a save in Finder still reaches the laptop',
   description:
-    'Three files saved into the Finder folder upload. With the cache limit at 0 and no minimum age, an eviction pass removes the daemon’s copies, and Finder still holds and opens every file with its bytes without downloading. A file saved over in Finder afterwards reaches the laptop with the new bytes. The status window’s On this Mac row reads what is cached against the limit of 0.',
+    'Three files saved into the Finder folder upload. With no hold time, an eviction pass removes the daemon’s copies, and Finder still holds and opens every file with its bytes without downloading. A file saved over in Finder afterwards reaches the laptop with the new bytes. The status window’s On this Mac row shows what is cached with no limit beside it, and the copy of the new save under Recently used.',
   devices: { mac: 'desktop', laptop: 'cli' },
   timeoutMs: 8 * 60_000,
   async run({ devices, converge, step, precondition, check, checkEqual, waitFor }) {
@@ -28,10 +28,7 @@ export default defineScenario({
       ),
     )
 
-    await step('the cache limit is 0 with no minimum age', async () => {
-      await mac.cli('config', 'set', 'cacheMaxBytes', '0')
-      await mac.cli('config', 'set', 'cacheMinAge', '0')
-    })
+    await step('the hold time is 0', () => mac.cli('config', 'set', 'cacheMinAge', '0'))
     await step('one eviction pass runs', () => mac.call('cache.evict'))
 
     const ids = (await mac.library()).filter((f) => NAMES.includes(f.name)).map((f) => f.id)
@@ -52,6 +49,11 @@ export default defineScenario({
     }
     checkEqual('Finder opens every file with its bytes', wrong, [])
 
+    // A scheduled pass with no hold would take the copy of the save below
+    // before the status window reads it.
+    await step('the hold time goes back to an hour', () =>
+      mac.cli('config', 'set', 'cacheMinAge', '1h'),
+    )
     const edited = crypto.getRandomValues(new Uint8Array(32 * 1024))
     await step('one.bin is saved over in Finder', () => mac.finderWrite('one.bin', edited))
     await step('the laptop gets the new version', () =>
@@ -71,11 +73,10 @@ export default defineScenario({
     await step('both converge', () => converge())
 
     await step('the status window opens', () => mac.openWindow())
-    const row = await mac.ui().window('main').read({ id: 'on-this-mac' })
-    check(
-      'On this Mac reads the cache against its limit of 0',
-      /^.+ of 0 bytes$/.test(row ?? ''),
-      `${row}`,
-    )
+    const main = mac.ui().window('main')
+    const row = await main.read({ id: 'on-this-mac' })
+    check('On this Mac shows a size with no limit', /^[\d.,]+ \S+$/.test(row ?? ''), `${row}`)
+    const recent = await main.read({ id: 'cache-recently-used' })
+    check('On this Mac shows the saved copy as recently used', !!recent, `${recent}`)
   },
 })

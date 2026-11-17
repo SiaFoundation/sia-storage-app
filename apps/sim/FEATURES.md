@@ -224,8 +224,8 @@ bun sim device expect phone --label Menu
 - When: a file's bytes coming down to a device, download priority, how many
   downloads run at once and how much memory they hold, and freeing local
   copies.
-- Code: `app.downloads`, `app.fs`, `app.cache`; settings `cacheMaxBytes` and
-  `cacheMinAge`; services `cacheEviction`, `transferMemoryBudget`; CLI
+- Code: `app.downloads`, `app.fs`, `app.cache`; setting `cacheMinAge`, the
+  hold time after a file's last use; services `cacheEviction`, `transferMemoryBudget`; CLI
   `download`, `config`
 - Check: `call <device> downloads.getState`; `call <device> cache.evict` runs an
   eviction pass now, and `cache.clear` removes every backed-up copy, as Clear
@@ -233,17 +233,17 @@ bun sim device expect phone --label Menu
 - Tests: scenarios `mobile/clear-local-files-keeps-unuploaded`,
   `mobile/stray-copy-removed-on-resume`,
   `sync/converge-and-download`, `mobile/tapped-download-arrives`,
-  `sync/small-downloads-beside-large`, `finder/cache-limit-evicts`,
-  `finder/cache-limit-keeps-unuploaded`, `finder/cache-limit-concurrent-opens`,
-  `desktop/cache-limit-finder-keeps-copies`, `desktop/clear-local-files`;
+  `sync/small-downloads-beside-large`, `finder/cache-evicts-unused`,
+  `finder/cache-keeps-unuploaded`, `finder/cache-evicts-during-opens`,
+  `desktop/cache-evicts-finder-keeps-copies`, `desktop/clear-local-files`;
   integration `downloads`,
   `fs-eviction`, `fs-adopt`, `fs-orphan`, `size-reconcile`
 - Network: `net latency` adds a delay to every call and `net download-rate`
   shares one download speed between every download, the two costs that decide
   how downloads should be scheduled.
 - CLI: `bun sim sia laptop -- download {file}`, and
-  `bun sim sia laptop -- config set cacheMaxBytes 600KB` with
-  `config set cacheMinAge 0` to make a small cache evict at once
+  `bun sim sia laptop -- config set cacheMinAge 0` to make every uploaded copy
+  evict on the next pass
 - Desktop: `bun sim device download mac {file}` downloads a cloud-only file by
   reading it through Finder, and `bun sim device finder-state mac {file}` shows
   whether it is downloaded. Nothing in sim can evict a download: macOS answers

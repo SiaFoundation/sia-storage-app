@@ -75,39 +75,34 @@ export const folderCountLabel = (s: Status): string => s.folderCount.toLocaleStr
 export const librarySizeLabel = (s: Status): string =>
   s.libraryBytes > 0 ? formatBytes(s.libraryBytes) : '-'
 
-/** What the local cache holds against its limit. Null fields are still loading. */
+/** What the local cache holds. Null fields are still loading. */
 export type LocalCache = {
   bytes: number | null
-  maxBytes: number | null | undefined
   /**
    * Size of the local copies with no copy on the network yet, trashed files
-   * and older versions included. Eviction never removes these, so they can
-   * hold the cache over its limit.
+   * and older versions included. Eviction never removes these.
    */
   notUploadedBytes: number | null
 }
 
 export function localCacheLabel(cache: LocalCache): string {
-  if (cache.bytes === null || cache.maxBytes === undefined) return '-'
-  const held = formatBytes(cache.bytes)
-  return cache.maxBytes === null ? `${held}, no limit` : `${held} of ${formatBytes(cache.maxBytes)}`
+  return cache.bytes === null ? '-' : formatBytes(cache.bytes)
 }
 
 /** One labelled figure under the On this Mac row. */
 export type CacheLine = { id: string; label: string; value: string }
 
 /**
- * What holds the cache over its limit, as labelled figures under the On this
- * Mac row, shown only while it is over: the copies with no backup, which
- * eviction never removes, and the backed-up rest, which is there because it
- * was used within the minimum age and goes on a later pass. A file is used
- * when it is saved, opened or read for an upload, not only opened.
- * Thumbnails of current files count in the rest, though eviction keeps them.
+ * Why the cache holds what it does, as labelled figures under the On this
+ * Mac row: the copies with no backup, which eviction never removes, and the
+ * backed-up rest, which is there because it was used within the hold time
+ * and goes on a later pass. A file is used when it is saved, opened or read
+ * for an upload, not only opened. Thumbnails of current files count in the
+ * rest, though eviction keeps them. A part that is empty is left out.
  */
 export function localCacheBreakdown(cache: LocalCache): CacheLine[] {
-  const { bytes, maxBytes, notUploadedBytes } = cache
-  if (bytes === null || maxBytes === undefined || maxBytes === null) return []
-  if (notUploadedBytes === null || bytes <= maxBytes) return []
+  const { bytes, notUploadedBytes } = cache
+  if (bytes === null || notUploadedBytes === null) return []
   // The two sizes are read at different moments.
   const kept = Math.min(notUploadedBytes, bytes)
   const lines: CacheLine[] = []

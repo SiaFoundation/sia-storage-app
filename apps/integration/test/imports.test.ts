@@ -684,7 +684,7 @@ describe('Imports lifecycle (integration)', () => {
 
     // Default minimum age: only a copy whose use time is still the importer's
     // 0 is old enough to go.
-    const result = await runCacheEviction(app.app, { maxBytes: 0 })
+    const result = await runCacheEviction(app.app, {})
 
     expect(result?.evictedFileIds).toContain(fileId)
     expect(await app.app.fs.readMeta(fileId)).toBeNull()
@@ -714,7 +714,7 @@ describe('Imports lifecycle (integration)', () => {
     app.pause()
 
     expect((await app.app.fs.readMeta(fileId))?.usedAt).toBe(0)
-    const result = await runCacheEviction(app.app, { maxBytes: 0 })
+    const result = await runCacheEviction(app.app, {})
     expect(result?.evictedFileIds).toContain(fileId)
   }, 30_000)
 
@@ -754,13 +754,13 @@ describe('Imports lifecycle (integration)', () => {
     )
     app.pause()
 
-    const kept = await runCacheEviction(app.app, { maxBytes: 0 })
+    const kept = await runCacheEviction(app.app, {})
     expect(kept?.evictedFileIds ?? []).not.toContain(fileId)
 
     // A copy added more than a day ago no longer waits.
     const meta = await app.app.fs.readMeta(fileId)
     await app.app.fs.upsertMeta({ ...meta!, addedAt: Date.now() - FS_EVICTION_THUMBNAIL_WAIT - 1 })
-    const evicted = await runCacheEviction(app.app, { maxBytes: 0 })
+    const evicted = await runCacheEviction(app.app, {})
     expect(evicted?.evictedFileIds).toContain(fileId)
   }, 30_000)
 })

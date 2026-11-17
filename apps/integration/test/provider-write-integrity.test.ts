@@ -320,7 +320,7 @@ describe('Saving a file through the provider', () => {
         timeout: 30_000,
         message: 'the replaced version to finish uploading',
       })
-      await runCacheEviction(A.app, { maxBytes: Number.POSITIVE_INFINITY, minAgeNonCurrent: 0 })
+      await runCacheEviction(A.app, { minAgeNonCurrent: 0 })
 
       expect(await A.app.fs.getFileUri(replaced)).toBeNull()
       await waitForContent(B, id, Buffer.from('third'))
