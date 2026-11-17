@@ -108,7 +108,7 @@ describe('FS Cache Eviction', () => {
     app.setConnected(false)
     await app.app.files.trash([file.id])
 
-    const result = await runCacheEviction(app.app, { maxBytes: 10_000_000 })
+    const result = await runCacheEviction(app.app, {})
 
     expect(result!.evictedFileIds).not.toContain(file.id)
     expect(await app.app.fs.readMeta(file.id)).not.toBeNull()
@@ -126,7 +126,7 @@ describe('FS Cache Eviction', () => {
     // trashFile cascades trashedAt to the file AND every thumb where thumbForId = file.id.
     await app.app.files.trashFile(file.id)
 
-    const result = await runCacheEviction(app.app, { maxBytes: 10_000_000 })
+    const result = await runCacheEviction(app.app, {})
 
     expect(result!.evictedFileIds.sort()).toEqual([file.id, 'file-thumb'].sort())
     expect(await app.app.fs.readMeta(file.id)).toBeNull()
@@ -148,7 +148,6 @@ describe('FS Cache Eviction', () => {
     })
 
     const result = await runCacheEviction(app.app, {
-      maxBytes: 10_000_000,
       minAgeNonCurrent: NON_CURRENT_GRACE,
     })
 
@@ -164,7 +163,6 @@ describe('FS Cache Eviction', () => {
     // v1 is younger than the gate and must be kept.
 
     const result = await runCacheEviction(app.app, {
-      maxBytes: 10_000_000,
       minAgeNonCurrent: NON_CURRENT_GRACE,
     })
 
@@ -190,7 +188,6 @@ describe('FS Cache Eviction', () => {
     })
 
     const result = await runCacheEviction(app.app, {
-      maxBytes: 10_000_000,
       minAgeNonCurrent: NON_CURRENT_GRACE,
     })
 
@@ -213,7 +210,7 @@ describe('FS Cache Eviction', () => {
     }
     app.setConnected(false)
 
-    const result = await runCacheEviction(app.app, { maxBytes: 100, minAge: 0 })
+    const result = await runCacheEviction(app.app, { minAge: 0 })
 
     expect(result!.evictedFileIds).toHaveLength(0)
     for (const file of files) {
@@ -292,7 +289,6 @@ describe('FS Cache Eviction', () => {
     }
     const olderMeta = (await app.app.fs.readMeta(older.id))!
     await app.app.fs.upsertMeta({ ...olderMeta, usedAt: Date.now() - ONE_HOUR - 60_000 })
-    await app.app.settings.setCacheMaxBytes(0)
 
     const result = await app.app.cache.evict()
 
@@ -315,7 +311,7 @@ describe('FS Cache Eviction', () => {
     await app.addFiles(generateTestFiles(2, { startId: 1, sizeBytes: 2000 }))
     await app.waitForNoActiveUploads()
 
-    const result = await runCacheEviction(app.app, { maxBytes: 100, minAge: LRU_GRACE })
+    const result = await runCacheEviction(app.app, { minAge: LRU_GRACE })
 
     expect(result!.evictedFileIds).toHaveLength(0)
   }, 60_000)
@@ -338,8 +334,7 @@ describe('FS Cache Eviction', () => {
       usedAt: Date.now() - 8 * ONE_DAY,
     })
 
-    // Tight cap forces LRU to fire.
-    const result = await runCacheEviction(app.app, { maxBytes: 100, minAge: LRU_GRACE })
+    const result = await runCacheEviction(app.app, { minAge: LRU_GRACE })
 
     // The current file goes; its thumb stays even though it's stale and uploaded.
     expect(result!.evictedFileIds).toContain(file.id)
@@ -372,9 +367,7 @@ describe('FS Cache Eviction', () => {
       usedAt: Date.now() - 8 * ONE_DAY,
     })
 
-    // Tight cap so LRU fires after pre-passes have already removed 1000 bytes.
     const result = await runCacheEviction(app.app, {
-      maxBytes: 100,
       minAge: LRU_GRACE,
       minAgeNonCurrent: NON_CURRENT_GRACE,
     })
@@ -384,7 +377,7 @@ describe('FS Cache Eviction', () => {
     )
   }, 60_000)
 
-  it('LRU pass is skipped when cache is under cap; pre-passes still fire', async () => {
+  it('a current file unused past its hold is evicted however little the cache holds', async () => {
     const [trashFile] = await app.addFiles(generateTestFiles(1, { startId: 1, sizeBytes: 500 }))
     await app.waitForNoActiveUploads()
     await app.app.files.trashFile(trashFile.id)
@@ -399,7 +392,7 @@ describe('FS Cache Eviction', () => {
       usedAt: Date.now() - 2 * ONE_HOUR,
     })
 
-    // Stale current file — would be the oldest LRU candidate, but cap is generous.
+    // 1,500 bytes are cached in all, and the current file goes anyway.
     const [staleCurrentFile] = await app.addFiles(
       generateTestFiles(1, { startId: 3, sizeBytes: 500 }),
     )
@@ -412,22 +405,20 @@ describe('FS Cache Eviction', () => {
     })
 
     const result = await runCacheEviction(app.app, {
-      maxBytes: 10_000_000,
       minAge: LRU_GRACE,
       minAgeNonCurrent: NON_CURRENT_GRACE,
     })
 
     expect(result!.evictedFileIds).toContain(trashFile.id)
     expect(result!.evictedFileIds).toContain(superFile.id)
-    expect(result!.evictedFileIds).not.toContain(staleCurrentFile.id)
-    expect(await app.app.fs.readMeta(staleCurrentFile.id)).not.toBeNull()
+    expect(result!.evictedFileIds).toContain(staleCurrentFile.id)
+    expect(await app.app.fs.readMeta(staleCurrentFile.id)).toBeNull()
   }, 60_000)
 
   it('clearing on request evicts a backed-up file the scheduled scan would keep', async () => {
     const [file] = await app.addFiles(generateTestFiles(1, { startId: 1, sizeBytes: 500 }))
     await app.waitForNoActiveUploads()
-    // Recently used and well under any cap, so every gate the scheduled scan
-    // applies would spare this file.
+    // Used just now, so the scheduled scan's hold spares this file.
     await app.app.fs.upsertMeta({
       fileId: file.id,
       size: file.size,
@@ -435,7 +426,7 @@ describe('FS Cache Eviction', () => {
       usedAt: Date.now(),
     })
 
-    const scheduled = await runCacheEviction(app.app, { maxBytes: 10_000_000 })
+    const scheduled = await runCacheEviction(app.app, {})
     expect(scheduled!.evictedFileIds).not.toContain(file.id)
 
     const cleared = await runCacheEviction(app.app, EVICT_ALL_BACKED_UP)
@@ -481,7 +472,7 @@ describe('FS Cache Eviction', () => {
 
     const controller = new AbortController()
     controller.abort()
-    const result = await runCacheEviction(app.app, { maxBytes: 10_000_000 }, controller.signal)
+    const result = await runCacheEviction(app.app, {}, controller.signal)
 
     expect(result!.evictedFileIds).toHaveLength(0)
     for (const file of files) {

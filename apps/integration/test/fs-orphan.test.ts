@@ -122,7 +122,7 @@ describe('FS Orphan Scanner', () => {
 
     const meta = await app.app.fs.readMeta(file.id)
     expect(meta?.usedAt).toBe(0)
-    const evicted = await runCacheEviction(app.app, { maxBytes: 0 })
+    const evicted = await runCacheEviction(app.app, {})
     expect(evicted?.evictedFileIds).toContain(file.id)
   })
 

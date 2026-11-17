@@ -5,7 +5,7 @@ import { defineScenario } from '../../src/scenario'
 export default defineScenario({
   name: 'opening 25 files through Finder while eviction runs over and over returns every file whole',
   description:
-    'The phone adds 25 files and the Mac’s cache limit is 0 with no minimum age, so every pass tries to remove every copy the Mac holds. The Mac opens all 25 the way Finder does while eviction passes run back to back. Every open returns the bytes the phone added, because a pass skips a file while it downloads or while Finder exports it.',
+    'The phone adds 25 files and the Mac’s hold time is 0, so every pass tries to remove every copy the Mac holds. The Mac opens all 25 the way Finder does while eviction passes run back to back. Every open returns the bytes the phone added, because a pass skips a file while it downloads or while Finder exports it.',
   devices: { mac: 'cli', phone: 'cli' },
   async run({ devices, seed, converge, step, checkEqual }) {
     const mac = devices.mac
@@ -13,10 +13,7 @@ export default defineScenario({
       seed('phone', { count: 25, size: 128 * 1024 }),
     )
     await step('both converge', () => converge())
-    await step('the Mac’s cache limit is 0 with no minimum age', async () => {
-      await mac.cli('config', 'set', 'cacheMaxBytes', '0')
-      await mac.cli('config', 'set', 'cacheMinAge', '0')
-    })
+    await step('the Mac’s hold time is 0', () => mac.cli('config', 'set', 'cacheMinAge', '0'))
 
     let opening = true
     const evicting = (async () => {

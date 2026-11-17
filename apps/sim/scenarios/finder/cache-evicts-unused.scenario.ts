@@ -3,12 +3,11 @@ import { sha256 } from '../../src/integrity'
 import { defineScenario } from '../../src/scenario'
 
 const SIZE = 200_000
-const LIMIT = 600_000
 
 export default defineScenario({
-  name: 'the Mac holds its cache under the limit and opens an evicted file again with the same bytes',
+  name: 'the Mac frees every uploaded file nobody is using and opens an evicted file again with the same bytes',
   description:
-    'The Mac adds 10 files of 200 kB and uploads them. With the cache limit set to 600 kB and no minimum age, one eviction pass leaves at most 600 kB cached, removes the evicted files from disk, and keeps all 10 in the library. Opening each evicted file the way Finder does downloads it again with the bytes the Mac added.',
+    'The Mac adds 10 files of 200 kB and uploads them. With no hold time, one eviction pass removes every cached copy from the database and from disk, though 2 MB is far less than the Mac could hold, and keeps all 10 in the library. Opening each evicted file the way Finder does downloads it again with the bytes the Mac added.',
   devices: { mac: 'cli' },
   async run({ devices, seed, converge, step, precondition, check, checkEqual }) {
     const mac = devices.mac
@@ -18,21 +17,18 @@ export default defineScenario({
       return (await mac.library()).every((f) => f.uploaded)
     })
 
-    await step('the cache limit is 600 kB with no minimum age', async () => {
-      await mac.cli('config', 'set', 'cacheMaxBytes', '600KB')
-      await mac.cli('config', 'set', 'cacheMinAge', '0')
-    })
+    await step('the hold time is 0', () => mac.cli('config', 'set', 'cacheMinAge', '0'))
     await step('one eviction pass runs', () => mac.call('cache.evict'))
 
     const [{ total }] = await mac.sql<{ total: number }>(
       'SELECT COALESCE(SUM(size), 0) AS total FROM fs',
     )
-    check('the cache holds at most 600 kB', total <= LIMIT, `${total} bytes cached`)
     const cached = new Set(
       (await mac.sql<{ fileId: string }>('SELECT fileId FROM fs')).map((r) => r.fileId),
     )
     const evicted = files.filter((f) => !cached.has(f.id))
-    check('at least seven files were evicted', evicted.length >= 7, `${evicted.length} evicted`)
+    checkEqual('every one of the 10 files was evicted', evicted.length, 10)
+    check('no cached copy of the 10 is left', total < SIZE, `${total} bytes cached`)
     const leftOnDisk = []
     for (const f of evicted) {
       const [{ type }] = await mac.sql<{ type: string }>(

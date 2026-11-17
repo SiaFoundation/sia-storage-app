@@ -174,8 +174,6 @@ export const IMPORTS_CACHE_COALESCE_MS = secondsInMs(1) // 1 second
 export const THUMBNAIL_SCANNER_INTERVAL = secondsInMs(5) // 5 seconds
 // How often a File Provider host retries thumbnail downloads Finder failed to get.
 export const PROVIDER_THUMBNAIL_RETRY_INTERVAL = secondsInMs(30)
-// Maximum number of bytes to retain in the local file system before evicting.
-export const FS_MAX_BYTES = 4_000_000_000 // 4 GB
 // File system orphaned file cleanup frequency.
 export const FS_ORPHAN_FREQUENCY = daysInMs(1) // 1 day
 // A scheduled orphan scan keeps files whose fs row is younger than this.
@@ -190,17 +188,14 @@ export const BACKGROUND_TASK_STALL_LIMIT = minutesInMs(2) // 2 minutes
 export const FS_EVICTION_FREQUENCY = minutesInMs(60) // 60 minutes
 // Shortest gap between eviction passes a running mobile import asks for.
 export const FS_EVICTION_IMPORT_FREQUENCY = minutesInMs(1) // 1 minute
-// How often the CLI and desktop daemon runs its eviction pass. A pass under
-// the cap with no trashed or superseded copies to remove reads one sum and
-// runs the two pre-pass queries, so running it often costs little, and a
-// cache over the cap after a large upload comes back down within this long
-// of `FS_EVICTABLE_MIN_AGE` ending.
+// How often the CLI and desktop daemon runs its eviction pass. A pass with
+// nothing past its hold reads one sum and the three candidate queries and
+// removes nothing, so running it often costs little, and a copy goes within
+// this long of its `FS_EVICTABLE_MIN_AGE` hold ending.
 export const FS_EVICTION_FREQUENCY_DAEMON = minutesInMs(15)
-// The LRU pass's age threshold until `cacheMinAge` is set. On the Mac a file
-// Finder has saved or opened is read from Finder's own copy, so the daemon's
-// copy is read again only by `sia download` or after Finder drops its copy,
-// and a hold of a day kept the cache far over its cap for a day after a large
-// upload.
+// How long an uploaded file's local copy is kept after its last use, until
+// `cacheMinAge` is set. Eviction has no size limit, so every uploaded copy
+// unused this long goes on the next pass.
 export const FS_EVICTABLE_MIN_AGE = minutesInMs(60) // 1 hour
 // How often a read moves a file's usedAt, at most. Well under
 // `FS_EVICTABLE_MIN_AGE`, so a file read again within its hour is held from

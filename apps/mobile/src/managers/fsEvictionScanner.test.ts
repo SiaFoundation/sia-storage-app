@@ -18,8 +18,8 @@ jest.mock('@siastorage/core/config', () => {
 
 // Passed to each scan rather than mocked as the core's defaults: jest.setup
 // loads the app facade, and the eviction service with it, before this file's
-// mock is registered, so the service keeps the real FS_MAX_BYTES.
-const config = { maxBytes: 1_000, minAge: daysInMs(7) }
+// mock is registered, so the service keeps the real FS_EVICTABLE_MIN_AGE.
+const config = { minAge: daysInMs(7) }
 
 const now = 1_000_000_000
 const indexerURL = 'https://indexer.com'
@@ -38,7 +38,6 @@ describe('fsEvictionScanner', () => {
   })
 
   it('a scheduled pass removes a backed-up file once it has gone an hour unused, or the minimum age set in settings', async () => {
-    await app().settings.setCacheMaxBytes(0)
     await createRemoteFile({ id: 'old', size: 200, usedAt: now - 61 * 60_000 })
     await createRemoteFile({ id: 'recent', size: 200, usedAt: now - 59 * 60_000 })
 
@@ -51,7 +50,7 @@ describe('fsEvictionScanner', () => {
     expect(await app().fs.readMeta('within-two-hours')).not.toBeNull()
   })
 
-  it('does not evict current versions when total size is below limit', async () => {
+  it('evicts a current version unused past the hold however little the cache holds', async () => {
     await createRemoteFile({
       id: 'file-1',
       size: 200,
@@ -59,9 +58,9 @@ describe('fsEvictionScanner', () => {
     })
     const result = await runFsEvictionScanner({ config })
 
-    expect(await app().fs.readMeta('file-1')).toBeDefined()
+    expect(await app().fs.readMeta('file-1')).toBeNull()
     expect(Number(await app().storage.getItem('fsEvictionLastRun'))).toBe(now)
-    expect(result?.evictedFileIds ?? []).toHaveLength(0)
+    expect(result?.evictedFileIds).toEqual(['file-1'])
   })
 
   it('never evicts local-only files', async () => {
@@ -77,10 +76,9 @@ describe('fsEvictionScanner', () => {
     })
     const result = await runFsEvictionScanner({ config })
 
-    expect(await app().fs.readMeta('file-2')).toBeDefined()
-    expect(await app().fs.readMeta('file-3')).toBeDefined()
+    expect(await app().fs.readMeta('file-2')).not.toBeNull()
     expect(Number(await app().storage.getItem('fsEvictionLastRun'))).toBe(now)
-    expect(result?.evictedFileIds ?? []).toHaveLength(0)
+    expect(result?.evictedFileIds).toEqual(['file-3'])
   })
 
   it('evicts trashed uploaded files on the next pass regardless of age', async () => {
@@ -126,7 +124,7 @@ describe('fsEvictionScanner', () => {
     expect(result?.evictedFileIds).toEqual(['imported'])
   })
 
-  it('an import under storage pressure clears uploaded copies below the cap and keeps ones used recently', async () => {
+  it('an import under storage pressure clears uploaded copies unused for an hour and keeps ones used recently', async () => {
     await createRemoteFile({ id: 'imported', size: 200, usedAt: 0 })
     await createRemoteFile({ id: 'opened-today', size: 200, usedAt: now - 1_000 })
     await createLocalOnlyFile({ id: 'not-uploaded', size: 200, usedAt: 0 })
@@ -138,15 +136,18 @@ describe('fsEvictionScanner', () => {
     expect(await app().fs.readMeta('not-uploaded')).not.toBeNull()
   })
 
-  it('an import with room to spare leaves a cache below its cap alone', async () => {
-    // Settings outlive resetDb, so the cap an earlier test set would apply here.
-    await app().settings.setCacheMaxBytes(1_000)
-    await createRemoteFile({ id: 'imported', size: 200, usedAt: 0 })
+  it('an import holds files for the hold in settings, and for an hour under storage pressure', async () => {
+    // Older than an hour and younger than the hold set here.
+    await app().settings.setCacheMinAge(daysInMs(30))
+    await createRemoteFile({ id: 'imported', size: 200, usedAt: now - daysInMs(2) })
 
-    const result = await evictDuringImport({ underStoragePressure: false })
-
-    expect(result?.evictedFileIds).toEqual([])
+    const roomy = await evictDuringImport({ underStoragePressure: false })
+    expect(roomy?.evictedFileIds).toEqual([])
     expect(await app().fs.readMeta('imported')).not.toBeNull()
+
+    await app().storage.setItem('fsEvictionLastRun', '0')
+    const pressed = await evictDuringImport({ underStoragePressure: true })
+    expect(pressed?.evictedFileIds).toEqual(['imported'])
   })
 
   it('does not advance lastRun when aborted mid-scan', async () => {
@@ -238,7 +239,7 @@ describe('fsEvictionScanner', () => {
   it('stopping waits for a running pass to end before it resolves', async () => {
     await createRemoteFile({ id: 'file-1', size: 200, usedAt: now - daysInMs(30) })
     let settled = false
-    const inFlight = runFsEvictionScanner({ force: true, config: { maxBytes: 0 } }).then(() => {
+    const inFlight = runFsEvictionScanner({ force: true, config: { minAge: 0 } }).then(() => {
       settled = true
     })
 
@@ -257,7 +258,7 @@ describe('fsEvictionScanner', () => {
       }),
     )
     try {
-      const pending = runFsEvictionScanner({ config: { maxBytes: 0 } })
+      const pending = runFsEvictionScanner({ config: { minAge: 0 } })
       await stopFsEvictionScanner()
       resolveLastRun(0)
 

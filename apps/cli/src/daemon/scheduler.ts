@@ -86,7 +86,7 @@ export function initializeScheduler(app: CliApp): { scheduler: ServiceScheduler 
       worker: whenConnected(() => runPruneSlabs(app.service, app.internal)),
     },
     {
-      // The configured cap and age. When the Finder folder also holds a file,
+      // The configured hold time. When the Finder folder also holds a file,
       // its copy and ours share disk blocks, so removing ours frees space only
       // once Finder drops its copy.
       name: 'cacheEviction',

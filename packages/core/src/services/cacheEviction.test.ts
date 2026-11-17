@@ -104,7 +104,7 @@ describe('runCacheEviction', () => {
       return removedNow
     }
 
-    await runCacheEviction(app, { maxBytes: 0, minAge: 0 })
+    await runCacheEviction(app, { minAge: 0 })
 
     expect(removed).toEqual(['f000', 'f002'])
   })
@@ -118,7 +118,7 @@ describe('runCacheEviction', () => {
       locked: new Set(['f000']),
     })
 
-    const result = await runCacheEviction(app, { maxBytes: 0, minAge: 0 })
+    const result = await runCacheEviction(app, { minAge: 0 })
 
     expect(removed).toEqual(['f001', 'f002'])
     expect(result?.evicted).toBe(2)
@@ -134,7 +134,7 @@ describe('runCacheEviction', () => {
       failing: new Set(list.map((r) => r.fileId)),
     })
 
-    const result = await runCacheEviction(app, { maxBytes: 0, minAge: 0 })
+    const result = await runCacheEviction(app, { minAge: 0 })
 
     expect(attempts).toHaveLength(150)
     expect(new Set(attempts).size).toBe(150)
@@ -151,10 +151,9 @@ describe('runCacheEviction', () => {
       failing: new Set(stuck.map((r) => r.fileId)),
     })
 
-    // 160 files of 10 bytes are cached, so five must go to reach the cap.
-    await runCacheEviction(app, { maxBytes: 1_550, minAge: 0 })
+    await runCacheEviction(app, { minAge: 0 })
 
-    expect(removed).toEqual(good.slice(0, 5).map((r) => r.fileId))
+    expect(removed).toEqual(good.map((r) => r.fileId))
   })
 })
 
@@ -217,7 +216,7 @@ describe('evictionRunner stopping', () => {
 })
 
 describe('evictionRunner', () => {
-  const SCHEDULED: CacheEvictionConfig = { maxBytes: 4_000, minAge: 1_000 }
+  const SCHEDULED: CacheEvictionConfig = { minAge: 1_000 }
 
   /** A pass that runs until released, recording the config it ran with. */
   function heldPasses() {

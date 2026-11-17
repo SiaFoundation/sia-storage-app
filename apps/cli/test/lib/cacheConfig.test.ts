@@ -1,33 +1,4 @@
-import {
-  formatCacheAge,
-  formatCacheSize,
-  parseCacheAge,
-  parseCacheSize,
-} from '../../src/lib/cacheConfig'
-
-describe('cache size input', () => {
-  it('reads decimal units, plain bytes, zero and off', () => {
-    expect(parseCacheSize('10GB')).toBe(10_000_000_000)
-    expect(parseCacheSize('500MB')).toBe(500_000_000)
-    expect(parseCacheSize('1.5 gb')).toBe(1_500_000_000)
-    expect(parseCacheSize('4096')).toBe(4096)
-    expect(parseCacheSize('0')).toBe(0)
-    expect(parseCacheSize('off')).toBeNull()
-  })
-
-  it('rejects anything else', () => {
-    for (const input of ['abc', '10GiB', '-5GB', '', 'GB']) {
-      expect(parseCacheSize(input)).toBeUndefined()
-    }
-  })
-
-  it('prints the default as 4 GB and off as off', () => {
-    expect(formatCacheSize(4_000_000_000)).toBe('4 GB')
-    expect(formatCacheSize(1_500_000)).toBe('1.5 MB')
-    expect(formatCacheSize(0)).toBe('0 B')
-    expect(formatCacheSize(null)).toBe('off')
-  })
-})
+import { formatCacheAge, parseCacheAge } from '../../src/lib/cacheConfig'
 
 describe('cache age input', () => {
   it('reads seconds, minutes, hours, days and zero', () => {
