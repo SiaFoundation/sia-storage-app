@@ -716,6 +716,24 @@ export function buildDbNamespaces(
         await removeTombstoned(await ops.tombstoneTrash(db))
         return entries
       },
+      trashOlderVersions: async (indexerURL) => {
+        let count = 0
+        // Each batch commits on its own, so a batch failing after others
+        // committed still leaves their files trashed, and they leave the
+        // uploads store and the caches here before the error goes on.
+        try {
+          await ops.trashOlderVersions(db, indexerURL, Date.now(), async (ids) => {
+            count += ids.length
+            await dropUploads(ids)
+          })
+        } finally {
+          if (count > 0) {
+            invalidateLibraryAndFolders()
+            caches.shareLinks.invalidateAll()
+          }
+        }
+        return count
+      },
       autoPurgeWithCleanup: async () => {
         const total = await ops.autoPurgeOldTrashedFiles(db, async (batchIds) => {
           const files = await ops.readFilesByIds(db, batchIds)

@@ -1,5 +1,5 @@
 import type { DatabaseAdapter, SQLParam } from '../../adapters/db'
-import { TRASH_AUTO_PURGE_AGE } from '../../config'
+import { OLDER_VERSION_TRASH_AGE, TRASH_AUTO_PURGE_AGE } from '../../config'
 import { naturalSortKey } from '../../lib/naturalSortKey'
 import type { RestoredFile } from '../../types/files'
 import { processInBatches, transaction } from '../sql'
@@ -211,8 +211,14 @@ class FolderNames {
  * stamp would decide which one shows. Versions of their own file left out of
  * the trash do not count, since every version of a file carries its
  * `stackId`, and a file saved under the name after the whole file was trashed
- * starts a stack of its own. Each comes back just above its own `updatedAt`
- * from the trash, which is enough for other devices to take the change.
+ * starts a stack of its own.
+ *
+ * Restored versions are stamped from the time of the restore, or just above
+ * their own `updatedAt` from the trash when that is later, as when the row
+ * carries another device's later clock. A version comes back current over a
+ * version of its file saved after it was trashed, which is what the user
+ * restoring it asked for, and other devices take the change because the stamp
+ * is above the one they hold.
  */
 export async function restoreFilesAndThumbnails(
   db: DatabaseAdapter,
@@ -283,6 +289,19 @@ export async function restoreFilesAndThumbnails(
     const restored: RestoredFile[] = []
     for (const rows of ordered) {
       rows.sort((a, b) => b.updatedAt - a.updatedAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
+    }
+    // A stamp only above the trash's own would leave a version saved since
+    // the trash current, and the next older-version pass would trash the
+    // restored one again. Counting down from the latest trash keeps entries
+    // of one file restored together in the order they were trashed.
+    const bases = new Map<TrashedRow[], number>()
+    let next = Date.now()
+    for (const rows of [...ordered].reverse()) {
+      const base = Math.max(next, rows[0].updatedAt + rows.length)
+      bases.set(rows, base)
+      next = base - rows.length
+    }
+    for (const rows of ordered) {
       const { name: original, fromPath } = rows[0]
       const directoryId = folderIds.get(fromPath) ?? null
       const ownStacks = new Set(rows.map((r) => r.stackId))
@@ -292,8 +311,7 @@ export async function restoreFilesAndThumbnails(
       }
       names.claim(directoryId, name, ownStacks)
       const renamed = name !== original
-      // Each comes back just above its own `updatedAt`, in version order.
-      const base = rows[0].updatedAt + rows.length
+      const base = bases.get(rows) as number
       rows.forEach((row, i) =>
         writes.push({
           id: row.id,
@@ -403,6 +421,104 @@ export async function autoPurgeOldTrashedFiles(
       if (onBatch && ids.length > 0) await onBatch(ids)
     },
   )
+}
+
+/**
+ * Moves older versions to the trash a day after a newer version replaced
+ * them, so a file saved many times does not keep every version for good. The
+ * trash deletes them for good after TRASH_AUTO_PURGE_AGE like any other file,
+ * and until then a version can be restored, which makes it current again.
+ *
+ * Versions are ordered by (updatedAt, id), and a version qualifies once a
+ * newer live version of its stack has been on this device, unchanged, for
+ * OLDER_VERSION_TRASH_AGE: that version's `addedAt` and `updatedAt` are both
+ * older than the age, and so is this version's own `addedAt`. `updatedAt`
+ * alone is not enough, because a photo-library import sets it to the capture
+ * time, so a photo taken months ago and imported today would make the version
+ * it replaced qualify at once. `addedAt` is when the row reached this device,
+ * by a save, an import or sync-down, and is not synced, so each device counts
+ * the day from when it got the versions. A restore stamps `updatedAt` with
+ * the time of the restore and leaves `addedAt`, so `updatedAt` is what keeps
+ * the version a restore replaced for a day. Finding any one such newer
+ * version is enough, since this version has not been current here since that
+ * one arrived.
+ *
+ * The current version never qualifies. A version also needs an object on
+ * `indexerURL`, because one that has not uploaded has its local copy as the
+ * only copy, and the uploader still sends it. A version on a share link
+ * stays, since trashing takes a file off every link for good and a snapshot
+ * link shows that version.
+ *
+ * Every version trashed in one call shares one `trashedAt`, so the versions of
+ * one file make one trash entry. Each batch is read in the transaction that
+ * trashes it, so a version restored or made current since the last batch
+ * stays. `onBatch` gets each batch's ids once its transaction commits, so a
+ * caller can clean up after the batches that committed when a later one
+ * fails. Returns the ids trashed.
+ *
+ * Batches go newest first and share one count down of `updatedAt` stamps, so
+ * versions of one file split across two batches keep their order, which
+ * restore reads. The count starts at `now`, which is above every qualifying
+ * row's own clock: a qualifying row is older by `updatedAt` than a newer
+ * version whose `updatedAt` is older than OLDER_VERSION_TRASH_AGE.
+ */
+export async function trashOlderVersions(
+  db: DatabaseAdapter,
+  indexerURL: string,
+  now: number = Date.now(),
+  onBatch?: (ids: string[]) => Promise<void>,
+): Promise<string[]> {
+  const cutoff = now - OLDER_VERSION_TRASH_AGE
+  const trashed: string[] = []
+  let base = now
+  // Each batch reads idx_files_older_versions from just below the last row the
+  // one before it took, so rows a batch leaves, such as versions not uploaded
+  // yet, are not read again by every later batch. The first batch starts at
+  // the cutoff, since a qualifying row's `updatedAt` is at most its newer
+  // version's, which is at most the cutoff.
+  let after = { updatedAt: cutoff + 1, id: '' }
+  while (true) {
+    const rows = await transaction(db, async (tx) => {
+      const batch = await tx.getAllAsync<{ id: string; updatedAt: number }>(
+        `SELECT f.id, f.updatedAt FROM files f
+         WHERE f.kind = 'file' AND f.current = 0
+           AND f.trashedAt IS NULL AND f.deletedAt IS NULL
+           AND (f.updatedAt, f.id) < (?, ?)
+           AND f.addedAt <= ?
+           AND EXISTS (SELECT 1 FROM objects o WHERE o.fileId = f.id AND o.indexerURL = ?)
+           AND EXISTS (
+             SELECT 1 FROM files n
+             WHERE n.stackId = f.stackId AND n.kind = 'file'
+               AND n.trashedAt IS NULL AND n.deletedAt IS NULL
+               AND (n.updatedAt, n.id) > (f.updatedAt, f.id)
+               AND n.updatedAt <= ? AND n.addedAt <= ?)
+           AND NOT EXISTS (SELECT 1 FROM share_link_files s WHERE s.fileId = f.id)
+         ORDER BY f.updatedAt DESC, f.id DESC
+         LIMIT ?`,
+        after.updatedAt,
+        after.id,
+        cutoff,
+        indexerURL,
+        cutoff,
+        cutoff,
+        TOMBSTONE_BATCH,
+      )
+      if (batch.length > 0) {
+        await trashFilesAndThumbnails(
+          tx,
+          batch.map((r) => r.id),
+          { trashedAt: now, base },
+        )
+      }
+      return batch
+    })
+    base -= rows.length
+    const ids = rows.map((r) => r.id)
+    trashed.push(...ids)
+    if (ids.length > 0) await onBatch?.(ids)
+    if (rows.length < TOMBSTONE_BATCH) return trashed
+    after = rows[rows.length - 1]
+  }
 }
 
 /**

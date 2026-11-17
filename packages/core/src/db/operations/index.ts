@@ -304,4 +304,5 @@ export {
   tombstoneTrashEntries,
   type TrashEntryRow,
   trashFilesAndThumbnails,
+  trashOlderVersions,
 } from './trash'
