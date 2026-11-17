@@ -22,7 +22,8 @@ mobile app's source.
 ### Files and versions
 
 - When: adding, opening, renaming, moving, trashing, restoring and deleting
-  files, and the versions kept under one name.
+  files, and the versions kept under one name, which go to the trash a day
+  after a newer version replaces them once they have uploaded.
 - Code: `app.files`; screens `Library`, `Directory`, `UnavailableFiles`,
   `Trash`; desktop `TrashView`; CLI `add`, `mv`, `rm`, `ls`, `trash`
 - Check: tables `files`, `objects`; `bun sim library`
@@ -31,7 +32,7 @@ mobile app's source.
   `sync/offline-edits-survive-kill`, `sync/same-name-on-three-devices`,
   `sync/edits-during-own-upload`, `mobile/phone-and-laptop`, `desktop/trash`;
   integration `trash-restore`, `trash-versions`, `version-sync`,
-  `full-lifecycle`, `bulk-operations`
+  `older-version-trash`, `full-lifecycle`, `bulk-operations`
 - CLI: `bun sim sia laptop -- ls`, `bun sim sia laptop -- trash`,
   `bun sim sia laptop -- restore {file}`,
   `bun sim sia laptop -- mv {file} renamed.bin`,
