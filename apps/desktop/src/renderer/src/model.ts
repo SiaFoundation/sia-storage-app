@@ -19,6 +19,12 @@ export type Status = {
   fileCount: number
   /** Files on this Mac that have no copy on the network yet, uploading or waiting to. */
   filesNotUploaded: number
+  /**
+   * Older versions of files on this Mac with no copy on the network yet. A
+   * save replaced them before they uploaded, and the uploader still sends
+   * them. Not part of `fileCount` or `filesNotUploaded`.
+   */
+  olderVersionsNotUploaded: number
   folderCount: number
   libraryBytes: number
   uploads: Uploads
@@ -179,7 +185,9 @@ function syncingDown(s: Status): boolean {
   return s.syncingDown || s.syncGate === 'pending' || s.syncGate === 'active'
 }
 
-const waiting = (s: Status): number => filesWaitingToUpload(s.uploads, s.filesNotUploaded)
+const notUploaded = (s: Status): number => s.filesNotUploaded + s.olderVersionsNotUploaded
+
+const waiting = (s: Status): number => filesWaitingToUpload(s.uploads, notUploaded(s))
 
 function condition(s: Status): Condition {
   if (!s.shellKnown) return 'checking'
@@ -197,7 +205,7 @@ function condition(s: Status): Condition {
   if (s.uploads.active > 0) return 'uploading'
   // A failed entry can outlive its file's need to upload, so it counts only
   // while the library still has files waiting.
-  if (s.uploads.failedFiles > 0 && s.filesNotUploaded > 0) return 'upload-failed'
+  if (s.uploads.failedFiles > 0 && notUploaded(s) > 0) return 'upload-failed'
   if (s.uploads.queued > 0 || waiting(s) > 0) return 'queued'
   if (syncingDown(s)) return 'syncing-down'
   if (s.syncingUp) return 'syncing-up'

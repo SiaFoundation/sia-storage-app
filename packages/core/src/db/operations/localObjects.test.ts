@@ -9,7 +9,9 @@ import {
   queryObjectRefsForFiles,
   queryObjectsForFile,
   queryObjectsForFiles,
+  queryVersionUploadState,
 } from './localObjects'
+import { upsertFsMeta } from './fs'
 import { db, setupTestDb, teardownTestDb } from './test-setup'
 
 async function createTestFile(id: string, overrides?: Record<string, any>) {
@@ -188,5 +190,34 @@ describe('deleteManyObjectsForFiles', () => {
 
   it('handles empty array', async () => {
     await deleteManyObjectsForFiles(db(), [])
+  })
+})
+
+describe('queryVersionUploadState', () => {
+  it('reads the object on one indexer and whether a local copy can still upload', async () => {
+    await createTestFile('f1')
+    expect(await queryVersionUploadState(db(), 'f1', 'https://a.com')).toEqual({
+      ref: undefined,
+      canUpload: false,
+    })
+
+    await upsertFsMeta(db(), { fileId: 'f1', size: 100, addedAt: 1000, usedAt: 1000 })
+    expect(await queryVersionUploadState(db(), 'f1', 'https://a.com')).toEqual({
+      ref: undefined,
+      canUpload: true,
+    })
+
+    await insertObject(db(), makeLocalObject('f1', 'https://b.com', 'obj-b'))
+    await insertObject(db(), makeLocalObject('f1', 'https://a.com', 'obj-a'))
+    const state = await queryVersionUploadState(db(), 'f1', 'https://a.com')
+    expect(state?.ref?.id).toBe('obj-a')
+    expect(state?.canUpload).toBe(true)
+  })
+
+  it('reports a lost version as unable to upload, and null for a missing row', async () => {
+    await createTestFile('f1', { lostReason: 'gone' })
+    await upsertFsMeta(db(), { fileId: 'f1', size: 100, addedAt: 1000, usedAt: 1000 })
+    expect((await queryVersionUploadState(db(), 'f1', 'https://a.com'))?.canUpload).toBe(false)
+    expect(await queryVersionUploadState(db(), 'missing', 'https://a.com')).toBeNull()
   })
 })

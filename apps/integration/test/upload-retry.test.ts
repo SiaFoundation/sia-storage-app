@@ -191,20 +191,35 @@ describe('Upload retries', () => {
     }
   })
 
-  it('uploads an edit whose pin failed after another device saves a newer version over it', async () => {
-    const storage = createEmptyIndexerStorage()
-    const handoff = nodeFs.mkdtempSync(path.join(os.tmpdir(), 'retry-older-'))
+  describe('an edit on the Mac that another device replaces before it uploads', () => {
+    let handoff: string
+    let storage: MockIndexerStorage
+    let mac: ReturnType<typeof createTestApp>
+    let phone: ReturnType<typeof createTestApp>
     let staged = 0
     const stage = (text: string) => {
       const file = path.join(handoff, `staged-${++staged}`)
       nodeFs.writeFileSync(file, text)
       return file
     }
-    const mac = createTestApp(storage, { handoffDir: handoff })
-    const phone = createTestApp(storage, { handoffDir: handoff })
-    await mac.start()
-    await phone.start()
-    try {
+
+    beforeEach(async () => {
+      storage = createEmptyIndexerStorage()
+      handoff = nodeFs.mkdtempSync(path.join(os.tmpdir(), 'retry-older-'))
+      mac = createTestApp(storage, { handoffDir: handoff })
+      phone = createTestApp(storage, { handoffDir: handoff })
+      await mac.start()
+      await phone.start()
+    })
+
+    afterEach(async () => {
+      await phone.shutdown()
+      await mac.shutdown()
+      nodeFs.rmSync(handoff, { recursive: true, force: true })
+    })
+
+    /** Creates notes.txt on the Mac and waits until the phone has it. */
+    async function createShared(): Promise<string> {
       const created = await mac.app.provider.create(null, 'notes.txt', 'file', stage('one'))
       await mac.waitForCondition(
         async () => (await mac.readLocalObjectsForFile(created.id)).length > 0,
@@ -214,26 +229,39 @@ describe('Upload retries', () => {
         async () => (await phone.app.files.getVersionHistory('notes.txt', null)).length === 1,
         30_000,
       )
+      return created.id
+    }
 
+    /** Saves a newer version on the phone and waits until the Mac has it. */
+    async function phoneSavesOver(id: string, macEdit: string): Promise<void> {
+      await phone.app.provider.write(id, stage('phone edit'))
+      await mac.waitForCondition(async () => {
+        const versions = await mac.app.files.getVersionHistory('notes.txt', null)
+        return versions.length === 3 && versions[0].id !== macEdit
+      }, 30_000)
+    }
+
+    /** Waits until the phone's version history holds the Mac's edit. */
+    async function phoneHasVersion(macEdit: string): Promise<void> {
+      await phone.waitForCondition(async () => {
+        const versions = await phone.app.files.getVersionHistory('notes.txt', null)
+        return versions.some((v) => v.id === macEdit)
+      }, 30_000)
+    }
+
+    it('uploads it after its pin failed', async () => {
+      const id = await createShared()
       const pin = jest
         .spyOn(mac.sdk, 'pinObject')
         .mockRejectedValue(new Error('simulated network failure'))
-      await mac.app.provider.write(created.id, stage('mac edit'))
+      await mac.app.provider.write(id, stage('mac edit'))
       await mac.waitForCondition(() => pin.mock.calls.length > 0, 30_000)
       const [macEdit] = await mac.app.files.getVersionHistory('notes.txt', null)
 
-      // The phone's save is newer, so once it syncs down the Mac's edit is an
-      // older version, which the poll's query does not take.
-      await phone.app.provider.write(created.id, stage('phone edit'))
-      await mac.waitForCondition(async () => {
-        const versions = await mac.app.files.getVersionHistory('notes.txt', null)
-        return versions.length === 3 && versions[0].id !== macEdit.id
-      }, 30_000)
-      // Out of any batch, so only a retry that does not depend on the query
-      // can still upload it.
+      await phoneSavesOver(id, macEdit.id)
       await mac.waitForCondition(() => mac.getUploadState(macEdit.id)?.status === 'error', 30_000)
-      // Its next attempt fails at the add instead, which on its own would
-      // leave the file to the query.
+      // Its next attempt fails at the add instead, a failure of another kind
+      // than the first.
       let failAdd = true
       storage.beforeAdd = async (p) => {
         if (failAdd && p.includes(macEdit.id)) {
@@ -243,15 +271,57 @@ describe('Upload retries', () => {
       }
       pin.mockRestore()
 
-      await mac.waitForCondition(
-        async () => (await mac.readLocalObjectsForFile(macEdit.id)).length > 0,
-        30_000,
-      )
+      await phoneHasVersion(macEdit.id)
       expect(failAdd).toBe(false)
-    } finally {
-      await phone.shutdown()
-      await mac.shutdown()
-      nodeFs.rmSync(handoff, { recursive: true, force: true })
-    }
+    })
+
+    it('uploads it after its file could not be read, and shows it failed until then', async () => {
+      const id = await createShared()
+      // Every add the Mac makes from here is the edit's, and the phone shares
+      // this storage, so its adds are told apart by the Mac's directory.
+      const failing = { on: true, attempts: 0 }
+      storage.beforeAdd = async (p) => {
+        if (!failing.on || !p.startsWith(mac.tempDir)) return
+        failing.attempts += 1
+        throw new Error(`could not read ${p}`)
+      }
+      await mac.app.provider.write(id, stage('mac edit'))
+      const [macEdit] = await mac.app.files.getVersionHistory('notes.txt', null)
+      await mac.waitForCondition(() => failing.attempts > 0, 30_000)
+
+      await phoneSavesOver(id, macEdit.id)
+      // An attempt after the edit became an older version, which still fails
+      // and still shows.
+      const before = failing.attempts
+      await mac.waitForCondition(() => failing.attempts > before, 30_000)
+      await mac.waitForCondition(() => mac.getUploadState(macEdit.id)?.status === 'error', 30_000)
+      // Longer than a poll interval, so the poll's check for failed files it
+      // no longer takes has run.
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+      expect(mac.getUploadState(macEdit.id)?.status).toBe('error')
+
+      failing.on = false
+      await phoneHasVersion(macEdit.id)
+    })
+
+    it('uploads it after the uploader restarts with its upload still failing', async () => {
+      const id = await createShared()
+      const pin = jest
+        .spyOn(mac.sdk, 'pinObject')
+        .mockRejectedValue(new Error('simulated network failure'))
+      await mac.app.provider.write(id, stage('mac edit'))
+      await mac.waitForCondition(() => pin.mock.calls.length > 0, 30_000)
+      const [macEdit] = await mac.app.files.getVersionHistory('notes.txt', null)
+
+      // What the daemon runs on exit. The failed attempt and its retry are
+      // kept in memory only, so they go with it.
+      await mac.app.uploader.shutdown()
+      pin.mockRestore()
+      await phoneSavesOver(id, macEdit.id)
+      mac.internal.initUploader()
+
+      await phoneHasVersion(macEdit.id)
+      expect((await mac.readLocalObjectsForFile(macEdit.id)).length).toBeGreaterThan(0)
+    })
   })
 })

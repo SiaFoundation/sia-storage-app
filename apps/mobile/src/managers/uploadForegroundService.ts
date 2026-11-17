@@ -118,12 +118,7 @@ async function requestNotifications(): Promise<boolean> {
   return result === PermissionsAndroid.RESULTS.GRANTED
 }
 
-/**
- * Files and thumbnails waiting to upload, and those the uploader already
- * holds. The waiting count covers current versions only, and a file stops
- * being current mid-upload when a newer one with its name arrives in its
- * folder, so it would read as no work while the uploader is still sending it.
- */
+/** Files and thumbnails waiting to upload, older versions included, and those the uploader already holds. */
 async function pendingUploads(): Promise<{ waiting: number; uploading: number }> {
   return {
     waiting: (await getFileStatsLocal({ localOnly: true })).count,

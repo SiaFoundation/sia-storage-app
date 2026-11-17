@@ -67,6 +67,14 @@ async function objectIdOf(app: TestApp, fileId: string): Promise<string | undefi
   return file ? Object.values(file.objects)[0]?.id : undefined
 }
 
+async function waitForObject(app: TestApp, fileId: string): Promise<string> {
+  let id: string | undefined
+  await waitForCondition(async () => (id = await objectIdOf(app, fileId)) !== undefined, {
+    message: `${fileId} uploads`,
+  })
+  return id as string
+}
+
 describe('Share links', () => {
   let storage: MockIndexerStorage
   let appA: TestApp
@@ -180,7 +188,6 @@ describe('Share links', () => {
 
   it('trashing the version a link names takes the file off both kinds of link', async () => {
     await addFile(appA, 'v1', 'report.txt')
-    // Uploaded first, since the uploader skips a version replaced before its upload.
     await appA.waitForNoActiveUploads()
     await addFile(appA, 'v2', 'report.txt')
     await appA.app.files.moveFile('v1', (await appA.createDirectory('Trips')).id)
@@ -599,21 +606,51 @@ describe('Share links', () => {
       expect(attached(storage, link.publicKey)).toEqual([])
     }, 30_000)
 
-    it('takes the version saved over a file shared before it uploaded, since the replaced one never uploads', async () => {
+    it('shows the version a file was shared as when a newer one is saved over it before it uploads', async () => {
+      // The shared version fails to upload until the newer one has uploaded
+      // and the link has had passes in which it could take the newer one.
+      let failOld = true
+      storage.beforeAdd = async (p) => {
+        if (failOld && p.includes('snap-old')) throw new Error(`could not read ${p}`)
+      }
       await addFile(appA, 'snap-old', 'snap-race.txt')
       const link = await appA.app.shares.createLink(['snap-old'], SNAPSHOT)
       await addFile(appA, 'snap-new', 'snap-race.txt')
-      await appA.waitForNoActiveUploads()
-      const newObject = await objectIdOf(appA, 'snap-new')
+      await waitForObject(appA, 'snap-new')
+      await passes()
+      failOld = false
+      const oldObject = await waitForObject(appA, 'snap-old')
 
       await waitForCondition(
         () =>
           attached(storage, link.publicKey)
             ?.map((a) => a.objectId)
-            .join() === newObject,
+            .join() === oldObject,
+        { message: 'the version shared is on the snapshot' },
+      )
+      await passes()
+      expect(attached(storage, link.publicKey)?.map((a) => a.objectId)).toEqual([oldObject])
+    }, 30_000)
+
+    it('takes the version saved over a file shared before it uploaded once the shared one has lost its local copy', async () => {
+      // Offline, so the shared version does not upload before its copy goes.
+      appA.setConnected(false)
+      await addFile(appA, 'snap-lost', 'snap-lost.txt')
+      await appA.app.fs.removeFile({ id: 'snap-lost', type: 'text/plain' })
+      appA.setConnected(true)
+      const link = await appA.app.shares.createLink(['snap-lost'], SNAPSHOT)
+      await addFile(appA, 'snap-saved', 'snap-lost.txt')
+      await appA.waitForNoActiveUploads()
+      const savedObject = await waitForObject(appA, 'snap-saved')
+
+      await waitForCondition(
+        () =>
+          attached(storage, link.publicKey)
+            ?.map((a) => a.objectId)
+            .join() === savedObject,
         { message: 'the version that replaced it is on the snapshot' },
       )
-      expect(await objectIdOf(appA, 'snap-old')).toBeUndefined()
+      expect(await objectIdOf(appA, 'snap-lost')).toBeUndefined()
     }, 30_000)
 
     it('keeps the version a file was shared as when its first attach failed and a newer one uploaded since', async () => {
@@ -635,13 +672,17 @@ describe('Share links', () => {
       expect(attached(storage, link.publicKey)?.map((a) => a.objectId)).toEqual([keptObject])
     }, 30_000)
 
-    it('drops a file whose version never uploaded when the version replacing it is already on the link', async () => {
+    it('drops a file whose version can never upload when the version replacing it is already on the link', async () => {
       await addFile(appA, 'merge-other', 'merge-other.txt')
       await appA.waitForNoActiveUploads()
       // The pass is run by hand once the files are in place, so it cannot
       // take the replacing version before the rename puts it on the link.
       appA.pause()
+      // Offline, so merge-old does not upload before its local copy goes.
+      appA.setConnected(false)
       await addFile(appA, 'merge-old', 'merge.txt')
+      await appA.app.fs.removeFile({ id: 'merge-old', type: 'text/plain' })
+      appA.setConnected(true)
       const link = await appA.app.shares.createLink(['merge-old', 'merge-other'], SNAPSHOT)
       await addFile(appA, 'merge-new', 'merge.txt')
       await appA.waitForNoActiveUploads()
