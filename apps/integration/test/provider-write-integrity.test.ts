@@ -293,8 +293,8 @@ describe('Saving a file through the provider', () => {
 
       await save(id, v2)
 
-      // The uploader sends current versions only, so this copy could never
-      // reach the new indexer.
+      // An object on the previous indexer is enough to free the copy, so this
+      // version never reaches the new indexer.
       const [, replaced] = await A.app.files.getVersionHistory('switched.txt', null)
       expect(await A.app.fs.getFileUri(replaced)).toBeNull()
     })

@@ -351,10 +351,13 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
   ): Promise<boolean> {
     let row = await ops.queryFileById(db, file.fileId)
     let ref = row ? await uploadedRef(indexerURL, row.id) : undefined
-    // The uploader skips a version that a newer one replaced before it was
-    // uploaded, so that version never gets an object. The link takes the
-    // version that replaced it rather than waiting on it for good.
-    if (!ref && file.state === 'pending' && current.id !== file.fileId) {
+    // A version with no object and no local copy, or one marked lost, can
+    // never upload. The link takes the version that replaced it rather than
+    // waiting on it for good. A version replaced before it uploaded still
+    // uploads from its local copy, and the link waits for it.
+    const canUpload = async () =>
+      row != null && row.lostReason == null && (await ops.readFsMeta(db, row.id)) != null
+    if (!ref && file.state === 'pending' && current.id !== file.fileId && !(await canUpload())) {
       // Another file on the link already names that version, after a rename
       // merged the two stacks. Moving this row onto it would collide on the
       // table's key and fail every pass, so this row goes instead.

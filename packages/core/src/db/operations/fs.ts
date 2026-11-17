@@ -161,9 +161,9 @@ export async function queryEvictionCandidates(
 // belong to them (matched via thumbForId). Current files' thumbs are never
 // included here — only thumbs whose parent is itself non-current.
 //
-// An object on any indexer is enough. The uploader sends current versions
-// only, so a superseded version's copy never reaches a newer indexer, and
-// keeping it after an indexer switch would hold the space for good.
+// An object on any indexer is enough. A superseded version already on an
+// earlier indexer is not worth holding this copy for until the uploader sends
+// it to the current one, which after an indexer switch is every such version.
 export async function queryNonCurrentCachedFiles(
   db: DatabaseAdapter,
   thresholdUsedAt: number,

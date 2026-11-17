@@ -185,9 +185,28 @@ function useNotUploaded() {
 }
 
 /**
+ * The same count over every version, less the current ones `useNotUploaded`
+ * counts, which leaves the older versions still to upload.
+ */
+function useOlderVersionsNotUploaded(currentNotUploaded: number | undefined): number {
+  const app = useApp()
+  const { data } = useSWR(app.caches.library.key('notUploadedAllVersions'), async () => {
+    const indexerURL = await app.settings.getIndexerURL()
+    return app.files.queryCount({
+      order: 'ASC',
+      pinned: { indexerURL, isPinned: false },
+      fileExistsLocally: true,
+      includeOldVersions: true,
+    })
+  })
+  // Read at different moments, so the difference can briefly go below zero.
+  return Math.max((data ?? 0) - (currentNotUploaded ?? 0), 0)
+}
+
+/**
  * Size of the local copies eviction keeps because they have no backup it
- * accepts. A trashed file or an older version that never uploaded counts,
- * though neither is waiting to upload.
+ * accepts. A trashed file that never uploaded counts, though it is not
+ * waiting to upload.
  */
 function useNotBackedUpBytes() {
   const app = useApp()
@@ -238,11 +257,13 @@ export function useStatus({ watch = false }: { watch?: boolean } = {}): Status {
   const sync = useSyncState()
   const { uploads, storageFull } = useUploads()
   const filesNotUploaded = useNotUploaded()?.count ?? 0
+  const olderVersionsNotUploaded = useOlderVersionsNotUploaded(filesNotUploaded)
   const shell = useShell(watch)
 
   return {
     fileCount: files.data ?? 0,
     filesNotUploaded,
+    olderVersionsNotUploaded,
     folderCount,
     libraryBytes: stats.data?.totalBytes ?? 0,
     uploads,

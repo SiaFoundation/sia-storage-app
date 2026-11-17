@@ -102,7 +102,7 @@ describe('Uploads while the account is full', () => {
     expect(added).toHaveLength(3)
   })
 
-  it('counts no failed file once a version that failed to upload is replaced', async () => {
+  it('counts no failed file once a version that failed to upload is replaced and both upload', async () => {
     let failing = true
     storage.beforeAdd = async (p) => {
       if (failing) throw new Error(`could not read ${p}`)
@@ -117,11 +117,11 @@ describe('Uploads while the account is full', () => {
     const { newest } = await newestVersion('notes.txt')
     await uploaded(newest.id)
 
+    await uploaded(created.id)
     await app.waitForCondition(() => summary().failedFiles === 0)
-    expect(app.getUploadState(created.id)).toBeUndefined()
   })
 
-  it('counts no failed file once another device saves a newer version over one that failed to upload', async () => {
+  it('still counts a version that cannot be read as failed after another device saves a newer version over it', async () => {
     const other = createTestApp(storage, { handoffDir: handoff })
     storage.beforeAdd = async (p) => {
       if (p.startsWith(app.tempDir)) throw new Error(`could not read ${p}`)
@@ -138,8 +138,11 @@ describe('Uploads while the account is full', () => {
         return newest.id !== created.id
       }, 30_000)
 
-      await app.waitForCondition(() => summary().failedFiles === 0, 30_000)
-      expect(app.getUploadState(created.id)).toBeUndefined()
+      // Longer than a poll interval, so the poll's check for failed files it
+      // no longer takes has run.
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+      expect(app.getUploadState(created.id)?.status).toBe('error')
+      expect(summary().failedFiles).toBe(1)
     } finally {
       await other.shutdown()
     }

@@ -98,6 +98,10 @@ export async function getFileStatsLocal(params: {
     },
     fileExistsLocally: true,
     includeThumbnails: params.includeThumbnails ?? true,
+    // The uploader sends an older version that has never uploaded, so the
+    // count of work still to upload takes those in. Copies already uploaded
+    // count the current versions the library shows.
+    includeOldVersions: params.localOnly,
   })
 }
 

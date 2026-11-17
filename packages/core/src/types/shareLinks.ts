@@ -34,7 +34,7 @@ export type ShareLinkFile = ShareFile & {
    * The version the link shows. On a `latest` link that is the current
    * version while the file has one, else the version it was shared as. On a
    * `snapshot` link it is the version it was shared as, or the one saved
-   * over it if that one never uploaded.
+   * over it if that one can never upload, having no object and no local copy.
    */
   fileId: string
   state: ShareLinkFileState

@@ -30,6 +30,7 @@ function status(over: Partial<Status> = {}): Status {
   return {
     fileCount: 10,
     filesNotUploaded: 0,
+    olderVersionsNotUploaded: 0,
     folderCount: 2,
     libraryBytes: 1000,
     uploads: NO_UPLOADS,
@@ -170,6 +171,17 @@ describe('what the status line says', () => {
 
   it('ignores a failed entry once the library has no file left to upload', () => {
     expect(activity(status({ uploads: uploads({ failedFiles: 1 }) }))).toBe('Up to date')
+  })
+
+  it('says an older version that failed could not upload, while every current file has', () => {
+    const s = status({ olderVersionsNotUploaded: 1, uploads: uploads({ failedFiles: 1 }) })
+
+    expect(activity(s)).toBe('1 file could not upload')
+    expect(uploadsRow(s)).toEqual({ done: true, label: 'All files uploaded' })
+  })
+
+  it('counts an older version still to upload as waiting', () => {
+    expect(activity(status({ olderVersionsNotUploaded: 2 }))).toBe('Waiting to upload 2 files')
   })
 
   it('calls a sync-down a metadata sync, not a download', () => {

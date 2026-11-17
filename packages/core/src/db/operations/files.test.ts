@@ -22,6 +22,7 @@ import {
   queryLostFiles,
   queryRecentFiles,
   queryUnuploadedFileBytes,
+  queryUnuploadedFileCount,
   readFile,
   readFileWithObjects,
   readFilesByIds,
@@ -867,6 +868,17 @@ describe('queryUnuploadedFileBytes', () => {
     await seedLocalBytes('uploaded-1', 100)
     await insertObject(db(), makeLocalObject('uploaded-1'))
     expect(await queryUnuploadedFileBytes(db())).toBe(0)
+  })
+
+  it('counts an older version a newer one replaced before it uploaded', async () => {
+    await insertFile(db(), makeFileRecord('v1', { name: 'notes.txt', size: 200, updatedAt: 1000 }))
+    await seedLocalBytes('v1', 200)
+    await insertFile(db(), makeFileRecord('v2', { name: 'notes.txt', size: 300, updatedAt: 2000 }))
+    await seedLocalBytes('v2', 300)
+    await insertObject(db(), makeLocalObject('v2'))
+
+    expect(await queryUnuploadedFileBytes(db())).toBe(200)
+    expect(await queryUnuploadedFileCount(db())).toBe(1)
   })
 })
 
