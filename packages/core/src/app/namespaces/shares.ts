@@ -10,6 +10,7 @@ export function buildSharesNamespace(
   getIndexerURL: () => Promise<string>,
   getAppKeyBytes: (indexerURL: string) => Promise<Uint8Array | null>,
   invalidateLinks: () => void,
+  trashOlderVersions: (indexerURL: string) => Promise<number>,
 ): AppService['shares'] {
   function requireSdk(): SdkAdapter {
     const sdk = getSdk()
@@ -28,6 +29,7 @@ export function buildSharesNamespace(
     requireSdk,
     getIndexerURL,
     invalidate: invalidateLinks,
+    trashOlderVersions,
   })
 
   return {

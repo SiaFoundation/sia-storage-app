@@ -118,6 +118,9 @@ export async function generateDataset(
       const groupName = versions === 1 ? `file-${fileIndex}.jpg` : `vgroup-${versions}v-${g}.pdf`
       const dirSlot = g % 55
       const dirId = dirSlot < dirIds.length ? dirIds[dirSlot] : null
+      // Set here because the insert trigger joins a row only to a current
+      // version of its name, and each group's current version comes last.
+      const stackId = `f-${fileIndex}`
 
       for (let v = 0; v < versions; v++) {
         const id = `f-${fileIndex}`
@@ -146,6 +149,7 @@ export async function generateDataset(
           deletedAt: null,
           lostReason: null,
           current: isCurrent,
+          stackId,
         })
 
         // 80% get objects

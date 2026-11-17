@@ -243,6 +243,10 @@ export const SHARED_FILE_AUTO_DOWNLOAD_THRESHOLD = 5 * 1024 * 1024 // 5 MB
 export const TRASH_AUTO_PURGE_AGE = daysInMs(30) // 30 days
 // How often to check for trashed files to auto-purge.
 export const TRASH_AUTO_PURGE_INTERVAL = minutesInMs(60) // 60 minutes
+// An older version goes to the trash once it has been replaced on this device for this long.
+export const OLDER_VERSION_TRASH_AGE = daysInMs(1) // 1 day
+// How often a share-link pass that succeeded goes on to trash older versions.
+export const OLDER_VERSION_TRASH_INTERVAL = minutesInMs(60)
 // How often to prune unreferenced slabs. Pruning is a slow indexer operation,
 // and even a no-op call runs a scan server-side, so keep the cadence slow.
 export const PRUNE_SLABS_INTERVAL = daysInMs(1)

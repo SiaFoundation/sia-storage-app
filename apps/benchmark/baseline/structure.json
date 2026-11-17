@@ -429,6 +429,103 @@
           }
         ]
       },
+      "trashOlderVersions:nothingDue": {
+        "reads": 2,
+        "writes": 0,
+        "execs": 0,
+        "result": "rows: 0",
+        "plans": [
+          {
+            "sql": "SELECT updatedAt FROM files WHERE kind = 'file' ORDER BY updatedAt LIMIT 1 OFFSET (SELECT CAST(count(*) * ? AS INTEGER) FROM files WHERE kind = 'file')",
+            "plan": [
+              "SCALAR SUBQUERY 1",
+              "SEARCH files USING COVERING INDEX idx_files_kind (kind=?)",
+              "SCAN files USING INDEX idx_files_updatedAt_id"
+            ]
+          },
+          {
+            "sql": "SELECT f.id, f.updatedAt FROM files f WHERE f.kind = 'file' AND f.current = 0 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND (f.updatedAt, f.id) < (?, …) AND f.addedAt <= ? AND EXISTS (SELECT 1 FROM objects o WHERE o.fileId = f.id AND o.indexerURL = ?) AND EXISTS ( SELECT 1 FROM files n WHERE n.stackId = f.stackId AND n.kind = 'file' AND n.trashedAt IS NULL AND n.deletedAt IS NULL AND (n.updatedAt, n.id) > (f.updatedAt, f.id) AND n.updatedAt <= ? AND n.addedAt <= ? AND n.lostReason IS NULL AND EXISTS (SELECT 1 FROM objects o2 WHERE o2.fileId = n.id AND o2.indexerURL = ?)) AND NOT EXISTS (SELECT 1 FROM share_link_files s WHERE s.fileId = f.id) ORDER BY f.updatedAt DESC, f.id DESC LIMIT ?",
+            "plan": [
+              "SEARCH f USING INDEX idx_files_older_versions ((updatedAt,id)<(?,?))",
+              "CORRELATED SCALAR SUBQUERY 4",
+              "SEARCH s USING COVERING INDEX idx_share_link_files_fileId (fileId=?)",
+              "SEARCH n EXISTS USING INDEX idx_files_stackId (stackId=?)",
+              "CORRELATED SCALAR SUBQUERY 2",
+              "SEARCH o2 USING INDEX idx_objects_fileId (fileId=?)",
+              "SEARCH o EXISTS USING INDEX idx_objects_fileId (fileId=?)"
+            ]
+          }
+        ]
+      },
+      "trashOlderVersions:due": {
+        "reads": 19,
+        "writes": 18,
+        "execs": 0,
+        "result": "rows: 1081",
+        "plans": [
+          {
+            "sql": "SELECT updatedAt FROM files WHERE kind = 'file' ORDER BY updatedAt LIMIT 1 OFFSET (SELECT CAST(count(*) * ? AS INTEGER) FROM files WHERE kind = 'file')",
+            "plan": [
+              "SCALAR SUBQUERY 1",
+              "SEARCH files USING COVERING INDEX idx_files_kind (kind=?)",
+              "SCAN files USING INDEX idx_files_updatedAt_id"
+            ]
+          },
+          {
+            "sql": "SELECT f.id, f.updatedAt FROM files f WHERE f.kind = 'file' AND f.current = 0 AND f.trashedAt IS NULL AND f.deletedAt IS NULL AND (f.updatedAt, f.id) < (?, …) AND f.addedAt <= ? AND EXISTS (SELECT 1 FROM objects o WHERE o.fileId = f.id AND o.indexerURL = ?) AND EXISTS ( SELECT 1 FROM files n WHERE n.stackId = f.stackId AND n.kind = 'file' AND n.trashedAt IS NULL AND n.deletedAt IS NULL AND (n.updatedAt, n.id) > (f.updatedAt, f.id) AND n.updatedAt <= ? AND n.addedAt <= ? AND n.lostReason IS NULL AND EXISTS (SELECT 1 FROM objects o2 WHERE o2.fileId = n.id AND o2.indexerURL = ?)) AND NOT EXISTS (SELECT 1 FROM share_link_files s WHERE s.fileId = f.id) ORDER BY f.updatedAt DESC, f.id DESC LIMIT ?",
+            "plan": [
+              "SEARCH f USING INDEX idx_files_older_versions ((updatedAt,id)<(?,?))",
+              "CORRELATED SCALAR SUBQUERY 4",
+              "SEARCH s USING COVERING INDEX idx_share_link_files_fileId (fileId=?)",
+              "SEARCH n EXISTS USING INDEX idx_files_stackId (stackId=?)",
+              "CORRELATED SCALAR SUBQUERY 2",
+              "SEARCH o2 USING INDEX idx_objects_fileId (fileId=?)",
+              "SEARCH o EXISTS USING INDEX idx_objects_fileId (fileId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT DISTINCT name, directoryId FROM files WHERE id IN (?, …) AND kind = 'file'",
+            "plan": [
+              "SEARCH files USING INDEX sqlite_autoindex_files_1 (id=?)",
+              "USE TEMP B-TREE FOR DISTINCT"
+            ]
+          },
+          {
+            "sql": "SELECT DISTINCT directoryId FROM files WHERE id IN (?, …) AND directoryId IS NOT NULL",
+            "plan": [
+              "SEARCH files USING INDEX sqlite_autoindex_files_1 (id=?)",
+              "USE TEMP B-TREE FOR DISTINCT"
+            ]
+          },
+          {
+            "sql": "SELECT f2.id, f2.name, f2.directoryId, f2.stackId, f2.updatedAt, f2.current FROM (SELECT json_extract(value, '$.name') AS name, json_extract(value, '$.directoryId') AS directoryId FROM json_each(?)) g CROSS JOIN files f2 ON f2.name = g.name AND f2.directoryId IS g.directoryId WHERE f2.kind = 'file' AND f2.trashedAt IS NULL AND f2.deletedAt IS NULL",
+            "plan": [
+              "SCAN json_each VIRTUAL TABLE INDEX 1:",
+              "SEARCH f2 USING INDEX idx_files_version_group (name=? AND directoryId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT id, name, directoryId, stackId, updatedAt, current FROM files INDEXED BY idx_files_stackId WHERE stackId IN (?, …) AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL",
+            "plan": [
+              "SEARCH files USING INDEX idx_files_stackId (stackId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT d.id, d.path FROM directories d WHERE d.id IN (?, …) AND NOT EXISTS ( SELECT 1 FROM files f WHERE f.directoryId = d.id AND f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL ) -- Any folder under d, as a path between '<path>/' and '<path>0', -- '0' being the byte after '/', which SQLite answers from the -- unique index on path. A LIKE on an expression reads every folder. AND NOT EXISTS ( SELECT 1 FROM directories c WHERE c.path > d.path || '/' AND c.path < d.path || '0' ) AND NOT EXISTS ( SELECT 1 FROM import_files i WHERE i.directoryId = d.id AND i.state IN ('pending', 'active') ) AND NOT EXISTS (SELECT 1 FROM imports im WHERE im.directoryId = d.id AND im.sealed = 0)",
+            "plan": [
+              "SCAN d",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH f USING INDEX idx_files_current_directoryId (directoryId=?)",
+              "CORRELATED SCALAR SUBQUERY 2",
+              "SEARCH c USING COVERING INDEX sqlite_autoindex_directories_2 (path>? AND path<?)",
+              "CORRELATED SCALAR SUBQUERY 3",
+              "SEARCH i USING COVERING INDEX idx_import_files_state_directory (state=? AND directoryId=?)",
+              "CORRELATED SCALAR SUBQUERY 4",
+              "SCAN im"
+            ]
+          }
+        ]
+      },
       "recalculateCurrentForGroup:single": {
         "reads": 1,
         "writes": 1,
@@ -552,7 +649,7 @@
             ]
           },
           {
-            "sql": "SELECT f.name, f.stackId FROM json_each(?) j CROSS JOIN files f ON f.name = j.value AND f.directoryId IS ? WHERE f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL",
+            "sql": "SELECT f.name, f.stackId, f.updatedAt FROM json_each(?) j CROSS JOIN files f ON f.name = j.value AND f.directoryId IS ? WHERE f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL",
             "plan": [
               "SCAN j VIRTUAL TABLE INDEX 1:",
               "SEARCH f USING INDEX idx_files_version_group (name=? AND directoryId=?)"

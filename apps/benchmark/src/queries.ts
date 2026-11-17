@@ -1,5 +1,6 @@
 import type { DatabaseAdapter } from '@siastorage/core/adapters'
 import type { AppService } from '@siastorage/core/app'
+import { OLDER_VERSION_TRASH_AGE } from '@siastorage/core/config'
 import * as ops from '@siastorage/core/db/operations'
 import { INDEXER_URL, LIBRARY_SAMPLES } from './dataset'
 import type { QuerySpec } from './types'
@@ -181,7 +182,40 @@ export function buildWriteQuerySpecs(db: DatabaseAdapter, sampleDirId: string): 
     return largeDir10kIds
   }
 
+  // The trash pass trashes an older version once a newer one is older than
+  // `now - OLDER_VERSION_TRASH_AGE`. The dataset's stamps are relative to when
+  // it was generated, so `now` is the stamp of the row that share of the way
+  // through the files by updatedAt, which keeps results exact. Single-version
+  // files come first in the dataset, so a cutoff up to about two thirds of
+  // the way in has no older version due.
+  async function trashPassNow(tx: DatabaseAdapter, share: number): Promise<number> {
+    const row = await tx.getFirstAsync<{ updatedAt: number }>(
+      `SELECT updatedAt FROM files WHERE kind = 'file' ORDER BY updatedAt
+       LIMIT 1 OFFSET (SELECT CAST(count(*) * ? AS INTEGER) FROM files WHERE kind = 'file')`,
+      share,
+    )
+    if (!row) throw new Error('dataset has no files')
+    return row.updatedAt + OLDER_VERSION_TRASH_AGE
+  }
+
   return [
+    // Reads every older version older than the cutoff and trashes none, the
+    // hourly pass's usual run.
+    {
+      name: 'trashOlderVersions:nothingDue',
+      category: 'write',
+      run: withRollback(async (tx) =>
+        ops.trashOlderVersions(tx, INDEXER_URL, await trashPassNow(tx, 0.66)),
+      ),
+    },
+    // About 1,100 versions due at scale 0.25, so the pass trashes three batches.
+    {
+      name: 'trashOlderVersions:due',
+      category: 'write',
+      run: withRollback(async (tx) =>
+        ops.trashOlderVersions(tx, INDEXER_URL, await trashPassNow(tx, 0.689)),
+      ),
+    },
     {
       name: 'recalculateCurrentForGroup:single',
       category: 'write',

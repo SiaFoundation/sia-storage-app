@@ -349,6 +349,14 @@ export interface AppService {
     tombstoneWithThumbnailsAndCleanup(files: { id: string; type: string }[]): Promise<void>
     /** Tombstones files past trash retention, then cleans up local files and uploads. */
     autoPurgeWithCleanup(): Promise<void>
+    /**
+     * Moves to the trash each older version uploaded to `indexerURL` and
+     * replaced at least a day ago. Returns how many it moved. It keeps a
+     * version a share link names only by this device's link rows, so the
+     * background pass calls it through `shares.syncLinksAndTrashOlderVersions`,
+     * which lists the links first and holds off link changes while it runs.
+     */
+    trashOlderVersions(indexerURL: string): Promise<number>
     /** Files in the trash, one entry per file with the versions trashed with it, most recently trashed first. */
     trashEntries(opts?: { limit?: number; offset?: number }): Promise<TrashEntry[]>
     /** How many entries the trash holds. */
@@ -1440,6 +1448,15 @@ export interface AppService {
      * revoked on other devices arrive.
      */
     syncLinks(opts?: { refresh?: boolean }): Promise<void>
+    /**
+     * Lists the account's keys, runs a sync pass, then moves older versions to
+     * the trash with `files.trashOlderVersions`, all in the queue link changes
+     * wait in. A link made on another device is then known before a version
+     * it shows could be trashed, and a link made here cannot pick a version
+     * between the trash reading it and trashing it. Returns how many versions
+     * it moved.
+     */
+    syncLinksAndTrashOlderVersions(): Promise<number>
   }
   /** Connection state: tracks whether the app is connected to an indexer. */
   connection: {
