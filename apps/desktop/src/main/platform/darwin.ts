@@ -21,6 +21,16 @@ import type { PlatformIntegration, ShellConfig, ShellPaths, ShellState, StopOpti
 const HIDE_TIMEOUT_MS = 2_000
 
 /**
+ * How long `start` waits before each further register when the last one did
+ * not stick, 10s in all. A register can report success and still be missing
+ * from the next `list`. That has been seen at launch a few seconds after the
+ * same identifier was unregistered, and is taken to be fileproviderd dropping
+ * a domain it is still tearing down. Without a retry the folder stays missing
+ * until the app is next launched.
+ */
+const REGISTER_RETRY_DELAYS_MS = [1_000, 2_000, 3_000, 4_000]
+
+/**
  * Where the sandboxed extension and the daemon meet.
  *
  * Inside its sandbox the extension's home directory *is* this path, so it opens
@@ -93,7 +103,9 @@ async function hideDomain(domainId: string): Promise<void> {
   clearTimeout(timer)
 }
 
-export function createDarwinIntegration(): PlatformIntegration {
+export function createDarwinIntegration(
+  retryDelaysMs: readonly number[] = REGISTER_RETRY_DELAYS_MS,
+): PlatformIntegration {
   let state: ShellState = 'absent'
   let displayName: string | null = null
   let domainId: string | null = null
@@ -102,6 +114,78 @@ export function createDarwinIntegration(): PlatformIntegration {
   /** False when the last `start` registered the domain but could not list
    *  domains to confirm it. */
   let confirmed = true
+  /** The `start` still running, which `stop` waits out. */
+  let starting: Promise<void> | null = null
+  /** Set by `stop`, so a `start` waiting to register again gives up. */
+  let stopping = false
+  /** Ends the wait between registers early, when `stop` is called during it. */
+  let wake: (() => void) | null = null
+
+  function pause(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(done, ms)
+      function done() {
+        clearTimeout(timer)
+        wake = null
+        resolve()
+      }
+      wake = done
+    })
+  }
+
+  /** Whether the system lists the domain, or null when it could not be asked. */
+  async function listed(id: string): Promise<boolean | null> {
+    try {
+      const { domains } = await runAgent(['list'])
+      return domains?.includes(id) ?? false
+    } catch (e) {
+      log.error('mount', 'agent_failed', { error: e as Error })
+      return null
+    }
+  }
+
+  async function register(config: ShellConfig): Promise<void> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await runAgent(['register', config.domainId, config.displayName])
+      } catch (e) {
+        log.error('mount', 'agent_failed', { error: e as Error })
+        state = 'error'
+        return
+      }
+      // Asked, not assumed: a register that reports success and does not stick
+      // leaves the last directory behind, which would read as a live mount.
+      const stuck = await listed(config.domainId)
+      if (stuck === null) {
+        // The confirmation failed, not the registration, so this is unknown
+        // rather than failed and `findMount` can still settle it later.
+        confirmed = false
+        break
+      }
+      if (stuck) {
+        registered = true
+        if (attempt > 1) log.info('mount', 'register_stuck', { domainId: config.domainId, attempt })
+        break
+      }
+      const delayMs = retryDelaysMs[attempt - 1]
+      if (delayMs === undefined || stopping) {
+        log.error('mount', 'register_did_not_stick', { domainId: config.domainId, attempt })
+        break
+      }
+      log.warn('mount', 'register_retry', { domainId: config.domainId, attempt, delayMs })
+      await pause(delayMs)
+      // A quit hides the domain once this returns, and a register after the
+      // hide would unhide it with nothing left to serve it.
+      if (stopping) {
+        log.info('mount', 'register_abandoned', { domainId: config.domainId, attempt })
+        break
+      }
+    }
+    // The system creates the directory on its own schedule, so a miss after a
+    // register that stuck is still starting.
+    if (registered && findMount(config.displayName)) state = 'mounted'
+    else state = registered || !confirmed ? 'starting' : 'error'
+  }
 
   return {
     shellPaths(config: DesktopConfig): ShellPaths {
@@ -126,29 +210,14 @@ export function createDarwinIntegration(): PlatformIntegration {
       domainId = config.domainId
       registered = false
       confirmed = true
+      stopping = false
+      const run = register(config)
+      starting = run
       try {
-        await runAgent(['register', config.domainId, config.displayName])
-      } catch (e) {
-        log.error('mount', 'agent_failed', { error: e as Error })
-        state = 'error'
-        return
+        await run
+      } finally {
+        if (starting === run) starting = null
       }
-      try {
-        // Asked, not assumed: a register that reports success and does not stick
-        // leaves the last directory behind, which would read as a live mount.
-        const { domains } = await runAgent(['list'])
-        registered = domains?.includes(config.domainId) ?? false
-        if (!registered) log.error('mount', 'register_did_not_stick', { domainId: config.domainId })
-      } catch (e) {
-        // The confirmation failed, not the registration, so this is unknown
-        // rather than failed and `findMount` can still settle it later.
-        log.error('mount', 'agent_failed', { error: e as Error })
-        confirmed = false
-      }
-      // The system creates the directory on its own schedule, so a miss after a
-      // register that stuck is still starting.
-      if (registered && findMount(config.displayName)) state = 'mounted'
-      else state = registered || !confirmed ? 'starting' : 'error'
     },
 
     /**
@@ -163,6 +232,9 @@ export function createDarwinIntegration(): PlatformIntegration {
      * all of it to whoever signs in next.
      */
     async stop(opts?: StopOptions) {
+      stopping = true
+      wake?.()
+      await starting
       if (domainId && opts?.remove) {
         // Left mounted on failure so the caller can see it and hold the wipe.
         if (!(await removeDomain(domainId))) return

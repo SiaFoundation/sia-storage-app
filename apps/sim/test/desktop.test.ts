@@ -7,6 +7,7 @@ import {
   desktopIdentity,
   desktopUnavailable,
   findMount,
+  folderTimeoutMessage,
   isPreservedCopy,
   parseEnvFile,
 } from '../src/devices/desktop'
@@ -92,6 +93,34 @@ describe('desktop devices', () => {
   test('the prod and beta builds are refused, since a device quits its build', () => {
     expect(() => desktopIdentity('prod')).toThrow('SIM_DESKTOP_CONTEXT=prod')
     expect(() => desktopIdentity('beta')).toThrow('SIM_DESKTOP_CONTEXT=beta')
+  })
+})
+
+describe("the error when a device's Finder folder does not open", () => {
+  const dataDir = '/tmp/sia-sim/s/devices/mac'
+
+  test("names the app's register not sticking when its log says so", () => {
+    const log =
+      '2026-11-17 10:00:00.100 INFO  [app] forced_reset folderDiscarded=true\n' +
+      '2026-11-17 10:00:00.600 ERROR [mount] register_did_not_stick domainId=sia-test attempt=5\n'
+    const message = folderTimeoutMessage('Sia Storage Test', log, dataDir)
+    expect(message).toContain('macOS did not keep it')
+    expect(message).toContain(`${dataDir}/desktop.log`)
+    expect(message).not.toContain('System Settings')
+  })
+
+  test("quotes the domain helper's failure when the app logged one", () => {
+    const log =
+      '2026-11-17 10:00:00.600 ERROR [mount] agent_failed error=Error: register: helper refused\n'
+    expect(folderTimeoutMessage('Sia Storage Test', log, dataDir)).toBe(
+      "Sia Storage Test's Finder domain helper failed while bringing the folder up: error=Error: register: helper refused",
+    )
+  })
+
+  test('names both causes when the app logged neither', () => {
+    const message = folderTimeoutMessage('Sia Storage Test', '', dataDir)
+    expect(message).toContain('System Settings')
+    expect(message).toContain('the app is not serving it')
   })
 })
 
