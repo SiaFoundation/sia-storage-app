@@ -116,7 +116,14 @@ export function createNodeDownloadAdapter(deps: {
       // Written to the caller's path rather than into managed storage. A
       // range is not the file, and storing it there would make the next
       // reader see a partial file as fully downloaded.
-      return streamToPath(dl, destPath, length, signal, () => {}, offset)
+      //
+      // The range sits at its own offset in the file, which costs nothing
+      // where a file can have a hole. NTFS has none in an ordinary file and
+      // writes zeros up to the offset first, so each range of a large file
+      // would cost a write as long as everything before it. On Windows the
+      // range is at the front, where its reader looks for it.
+      const at = process.platform === 'win32' ? 0 : offset
+      return streamToPath(dl, destPath, length, signal, () => {}, at)
     },
 
     async downloadFromShareUrl({ file, url, sdk, ensureSpace, onProgress, signal }) {

@@ -25,6 +25,44 @@ describe('Provider handoff', () => {
 
   const dest = (name: string) => path.join(handoffDir, name)
 
+  describe('path containment under a Windows handoff directory', () => {
+    let windows: TestApp
+
+    beforeEach(async () => {
+      windows = createTestApp(createEmptyIndexerStorage(), {
+        handoffDir: 'C:\\Users\\me\\handoff',
+      })
+      await windows.start()
+    })
+
+    afterEach(() => windows.shutdown())
+
+    it('takes a path under it, written with either separator and either case of drive letter', async () => {
+      // Past the path check, the call goes on to look for the file.
+      await expect(
+        windows.app.provider.fetch('missing', 'c:/Users/me/handoff\\out.bin'),
+      ).rejects.toThrow(/No file with id/)
+    })
+
+    it('refuses a directory whose name differs in letter case', async () => {
+      await expect(
+        windows.app.provider.fetch('missing', 'C:\\Users\\ME\\handoff\\x.bin'),
+      ).rejects.toThrow(/outside/)
+    })
+
+    it('refuses one that climbs out with ..', async () => {
+      await expect(
+        windows.app.provider.fetch('missing', 'C:\\Users\\me\\handoff\\..\\escaped.bin'),
+      ).rejects.toThrow(/outside/)
+    })
+
+    it('refuses a sibling directory sharing the handoff name prefix', async () => {
+      await expect(
+        windows.app.provider.fetch('missing', 'C:\\Users\\me\\handoff-evil\\x.bin'),
+      ).rejects.toThrow(/outside/)
+    })
+  })
+
   describe('path containment', () => {
     it('refuses a destination outside the handoff directory', async () => {
       const [file] = await app.addFiles(generateTestFiles(1, { startId: 1 }))
