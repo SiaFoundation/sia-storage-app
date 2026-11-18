@@ -7,7 +7,8 @@ import { join } from 'node:path'
  * Covers which helper command each kind of stop runs. Signing out and quitting
  * differ in exactly one way that matters, and getting it wrong leaves the
  * account's file names and downloaded contents in the system's copy. Also
- * covers which domain and agent the daemon is told about.
+ * covers which domain and agent the daemon is told about, and registering
+ * again when the system does not list the domain after a register.
  *
  * The helper is mocked rather than run: it is a signed bundle that talks to
  * fileproviderd, and loading the real module pulls in Electron.
@@ -15,6 +16,8 @@ import { join } from 'node:path'
 const calls: string[][] = []
 let fails = false
 let listFails = false
+/** What each `list` answers, in order, before falling back to the registered domain. */
+let listAnswers: string[][] = []
 /** Stands in for the bare agent the packaging installs. Each test writes it or leaves it out. */
 const agentDir = mkdtempSync(join(tmpdir(), 'darwin-test-'))
 const finderAgent = join(agentDir, 'Sia Storage Finder Agent')
@@ -28,20 +31,18 @@ mock.module('./agent', () => ({
     if (fails) throw new Error('helper refused')
     if (listFails && args[0] === 'list') throw new Error('helper refused')
     // start() re-reads the list to confirm the registration stuck.
-    if (args[0] === 'list') return { ok: true, domains: ['sia-dev'] }
+    if (args[0] === 'list') return { ok: true, domains: listAnswers.shift() ?? ['sia-dev'] }
     return { ok: true }
   },
 }))
 
 const { createDarwinIntegration } = await import('./darwin')
 
+const config = { domainId: 'sia-dev', displayName: 'Sia', shellSocket: '' }
+
 async function mounted() {
   const platform = createDarwinIntegration()
-  await platform.start({
-    domainId: 'sia-dev',
-    displayName: 'Sia',
-    paths: {} as never,
-  } as never)
+  await platform.start(config)
   calls.length = 0
   return platform
 }
@@ -130,6 +131,61 @@ describe('the Finder domain the daemon is told about', () => {
 
     await platform.stop()
 
+    expect(platform.mount()).toBeNull()
+  })
+})
+
+describe('a register the system does not keep', () => {
+  beforeEach(() => {
+    calls.length = 0
+    fails = false
+    listFails = false
+    listAnswers = []
+    writeFileSync(finderAgent, '')
+  })
+
+  it('registers again until the system lists the domain', async () => {
+    listAnswers = [[], []]
+    const platform = createDarwinIntegration([0, 0, 0])
+
+    await platform.start(config)
+
+    expect(calls).toEqual([
+      ['register', 'sia-dev', 'Sia'],
+      ['list'],
+      ['register', 'sia-dev', 'Sia'],
+      ['list'],
+      ['register', 'sia-dev', 'Sia'],
+      ['list'],
+    ])
+    expect(platform.status()).not.toBe('error')
+    expect(platform.mount()).toEqual({ id: 'sia-dev', adapterConfig: finderAgent })
+  })
+
+  it('reports an error once every register has failed to stick', async () => {
+    listAnswers = [[], [], []]
+    const platform = createDarwinIntegration([0, 0])
+
+    await platform.start(config)
+
+    expect(calls.filter(([verb]) => verb === 'register')).toHaveLength(3)
+    expect(platform.status()).toBe('error')
+    expect(platform.mount()).toBeNull()
+  })
+
+  it('stops registering when the app quits while it waits to try again', async () => {
+    listAnswers = [[]]
+    const platform = createDarwinIntegration([60_000])
+
+    const started = platform.start(config)
+    // Lets the first register and list run, so the start is waiting to retry.
+    while (calls.length < 2) await new Promise((resolve) => setTimeout(resolve, 1))
+    await platform.stop()
+    await started
+
+    // A register after the hide would put the folder back in Finder with the
+    // app gone.
+    expect(calls).toEqual([['register', 'sia-dev', 'Sia'], ['list'], ['hide', 'sia-dev']])
     expect(platform.mount()).toBeNull()
   })
 })

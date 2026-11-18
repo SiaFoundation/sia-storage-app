@@ -17,7 +17,15 @@
  * A build has one Finder folder per Mac, so one desktop device runs at a time
  * across every checkout, under the lease in desktop-lock.ts.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
@@ -99,6 +107,28 @@ export function desktopUnavailable(identity = desktopIdentity()): string | null 
     return `${identity.appName} is not installed. Run \`bun run desktop:package ${identity.context}\` once.`
   }
   return null
+}
+
+/**
+ * Why a device's Finder folder did not open, from what the app logged in this
+ * launch. The app logs `register_did_not_stick` when every register it made
+ * reported success and macOS still did not list the domain, and
+ * `agent_failed` from the `mount` scope when its domain helper failed to
+ * register or to list the domains. With
+ * neither, it can be the extension switched off in System Settings, which the
+ * app cannot see.
+ */
+export function folderTimeoutMessage(appName: string, appLog: string, dataDir: string): string {
+  const log = join(dataDir, 'desktop.log')
+  if (appLog.includes('[mount] register_did_not_stick')) {
+    return `${appName} registered its Finder folder and macOS did not keep it (register_did_not_stick in ${log}), so the folder in ~/Library/CloudStorage is left from before and nothing serves it.`
+  }
+  const failed = appLog.split('\n').find((line) => line.includes('[mount] agent_failed'))
+  if (failed) {
+    const reason = failed.slice(failed.indexOf('agent_failed') + 'agent_failed'.length).trim()
+    return `${appName}'s Finder domain helper failed while bringing the folder up: ${reason}`
+  }
+  return `${appName}'s Finder folder did not open within 20 s. Either macOS has not switched it on, in which case turn on ${appName} under File Providers in System Settings, General, Login Items & Extensions and start the device again, or the app is not serving it, which ${log} shows.`
 }
 
 /**
@@ -395,6 +425,7 @@ export class DesktopDevice extends CliDevice {
     })
     const env = { ...this.launchEnv(), SIA_SIM_DEBUG_PORT: String(debugPort) }
     const flags = Object.entries(env).flatMap(([k, v]) => ['--env', `${k}=${v}`])
+    const logStart = this.appLogSize()
     const opened = Bun.spawnSync(['open', ...flags, this.identity.appPath], { env: openEnv() })
     if (opened.exitCode !== 0) {
       throw new Error(`open ${this.identity.appName} failed: ${opened.stderr.toString().trim()}`)
@@ -405,19 +436,34 @@ export class DesktopDevice extends CliDevice {
       () => findMount(this.identity.domainDisplay),
       { timeoutMs: 60_000, intervalMs: 500 },
     )
-    // macOS syncs an extension's folder only once someone has switched the
-    // extension on in System Settings. Until then fileproviderd answers "Sync is
-    // not enabled" and listing or opening anything in the folder fails with
-    // ETIMEDOUT, which a scenario would otherwise report as the app failing.
+    // Listing the folder fails with ETIMEDOUT in two cases. macOS syncs an
+    // extension's folder only once someone has switched the extension on in
+    // System Settings, and until then fileproviderd answers "Sync is not
+    // enabled". And a directory left from an earlier registration is found
+    // above even when the app's own register did not take, with nothing
+    // serving it.
     await waitFor(`${this.name}'s Finder folder to open`, () => readdir(mount).then(() => true), {
       timeoutMs: 20_000,
       intervalMs: 1000,
     }).catch((e: unknown) => {
       if (!String(e).includes('ETIMEDOUT')) throw e
       throw new Error(
-        `macOS has not switched on ${this.identity.appName}'s Finder folder. Turn on ${this.identity.appName} under File Providers in System Settings, General, Login Items & Extensions, then start the device again.`,
+        folderTimeoutMessage(this.identity.appName, this.appLogSince(logStart), this.paths.dataDir),
       )
     })
+  }
+
+  private appLogSize(): number {
+    const file = join(this.paths.dataDir, 'desktop.log')
+    return existsSync(file) ? statSync(file).size : 0
+  }
+
+  /** What the app logged from byte `start` of its log on, so a size taken
+   *  before a launch scopes it to that launch. */
+  private appLogSince(start: number): string {
+    const file = join(this.paths.dataDir, 'desktop.log')
+    if (!existsSync(file)) return ''
+    return readFileSync(file).subarray(start).toString('utf8')
   }
 
   /**
