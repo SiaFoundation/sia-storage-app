@@ -31,11 +31,16 @@ import { registerSyncRoot, syncRootRegistered, unregisterSyncRoot } from './sync
 
 /** How often the callbacks Windows queued are taken. A read waits on this. */
 const POLL_MS = 10
-/** How long a path has to go unchanged before it is examined. */
+/**
+ * How long a path has to go unchanged before it is examined. A program
+ * saving a file changes it several times in a row.
+ */
 const QUIET_MS = 500
 const CHANGES_POLL_MS = 1000
+/** A save sends the whole file, which the daemon hashes before it answers. */
+const CALL_TIMEOUT_MS = 5 * 60_000
 /** A range not served within the system's 60 second fetch timeout is of no use. */
-const CALL_TIMEOUT_MS = 60_000
+const FETCH_TIMEOUT_MS = 60_000
 
 const failed = (event: string) => (e: unknown) =>
   logger.error('provider', event, { error: e as Error })
@@ -58,7 +63,12 @@ async function serve(root: string, mountId: string, name: string, icon: string):
   registerSyncRoot(root, mountId, name, icon)
   const cloud = connectCloudFiles(root)
   const daemon = <T>(method: string, ...args: unknown[]) =>
-    sendIpcCommand(socket, `ds:provider:${method}`, { args }, CALL_TIMEOUT_MS) as Promise<T>
+    sendIpcCommand(
+      socket,
+      `ds:provider:${method}`,
+      { args },
+      method === 'fetchRange' ? FETCH_TIMEOUT_MS : CALL_TIMEOUT_MS,
+    ) as Promise<T>
   const folder = createFolder({ root, handoffDir, cloud, daemon })
 
   // Windows gives a process no signal it can catch, and a provider left
@@ -72,7 +82,10 @@ async function serve(root: string, mountId: string, name: string, icon: string):
   /** Paths that changed, by when each is due to be examined. */
   const due = new Map<string, number>()
   const watcher = watch(root, { recursive: true }, (_event, rel) => {
-    if (rel !== null) due.set(rel, Date.now() + QUIET_MS)
+    // No name means Windows had more changes than it could hold, and
+    // dropped them.
+    if (rel === null) folder.scan().catch(failed('scan_failed'))
+    else due.set(rel, Date.now() + QUIET_MS)
   })
   // With no watch, changes made in the folder go unseen. The app starts a
   // provider that exits again.
@@ -81,6 +94,8 @@ async function serve(root: string, mountId: string, name: string, icon: string):
     process.exit(1)
   })
   setInterval(() => {
+    // Callbacks before paths: a rename's callback moves the entry, and the
+    // old path examined first would read as the file having left the folder.
     for (let event = cloud.poll(); event; event = cloud.poll()) {
       folder.handle(event).catch(failed('callback_failed'))
     }
@@ -88,7 +103,11 @@ async function serve(root: string, mountId: string, name: string, icon: string):
     for (const [rel, at] of due) {
       if (at > now) continue
       due.delete(rel)
-      folder.examine(rel).catch(failed('examine_failed'))
+      folder.examine(rel).catch((e) => {
+        // A program still writing the file holds it, and its close is
+        // another change to the path.
+        if ((e as NodeJS.ErrnoException).code !== 'EBUSY') failed('examine_failed')(e)
+      })
     }
   }, POLL_MS)
   setInterval(() => folder.touchOpened().catch(failed('touch_failed')), CHANGES_POLL_MS)
@@ -96,7 +115,10 @@ async function serve(root: string, mountId: string, name: string, icon: string):
   process.stdout.write('ready\n')
   logger.info('provider', 'serving', { root, mountId })
 
-  // One pass per connection to the daemon, which restarts under the app.
+  // One pass per connection to the daemon, which restarts under the app. The
+  // rebuild that starts a pass sends a save or a new file whose call failed
+  // while the daemon was away. A rename or a delete that failed is not sent
+  // again, and the rebuild puts the library's side back.
   let link: HeldMountLink | undefined
   let failing = false
   for (;;) {
