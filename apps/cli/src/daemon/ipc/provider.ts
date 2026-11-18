@@ -101,7 +101,8 @@ export function startProviderListener(
   materializing?: Materializing,
   shareRequests?: ShareRequests,
 ): ReturnType<typeof startIpcServer> {
-  assertSocketPathFits(opts.socketPath)
+  // On Windows the path only names the file that holds the pipe's name.
+  if (process.platform !== 'win32') assertSocketPathFits(opts.socketPath)
 
   const library = libraryId(opts.libraryPath)
   registerProviderHandlers(reflected, opts.version, library, materializing)

@@ -43,7 +43,9 @@ export type DownloadObjectAdapter = {
    *
    * Optional: only a host that serves ranges to another process by path needs
    * it. Nothing is recorded in managed storage, because a range is not the
-   * file and storing it would make a partial file read as downloaded.
+   * file and storing it would make a partial file read as downloaded. The
+   * range is written at its own offset in the file, except on Windows, where
+   * it is written at the front.
    */
   downloadRangeToPath?(params: {
     object: LocalObject
