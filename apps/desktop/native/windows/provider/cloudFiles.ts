@@ -20,6 +20,8 @@ export const Callback = {
   opened: 5,
   closed: 6,
   dehydrated: 8,
+  deleted: 10,
+  renamed: 12,
 } as const
 
 /** One callback, as `shim.c` copied it. */
@@ -32,6 +34,11 @@ export type CloudEvent = {
   length: number
   /** The identity the placeholder carries. */
   identity: string
+  /**
+   * Where the placeholder is now, absolute. Empty where Windows gives no
+   * path, as it does for `fetch`, and for a path over 1,023 characters.
+   */
+  path: string
 }
 
 export type Placeholder = {
@@ -49,6 +56,8 @@ export type CloudFiles = {
   poll(): CloudEvent | 'dropped' | null
   /** Creates a placeholder with no bytes at `path`. False when the name is taken. */
   create(path: string, placeholder: Placeholder): boolean
+  /** Makes a plain file or folder a placeholder, keeping its bytes on disk. */
+  convert(path: string, identity: string, inSync: boolean): void
   /**
    * Gives a placeholder a new identity and in-sync state. With `dehydrate`
    * it also takes the new size and times and drops the bytes on disk, which
@@ -124,6 +133,7 @@ export function connectCloudFiles(root: string): CloudFiles {
     CfConnectSyncRoot: { args: ['ptr', 'ptr', 'ptr', 'u32', 'ptr'], returns: 'i32' },
     CfDisconnectSyncRoot: { args: ['i64'], returns: 'i32' },
     CfCreatePlaceholders: { args: ['ptr', 'ptr', 'u32', 'u32', 'ptr'], returns: 'i32' },
+    CfConvertToPlaceholder: { args: ['i64', 'ptr', 'u32', 'u32', 'ptr', 'ptr'], returns: 'i32' },
     CfUpdatePlaceholder: {
       args: ['i64', 'ptr', 'ptr', 'u32', 'ptr', 'u32', 'u32', 'ptr', 'ptr'],
       returns: 'i32',
@@ -145,8 +155,10 @@ export function connectCloudFiles(root: string): CloudFiles {
   const key = Buffer.alloc(8)
   check('CfConnectSyncRoot', cf.CfConnectSyncRoot(ptr(wide(root)), ptr(table), null, 0, ptr(key)))
   const connectionKey = key.readBigInt64LE(0)
-  // An `Event` of shim.c: 40 bytes of fields, then the identity.
-  const event = Buffer.alloc(40 + 256)
+  // A callback's path starts at the volume's root, with no drive.
+  const volume = root.slice(0, root.indexOf('\\'))
+  // An `Event` of shim.c: 40 bytes of fields, the identity, then the path and its length.
+  const event = Buffer.alloc(40 + 256 + 8 + 2 * 1024)
 
   /**
    * Runs `use` with a handle to the file or folder, or returns null when it
@@ -203,6 +215,7 @@ export function connectCloudFiles(root: string): CloudFiles {
       const result = shim.cf_poll(ptr(event))
       if (result === 0) return null
       if (result < 0) return 'dropped'
+      const pathLength = event.readUInt32LE(296)
       return {
         type: event.readUInt32LE(0),
         transferKey: event.readBigInt64LE(8),
@@ -210,6 +223,10 @@ export function connectCloudFiles(root: string): CloudFiles {
         offset: Number(event.readBigInt64LE(24)),
         length: Number(event.readBigInt64LE(32)),
         identity: event.subarray(40, 40 + event.readUInt32LE(4)).toString(),
+        path:
+          pathLength === 0
+            ? ''
+            : volume + event.subarray(304, 304 + 2 * pathLength).toString('utf16le'),
       }
     },
 
@@ -231,6 +248,16 @@ export function connectCloudFiles(root: string): CloudFiles {
       check('CfCreatePlaceholders', code)
       check('CfCreatePlaceholders for the item', result)
       return true
+    },
+
+    convert(path, identity, inSync) {
+      const id = Buffer.from(identity)
+      // CF_CONVERT_FLAG_MARK_IN_SYNC 1
+      const code = withHandle(path, false, (handle) =>
+        cf.CfConvertToPlaceholder(handle, ptr(id), id.length, inSync ? 1 : 0, null, null),
+      )
+      if (code === null) throw new Error('The file is in use')
+      check('CfConvertToPlaceholder', code)
     },
 
     update(path, placeholder, dehydrate = false) {
