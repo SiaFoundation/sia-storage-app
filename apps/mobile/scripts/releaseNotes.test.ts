@@ -1,10 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 import {
-  type TestingNotes,
+  type AppTesting,
+  type Item,
+  type RoundChanges,
   type WhatsNewEntry,
   candidateChanges,
   changelogSections,
   parseGenerated,
+  parseTesting,
   parseWhatsNew,
   playTestingText,
   readTesting,
@@ -110,14 +113,25 @@ describe("What's New", () => {
   })
 })
 
-const testing: TestingNotes = {
+const both = ['ios', 'android'] as const
+const testing: AppTesting = {
   version: '1.16.0-rc.1',
-  sinceCandidate: { from: '1.16.0-rc.0', items: ['Folders can be shared.'] },
-  sinceRelease: { from: '1.15.1', items: ['Folders can be shared.', 'Photos import faster.'] },
+  sinceCandidate: {
+    from: '1.16.0-rc.0',
+    items: [{ text: 'Folders can be shared.', platforms: [...both] }],
+  },
+  sinceRelease: {
+    from: '1.15.1',
+    items: [
+      { text: 'Folders can be shared.', platforms: [...both] },
+      { text: 'Photos import faster.', platforms: [...both] },
+      { text: 'iCloud photos import.', platforms: ['ios'] },
+    ],
+  },
 }
 
 describe('tester notes', () => {
-  test('TestFlight gets both lists and the changelog link', () => {
+  test('TestFlight gets both lists of iOS items and the changelog link', () => {
     expect(testFlightText(testing)).toBe(
       [
         'What to test since 1.16.0-rc.0:',
@@ -126,55 +140,106 @@ describe('tester notes', () => {
         'Everything in 1.16.0 since 1.15.1:',
         '- Folders can be shared.',
         '- Photos import faster.',
+        '- iCloud photos import.',
         '',
         'Full changelog: https://github.com/SiaFoundation/sia-storage-app/releases/tag/mobile/v1.16.0-rc.1',
       ].join('\n'),
     )
   })
 
-  test('a candidate with no app changes says so', () => {
-    const same = { ...testing, sinceCandidate: { from: '1.16.0-rc.0', items: [] } }
-    expect(playTestingText(same)).toStartWith(
-      'Since 1.16.0-rc.0:\n- No changes to the app since 1.16.0-rc.0.',
+  test('a platform with no changes since the last candidate says so', () => {
+    const iosOnly: AppTesting = {
+      ...testing,
+      sinceCandidate: {
+        from: '1.16.0-rc.0',
+        items: [{ text: 'iCloud photos import.', platforms: ['ios'] }],
+      },
+    }
+    expect(playTestingText(iosOnly)).toStartWith(
+      'Since 1.16.0-rc.0:\n- No changes since 1.16.0-rc.0.',
     )
   })
 
   test('Play testing gets the newest list, cut to 500 characters with a pointer to the rest', () => {
-    const long: TestingNotes = {
+    const long: AppTesting = {
       ...testing,
-      sinceCandidate: { from: '1.16.0-rc.0', items: Array(20).fill('x'.repeat(40)) },
+      sinceCandidate: {
+        from: '1.16.0-rc.0',
+        items: Array(20).fill({ text: 'x'.repeat(40), platforms: ['android'] }),
+      },
     }
     const text = playTestingText(long)
     expect(text.length).toBeLessThanOrEqual(500)
     expect(text).toStartWith('Since 1.16.0-rc.0:\n- ')
     expect(text).toContain('- More in the changelog.\n\nhttps://github.com/')
   })
+
+  test('a desktop item for a platform the desktop release does not build is refused', () => {
+    const desktop = { ...testing, version: '0.0.3-rc.0', sinceCandidate: null }
+    expect(() =>
+      parseTesting({
+        desktop: {
+          ...desktop,
+          sinceRelease: { from: null, items: [{ text: 'x', platforms: ['windows'] }] },
+        },
+      }),
+    ).toThrow('needs platforms from mac')
+    expect(() => parseTesting({ web: desktop })).toThrow('unknown apps web')
+  })
+})
+
+const changes = (fresh: string[]) => ({
+  version: 'x',
+  sinceRelease: { from: null, entries: ['a'] },
+  sinceCandidate: { from: 'y', entries: fresh },
 })
 
 describe("the model's reply", () => {
-  const reply = (whatsNew: unknown) =>
-    JSON.stringify({ whatsNew, sinceCandidate: ['a'], sinceRelease: ['b'] })
+  const items: Item[] = [{ text: 'a', platforms: ['mac'] }]
+  const round: RoundChanges = { mobile: changes(['a']), desktop: changes(['b']) }
+  const reply = (
+    whatsNew: unknown,
+    mobileCandidate: unknown[] = [{ text: 'a', platforms: ['ios'] }],
+  ) =>
+    JSON.stringify({
+      whatsNew,
+      testing: {
+        mobile: {
+          sinceCandidate: mobileCandidate,
+          sinceRelease: [{ text: 'b', platforms: ['android'] }],
+        },
+        desktop: { sinceCandidate: items, sinceRelease: items },
+      },
+    })
 
-  test('a reply wrapped in a code fence is read', () => {
-    const notes = parseGenerated('```json\n' + reply(entry.items) + '\n```', 1)
+  test('a reply wrapped in a code fence is read for every app in the round', () => {
+    const notes = parseGenerated('```json\n' + reply(entry.items) + '\n```', round)
     expect(notes.whatsNew).toEqual(entry.items)
-    expect(notes.sinceCandidate).toEqual(['a'])
+    expect(notes.testing.desktop?.sinceCandidate).toEqual(items)
+  })
+
+  test("a round without mobile needs no What's New entry", () => {
+    const notes = parseGenerated(reply(undefined), { desktop: changes(['b']) })
+    expect(notes.whatsNew).toBeNull()
+    expect(notes.testing.mobile).toBeUndefined()
   })
 
   test('an empty candidate list is refused when the changelog has new entries', () => {
-    const empty = JSON.stringify({ whatsNew: entry.items, sinceCandidate: [], sinceRelease: ['b'] })
-    expect(() => parseGenerated(empty, 2)).toThrow('2 entries are new')
-    expect(parseGenerated(empty, 0).sinceCandidate).toEqual([])
+    expect(() => parseGenerated(reply(entry.items, []), round)).toThrow('1 entries are new')
+    const unchanged = { ...round, mobile: changes([]) }
+    expect(
+      parseGenerated(reply(entry.items, []), unchanged).testing.mobile?.sinceCandidate,
+    ).toEqual([])
   })
 
-  test('Android items over 500 characters are refused', () => {
+  test("Android What's New items over 500 characters are refused", () => {
     const long = [{ text: 'y'.repeat(600), platforms: ['ios', 'android'] }]
-    expect(() => parseGenerated(reply(long), 1)).toThrow('over 500')
+    expect(() => parseGenerated(reply(long), round)).toThrow('over 500')
   })
 
-  test('a reply with no item for one platform is refused', () => {
+  test("a What's New with no item for one platform is refused", () => {
     expect(() =>
-      parseGenerated(reply([{ text: 'Only on iPhone.', platforms: ['ios'] }]), 1),
+      parseGenerated(reply([{ text: 'Only on iPhone.', platforms: ['ios'] }]), round),
     ).toThrow('no item for android')
   })
 })

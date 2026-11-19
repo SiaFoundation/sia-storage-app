@@ -17,7 +17,7 @@
 import { execFileSync } from 'node:child_process'
 import { deriveAppVersion } from '../appVersion'
 import { resolveVariant } from '../variants'
-import { type Platform, readWhatsNew, storeLimit, storeText } from './releaseNotes'
+import { type MobilePlatform, readWhatsNew, storeLimit, storeText } from './releaseNotes'
 import { submitToAppStore } from './stores/appStore'
 import { submitToGooglePlay } from './stores/googlePlay'
 
@@ -38,7 +38,7 @@ export function shippedCandidate(version: string): string {
   return candidate
 }
 
-function notes(version: string, platform: Platform): string {
+function notes(version: string, platform: MobilePlatform): string {
   const entry = readWhatsNew().find((e) => e.version === version)
   if (!entry) throw new Error(`release-notes/whats-new.json has no entry for ${version}`)
   const text = storeText(entry, platform)

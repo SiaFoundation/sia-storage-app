@@ -1,7 +1,8 @@
 # Writing Sia Storage release notes
 
 Prepare Release gives this guide to the model that writes `whats-new.json` and `testing.json`
-for each mobile release candidate. People editing either file follow it too.
+for each release candidate of the mobile and desktop apps. People editing either file follow it
+too.
 
 ## What's New (`whats-new.json`)
 
@@ -45,14 +46,18 @@ The 1.15.0 entry is an example of the length and tone.
 
 ## Tester notes (`testing.json`)
 
-What people testing a release candidate in TestFlight and Google Play internal testing read.
-They know the app well and want to know what to try.
+What people testing a release candidate read: TestFlight and Google Play internal testing for
+the mobile app, and the beta desktop app. They know the app well and want to know what to try.
+Each app in the round gets its own lists, from its own changelog.
 
 - **Since the last candidate:** two to four items on what changed since the previous
   candidate, such as the fix for a problem found in it. Left out for the first candidate after
   a stable release.
 - **Since the last release:** everything in the version so far, grouped by theme, one item per
   theme.
+- **Mark platforms.** Each item lists the platforms a tester can try it on, from that app's
+  platforms only. Mark an item for one platform when it names that platform's own things, such
+  as iCloud on iOS, Finder on macOS or File Explorer on Windows, and otherwise for all of them.
 - **One sentence per item, friendly and not technical.** For a pile of related fixes, say
   "Fixed some issues with importing files". No function, table or library names.
 - **Never list file formats**, and leave out dependency updates, refactors and build changes.
