@@ -24,6 +24,9 @@ jobs:
       - uses: ./.github/actions/setup
       - run: bun run lint
       - run: bun run check-changesets
+      - run: bun run check-release-notes
+        env:
+          RELEASE_PR: ${{ github.head_ref == 'release' }}
 
   knip:
     runs-on: ubuntu-latest

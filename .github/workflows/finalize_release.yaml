@@ -1,10 +1,11 @@
-# The manual step of a mobile or desktop release: run after the chosen release
-# candidate has shipped to the stores, or the beta desktop app has been tried.
-# Regenerates the release PR as the stable version (X.Y.Z-rc.N becomes X.Y.Z)
-# and records which candidate it graduated. Merging it
+# The manual step of a mobile or desktop release: run once the chosen release
+# candidate has been tested in TestFlight, Play internal testing and the beta
+# desktop app. Regenerates the release PR as the stable version (X.Y.Z-rc.N
+# becomes X.Y.Z) and records which candidate it graduated. Merging it
 # brings main's versions and changelogs forward, and Publish Release then tags
 # the candidate's own commit, so the stable tag names the source that shipped
-# rather than main's tip. Safe to run after newer changes have merged: it
+# rather than main's tip. That tag submits the candidate's mobile build to App
+# Store and Google Play review (release-stores.yml). Safe to run after newer changes have merged: it
 # finalizes from the shipped candidate's tag, and the newer work starts the next
 # train. While the PR it opens is unmerged, Prepare Release leaves the release
 # branch alone, so a push to main can no longer replace the graduation with an rc.
@@ -41,8 +42,8 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-          # knope force-pushes the release branch later in the run, using the
-          # credentials that checkout saves here.
+          # prepare-release.ts force-pushes the release branch later in the
+          # run, using the credentials that checkout saves here.
           token: ${{ steps.bot-token.outputs.token }}
 
       - name: Configure Git

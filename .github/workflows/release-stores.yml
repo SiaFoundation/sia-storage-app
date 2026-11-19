@@ -1,0 +1,78 @@
+name: Release Stores
+
+# Submits a stable mobile release to App Store and Google Play review. Publish
+# Release tags `mobile/vX.Y.Z` on the commit of the candidate it graduated, and
+# Release already uploaded that candidate's prod build to TestFlight and Play
+# internal testing, so this submits the tested build without rebuilding. The
+# notes are the version's entry in apps/mobile/release-notes/whats-new.json on
+# main, so a fix to them merged to main is used by a re-run.
+#
+# Each store is its own job, so re-running a failed job retries that store
+# alone, and submitStores.ts reads what the store already has before changing
+# anything, so any re-run is safe. An approved version still waits for someone
+# to release it: App Store versions are created with manual release, and Play
+# holds approved changes under managed publishing.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Stable mobile version to submit (e.g. 1.15.1)'
+        required: true
+        type: string
+      platform:
+        description: 'Store to submit to'
+        required: true
+        type: choice
+        options: [both, ios, android]
+        default: both
+      dry_run:
+        description: 'Only read each store and print what would change'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-stores-${{ inputs.version || github.event.release.tag_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE: ${{ inputs.version || github.event.release.tag_name }}
+  DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+
+jobs:
+  app-store:
+    if: ${{ (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'mobile/v') && !github.event.release.prerelease) || inputs.platform == 'both' || inputs.platform == 'ios' }}
+    runs-on: ubuntu-latest
+    steps:
+      # main for the notes, and every tag to find the candidate.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - name: Submit to App Store review
+        working-directory: apps/mobile
+        env:
+          APP_STORE_CONNECT_API_KEY_JSON: ${{ secrets.APP_STORE_CONNECT_API_KEY_JSON }}
+        run: bun scripts/submitStores.ts ios "${RELEASE#mobile/v}" $DRY_RUN
+
+  google-play:
+    if: ${{ (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'mobile/v') && !github.event.release.prerelease) || inputs.platform == 'both' || inputs.platform == 'android' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - name: Submit to Google Play review
+        working-directory: apps/mobile
+        env:
+          GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON }}
+        run: bun scripts/submitStores.ts android "${RELEASE#mobile/v}" $DRY_RUN

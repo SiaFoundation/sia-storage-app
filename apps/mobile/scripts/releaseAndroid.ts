@@ -3,10 +3,12 @@
 /**
  * Android Release Build & Distribution
  *
- * Builds a signed Android AAB and uploads to Google Play Store.
+ * Builds a signed Android AAB and uploads it to Google Play internal testing,
+ * with the tester notes from release-notes/testing.json. Production gets the
+ * same build later, through submitStores.ts.
  *
  * Usage:
- *   bun scripts/releaseAndroid.ts [internal|production]
+ *   bun scripts/releaseAndroid.ts
  *
  * Environment variables:
  *   APP_VARIANT                          - Which app to build: beta | prod (default prod)
@@ -22,19 +24,9 @@ import path from 'node:path'
 import { $ } from 'bun'
 import pkg from '../package.json'
 import { resolveVariant } from '../variants'
-import { whatsNewText } from './releaseNotes'
+import { testerText } from './releaseNotes'
 
 const projectRoot = path.resolve(import.meta.dir, '..')
-
-// Get track from command line args
-const track = Bun.argv[2] || 'internal'
-
-if (track !== 'internal' && track !== 'production') {
-  console.error('Usage: bun scripts/releaseAndroid.ts [internal|production]')
-  console.error('  internal   - Upload to internal testing track (default)')
-  console.error('  production - Upload to production track')
-  process.exit(1)
-}
 
 // Which app identity to build. CI sets APP_VARIANT per matrix leg; default to
 // prod so a bare `release:android:*` invocation builds the public app.
@@ -63,7 +55,7 @@ process.env.ANDROID_PACKAGE = variant.bundleId
 
 $.cwd(projectRoot)
 
-console.log(`=== Android Release Build (${variant.name} / ${track}) ===`)
+console.log(`=== Android Release Build (${variant.name}) ===`)
 
 // Step 1: Clean and prebuild
 console.log('Step 1/3: Cleaning and prebuilding...')
@@ -74,21 +66,17 @@ await $`bunx expo prebuild --platform android`
 console.log('Step 2/3: Building release AAB...')
 await $`bun scripts/androidGradleTask.ts bundleRelease`
 
-// Step 3: Upload to Play Store
+// Step 3: Upload to Play internal testing
 if (Bun.env.DRY_RUN === 'true') {
-  console.log('Step 3/3: DRY_RUN=true — skipping Play Store upload.')
+  console.log('Step 3/3: DRY_RUN=true, skipping the Play upload.')
 } else {
-  console.log(`Step 3/3: Uploading to Play Store (${track} track)...`)
-  if (track === 'internal') {
-    // supply has no inline release-notes option; it reads "What's new" from a
-    // per-locale changelog file. default.txt applies to any versionCode.
-    const changelogDir = path.join(projectRoot, 'fastlane/metadata/android/en-US/changelogs')
-    mkdirSync(changelogDir, { recursive: true })
-    writeFileSync(path.join(changelogDir, 'default.txt'), whatsNewText(pkg.version))
-    await $`fastlane android distribute_internal`
-  } else {
-    await $`fastlane android distribute_play_store`
-  }
+  console.log('Step 3/3: Uploading to Play internal testing...')
+  // supply has no inline release-notes option; it reads "What's new" from a
+  // per-locale changelog file. default.txt applies to any versionCode.
+  const changelogDir = path.join(projectRoot, 'fastlane/metadata/android/en-US/changelogs')
+  mkdirSync(changelogDir, { recursive: true })
+  writeFileSync(path.join(changelogDir, 'default.txt'), testerText(pkg.version, 'android'))
+  await $`fastlane android distribute_internal`
 }
 
 console.log('=== Android release complete! ===')

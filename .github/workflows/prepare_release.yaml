@@ -2,9 +2,10 @@
 # The PR bumps package.json version and updates CHANGELOG.md based on changesets.
 #
 # Trains carrying mobile or desktop changes are versioned X.Y.Z-rc.N (see
-# scripts/prepare-release.ts); once a candidate has shipped to the stores and
-# the beta desktop app has been tried, the Finalize Release workflow
-# regenerates the PR as the final stable release.
+# scripts/prepare-release.ts); once a candidate has been tested, the Finalize
+# Release workflow regenerates the PR as the final stable release. A mobile
+# candidate's release commit also carries its release notes, which
+# prepare-release.ts writes with Copilot (apps/mobile/scripts/writeReleaseNotes.ts).
 name: Prepare Release
 
 on:
@@ -15,13 +16,6 @@ on:
   # still holds the graduation until a run overwrites it.
   workflow_dispatch:
 
-# Shared with the other release workflows: two pushes in quick succession would
-# otherwise race to force-push the release branch, and a prepare must not run
-# while a publish is mid-flight and versions disagree with tags.
-concurrency:
-  group: release-train
-  cancel-in-progress: false
-
 jobs:
   prepare-release:
     # Matches the subject only. head_commit.message carries the body too, so
@@ -29,6 +23,21 @@ jobs:
     # subject while explaining something. A dispatch has no head_commit, so it is
     # allowed explicitly rather than relying on coercion of a missing value.
     if: "${{ github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'chore: release') }}"
+    # Shared with the other release workflows: two pushes in quick succession
+    # would otherwise race to force-push the release branch, and a prepare must
+    # not run while a publish is mid-flight and versions disagree with tags.
+    # Set on the job rather than the workflow so the run a release PR's own
+    # merge starts, which the `if` skips, never joins the group. A group holds
+    # one waiting run and a newcomer cancels it, so that skipped run could
+    # cancel the Publish Release run waiting behind another job.
+    concurrency:
+      group: release-train
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      # Lets the workflow token call Copilot, billed to the organization, for
+      # the mobile release notes.
+      copilot-requests: write
     runs-on: ubuntu-latest
     steps:
       # An app token: pushes made with GITHUB_TOKEN don't trigger workflows,
@@ -45,8 +54,8 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-          # knope force-pushes the release branch later in the run, using the
-          # credentials that checkout saves here.
+          # prepare-release.ts force-pushes the release branch later in the
+          # run, using the credentials that checkout saves here.
           token: ${{ steps.bot-token.outputs.token }}
 
       - name: Configure Git
@@ -66,4 +75,5 @@ jobs:
         run: bun scripts/prepare-release.ts
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
+          COPILOT_GITHUB_TOKEN: ${{ github.token }}
         continue-on-error: true

@@ -12,6 +12,7 @@
 import { execFileSync, execSync } from 'child_process'
 import { readFileSync, readdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
+import { writeReleaseNotes } from '../apps/mobile/scripts/writeReleaseNotes'
 import { createReleasePr } from './create-release-pr'
 
 // Records which candidate a final cut graduated. It is committed with the cut,
@@ -106,6 +107,21 @@ function checkout(candidate: string): string {
   return candidate
 }
 
+// Finalizing a candidate whose own knope.toml still commits and pushes leaves
+// nothing staged here, the one case where nothing staged is not a failure.
+function commitAndPush(): void {
+  execSync('git add -A', { stdio: 'inherit' })
+  const staged = execSync('git diff --cached --name-only', { encoding: 'utf-8' }).trim() !== ''
+  if (staged) {
+    execSync('git commit -m "chore: release"', { stdio: 'inherit' })
+  } else if (
+    execSync('git log -1 --format=%s', { encoding: 'utf-8' }).trim() !== 'chore: release'
+  ) {
+    throw new Error('knope prepared nothing to release')
+  }
+  execSync('git push --force --set-upstream origin release', { stdio: 'inherit' })
+}
+
 const final = process.env.RELEASE_MODE === 'final'
 if (!final && finalCutIsOpen()) {
   console.log('a final cut is open; leaving the release branch alone until it merges or closes')
@@ -125,7 +141,12 @@ execSync(`knope prepare-release --verbose${rc ? ' --prerelease-label rc' : ''}`,
   stdio: 'inherit',
 })
 
-// Not a knope step: knope spawns those after the working tree has been replaced
-// by the candidate's, which would run whatever version of this shipped back
-// then. Imported statically instead, so it is resolved before that checkout.
-createReleasePr(final ? candidate : '')
+// The notes, the commit and the PR are not knope steps: knope spawns those after
+// the working tree has been replaced by the candidate's, which would run
+// whatever version of this shipped back then. Imported statically instead, so
+// they are resolved before that checkout. The notes go into the release commit
+// rather than a later one, because every push to the release branch restarts
+// its sim checks.
+const notesProblem = writeReleaseNotes(final)
+commitAndPush()
+createReleasePr(final ? candidate : '', notesProblem)

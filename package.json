@@ -8,6 +8,7 @@
   "scripts": {
     "lint": "oxlint . && oxfmt --check .",
     "check-changesets": "bun scripts/check-changesets.ts",
+    "check-release-notes": "bun run --cwd apps/mobile release:check-notes",
     "publish-releases": "bun scripts/publish-releases.ts",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun --cwd packages/core test && bun --cwd packages/node-adapters test && bun --cwd packages/mock-network test && bun --cwd apps/sim test && bun --cwd apps/mobile test && bun --cwd apps/integration test && bun --cwd apps/cli test && bun --cwd apps/desktop test && bun --cwd apps/benchmark test",
