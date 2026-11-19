@@ -287,6 +287,28 @@ export class UploadManager {
     return fresh.length
   }
 
+  /**
+   * Takes a file off the upload queue unless a batch already holds it. A
+   * file packing, packed, uploading or done is left alone, since its bytes
+   * are already in a slab the batch sends, and the result is `held`. A file
+   * queued or waiting to retry has its uploads-store entry removed, as
+   * trashing does, and the result is `withdrawn`. The loop skips a queued
+   * file whose entry is gone. A file the uploader has no entry for is
+   * `absent`. The entry is checked and removed with no await between, so the
+   * loop cannot start packing the file in between.
+   *
+   * A withdrawn file is off the queue until it is enqueued again, and the
+   * poll takes it again only while auto-scan uploads are on.
+   */
+  withdraw(fileId: string): 'held' | 'withdrawn' | 'absent' {
+    const status = this.app.uploads.getEntry(fileId)?.status
+    if (status === undefined) return 'absent'
+    if (status !== 'queued' && status !== 'error') return 'held'
+    this.app.uploads.remove(fileId)
+    this.retries.delete(fileId)
+    return 'withdrawn'
+  }
+
   // Each file passed is taken once, so a list naming a file twice queues it once.
   private notActive(files: FileEntry[]): FileEntry[] {
     const taken = new Set(this.app.uploads.getActiveIds())
@@ -636,15 +658,23 @@ export class UploadManager {
   }
 
   /**
-   * Whether a queued file was trashed or deleted before it was packed.
-   * Trashing and deleting take a file out of the uploads store, and every
-   * file the loop takes was registered there when it was queued, so a
-   * missing entry means the file is no longer wanted. Skipping it keeps a
-   * trashed file from taking a place in the batch and an upload.
+   * Whether a queued file was trashed or deleted before it was packed, or
+   * is already in a batch. Trashing and deleting take a file out of the
+   * uploads store, and every file the loop takes was registered there when
+   * it was queued, so a missing entry means the file is no longer wanted.
+   * Skipping it keeps a trashed file from taking a place in the batch and an
+   * upload.
+   *
+   * `withdraw` removes an entry but leaves the file's FileEntry in the
+   * queues, so a file withdrawn and enqueued again can be queued twice. Both
+   * callers set the status to `packing` right after this check, with no
+   * await between, so the second of the two is skipped rather than packed
+   * and pinned a second time.
    */
   private dropped(entry: FileEntry): boolean {
-    if (this.app.uploads.getEntry(entry.fileId)) return false
-    logger.info('uploadManager', 'file_dropped', { fileId: entry.fileId })
+    const status = this.app.uploads.getEntry(entry.fileId)?.status
+    if (status === 'queued' || status === 'error') return false
+    logger.info('uploadManager', 'file_dropped', { fileId: entry.fileId, status })
     return true
   }
 

@@ -63,6 +63,9 @@ export function buildUploaderNamespace(
         manager.enqueue(fileEntries)
       }
     },
+    withdraw(fileId) {
+      return manager.withdraw(fileId)
+    },
     async shutdown() {
       await manager.shutdown()
     },

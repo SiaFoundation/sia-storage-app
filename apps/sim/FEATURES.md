@@ -341,7 +341,8 @@ bun sim device expect phone --label Menu
 ### Finder on the Mac
 
 - When: the desktop app's Finder folder, and the File Provider extension that
-  serves it from the daemon.
+  serves it from the daemon. A save deletes the version it replaces when that
+  version never left the Mac and no batch or share link holds it.
 - Code: `app.provider`, served to the extension by
   `apps/cli/src/daemon/ipc/provider.ts`
 - Check: on a CLI device, stage bytes with `stage()` or `handoffTarget()`, then
@@ -358,7 +359,7 @@ bun sim device expect phone --label Menu
   `desktop/finder-thumbnails-for-cloud-files`; integration `provider-handoff`,
   `provider-reads`, `provider-changes`, `provider-bulk-create`,
   `provider-concurrent-opens`, `provider-write-integrity`,
-  `provider-thumbnails`
+  `provider-thumbnails`, `finder-replaced-saves`
 - Desktop: `bun sim device finder mac` prints the folder, and `cp`, `mv`, `rm`
   and reading a file in it take the path Finder takes. `finder-state` shows what
   Finder shows for a file, `download` reads a cloud-only file through Finder,

@@ -1339,6 +1339,72 @@ export async function readFileByNameInUnfiled(
   return transformRow(row, objects)
 }
 
+/**
+ * Whether `id` is an older version that no other device can have seen and no
+ * share link names, so deleting it loses nothing beyond its local copy. It has
+ * no object on any indexer and a local copy here, which together mean it was
+ * made on this device: a version from another device reaches this one only
+ * through its object. Its thumbnails have no object either: the thumbnail
+ * scanner makes them while the version is current and has a local copy, and
+ * they can upload before it does. A share link names its files by version, and a
+ * snapshot link waits for this version's upload.
+ */
+export async function queryUnsentOlderVersion(db: DatabaseAdapter, id: string): Promise<boolean> {
+  const row = await db.getFirstAsync<{ id: string }>(
+    `SELECT f.id FROM files f
+     WHERE f.id = ? AND f.kind = 'file' AND f.current = 0
+       AND f.trashedAt IS NULL AND f.deletedAt IS NULL
+       AND NOT EXISTS (SELECT 1 FROM objects o WHERE o.fileId = f.id)
+       AND NOT EXISTS (
+         SELECT 1 FROM files t JOIN objects o ON o.fileId = t.id WHERE t.thumbForId = f.id)
+       AND EXISTS (SELECT 1 FROM fs fsMeta WHERE fsMeta.fileId = f.id)
+       AND NOT EXISTS (SELECT 1 FROM share_link_files s WHERE s.fileId = f.id)`,
+    id,
+  )
+  return row !== null
+}
+
+/**
+ * Deletes `id`, as `tombstoneFilesAndThumbnails` does, only while
+ * `queryUnsentOlderVersion` holds for it, and returns whether it did. Both
+ * run in one transaction, so a share link row or an object recorded after a
+ * separate check could not be deleted along with the version. Removing its
+ * bytes and its thumbnails' is left to the caller.
+ */
+export async function tombstoneUnsentOlderVersion(
+  db: DatabaseAdapter,
+  id: string,
+): Promise<boolean> {
+  return sql.transaction(db, async (tx) => {
+    if (!(await queryUnsentOlderVersion(tx, id))) return false
+    await tombstoneFilesAndThumbnails(tx, [id])
+    return true
+  })
+}
+
+/**
+ * Inserts a thumbnail row only while the file it is for is live, and
+ * returns whether it did. The thumbnail scanner makes a thumbnail long after
+ * it reads the file, and the uploader takes a thumbnail by the thumbnail's
+ * own trash and delete times, so one recorded for a file trashed or deleted
+ * meanwhile would upload. Deleting a file marks its thumbnail rows in the
+ * same transaction, so checking the parent in this one leaves no gap.
+ */
+export async function insertThumbnailForLiveFile(
+  db: DatabaseAdapter,
+  thumbnail: Omit<FileRecord, 'objects'> & { thumbForId: string },
+): Promise<boolean> {
+  return sql.transaction(db, async (tx) => {
+    const parent = await tx.getFirstAsync<{ id: string }>(
+      `SELECT id FROM files WHERE id = ? AND trashedAt IS NULL AND deletedAt IS NULL`,
+      thumbnail.thumbForId,
+    )
+    if (!parent) return false
+    await insertFile(tx, thumbnail)
+    return true
+  })
+}
+
 export async function queryUnuploadedFileCount(db: DatabaseAdapter): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>(
     `SELECT COUNT(*) as count FROM files f
@@ -1494,6 +1560,21 @@ export async function queryCurrentFileVersion(
      LIMIT 1`,
     name,
     directoryId,
+  )
+}
+
+/** The current version of the stack `stackId` names, or null when none is live. */
+export async function queryCurrentVersionOfStack(
+  db: DatabaseAdapter,
+  stackId: string,
+): Promise<FileRecordRow | null> {
+  return db.getFirstAsync<FileRecordRow>(
+    `SELECT ${FILE_ROW_COLUMNS}
+     FROM files
+     WHERE stackId = ? AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL
+     ORDER BY updatedAt DESC, id DESC
+     LIMIT 1`,
+    stackId,
   )
 }
 

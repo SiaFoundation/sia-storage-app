@@ -166,3 +166,104 @@ describe('UploadManager and the memory budget', () => {
     await jest.advanceTimersByTimeAsync(0)
   })
 })
+
+describe('UploadManager.withdraw', () => {
+  /** A manager whose uploads store holds one entry per status, and no loop running. */
+  function managerWithEntries() {
+    const statuses = ['queued', 'error', 'packing', 'packed', 'uploading', 'done'] as const
+    const entries = new Map<string, { id: string; status: string }>(
+      statuses.map((status) => [status, { id: status, status }]),
+    )
+    const manager = new UploadManager()
+    ;(manager as unknown as { app: AppService }).app = {
+      uploads: {
+        getEntry: (id: string) => entries.get(id),
+        remove: (id: string) => entries.delete(id),
+      },
+    } as unknown as AppService
+    return { manager, entries }
+  }
+
+  it('takes a queued file, or one waiting to retry, out of the uploads store', () => {
+    const { manager, entries } = managerWithEntries()
+
+    expect(manager.withdraw('queued')).toBe('withdrawn')
+    expect(manager.withdraw('error')).toBe('withdrawn')
+    expect(entries.has('queued')).toBe(false)
+    expect(entries.has('error')).toBe(false)
+  })
+
+  it('leaves a file a batch holds, and says it did', () => {
+    const { manager, entries } = managerWithEntries()
+
+    for (const status of ['packing', 'packed', 'uploading', 'done']) {
+      expect(manager.withdraw(status)).toBe('held')
+      expect(entries.get(status)?.status).toBe(status)
+    }
+  })
+
+  it('reports a file the uploader does not hold as absent', () => {
+    const { manager } = managerWithEntries()
+
+    expect(manager.withdraw('never-queued')).toBe('absent')
+  })
+
+  it('packs a file withdrawn and enqueued again once, though both entries are still queued', async () => {
+    const entries = new Map<string, { id: string; status: string }>()
+    const app = {
+      uploads: {
+        getEntry: (id: string) => entries.get(id),
+        getActiveIds: () => [...entries.keys()],
+        registerMany: (files: { id: string }[]) => {
+          for (const f of files) entries.set(f.id, { id: f.id, status: 'queued' })
+        },
+        remove: (id: string) => entries.delete(id),
+        setStatus: (id: string, status: string) => {
+          const entry = entries.get(id)
+          if (entry) entry.status = status
+        },
+      },
+    } as unknown as AppService
+    const addPath = jest.fn().mockResolvedValue(undefined)
+    const internal = {
+      transferBudget: new TransferMemoryBudget(() => null),
+      requireSdk: () => ({ uploadPacked: async () => ({ addPath, cancel: () => {} }) }),
+    } as unknown as AppServiceInternal
+    // Wired by hand rather than by initialize(), so no loop runs until the
+    // test drains the queue itself.
+    const manager = new UploadManager()
+    const internals = manager as unknown as {
+      app: AppService
+      internal: AppServiceInternal
+      adapters: { toFilePath: (uri: string) => string }
+      active: boolean
+      loopGeneration: number
+      explicitQueue: { fileId: string }[]
+      drainQueues: (first: unknown) => unknown[]
+      processEntries: (entries: unknown[], generation: number) => Promise<void>
+    }
+    internals.app = app
+    internals.internal = internal
+    internals.adapters = { toFilePath: (uri) => uri }
+    internals.active = true
+    internals.loopGeneration = 1
+    const entry = {
+      fileId: 'v1',
+      fileUri: 'file:///v1',
+      size: 10,
+      file: { id: 'v1', kind: 'file' } as never,
+    }
+
+    expect(manager.enqueue([entry])).toBe(1)
+    expect(manager.withdraw('v1')).toBe('withdrawn')
+    expect(manager.enqueue([{ ...entry }])).toBe(1)
+    expect(internals.explicitQueue).toHaveLength(2)
+
+    const first = internals.explicitQueue.shift()
+    await internals.processEntries(internals.drainQueues(first), 1)
+
+    expect(addPath).toHaveBeenCalledTimes(1)
+    expect(entries.get('v1')?.status).toBe('packed')
+    internals.active = false
+  })
+})

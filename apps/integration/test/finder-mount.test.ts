@@ -210,7 +210,7 @@ describe('a device with a Finder folder', () => {
   })
 
   describe('versions', () => {
-    it('keeps both versions in the cache when a file is saved again before it uploaded', async () => {
+    it('deletes the first version when a file is saved again before it uploaded, and the file keeps its id', async () => {
       mac.setConnected(false)
       const first = await finder.create(null, 'f.bin', bytesOf('1'))
       const firstId = await versionOf(mac, first.id)
@@ -218,11 +218,14 @@ describe('a device with a Finder folder', () => {
       const second = await finder.save(first.id, bytesOf('2', 150))
       const secondId = await versionOf(mac, second.id)
 
+      // The first version's row id is the id Finder names the file by, and
+      // the file keeps that id once the row is deleted.
+      expect(firstId).toBe(first.id)
       expect(second.id).toBe(first.id)
-      expect(secondId).not.toBe(firstId)
-      // Finder now holds only the second version's bytes, so the cache is
-      // the only place the first version exists.
-      expect(await cached(firstId)).toBe(true)
+      expect((await mac.app.files.getVersionHistory('f.bin', null)).map((v) => v.id)).toEqual([
+        secondId,
+      ])
+      expect(await cached(firstId)).toBe(false)
       expect(await cached(secondId)).toBe(true)
       expect(await mountRow(first.id)).toMatchObject({ fileId: secondId, bytes: 150 })
     })
