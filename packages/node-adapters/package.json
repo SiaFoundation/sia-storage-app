@@ -18,6 +18,7 @@
     "./bunDatabase": "./src/bunDatabase.ts",
     "./lock": "./src/lock.ts",
     "./ipc": "./src/ipc.ts",
+    "./mountLink": "./src/mountLink.ts",
     "./state": "./src/state.ts",
     "./sdk": "./src/sdk.ts",
     "./auth": "./src/auth.ts",
