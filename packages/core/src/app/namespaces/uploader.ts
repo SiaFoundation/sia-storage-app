@@ -63,6 +63,10 @@ export function buildUploaderNamespace(
         manager.enqueue(fileEntries)
       }
     },
+    async enqueueSave(stackId, versionId) {
+      if (manager.holdSave(stackId, versionId)) return
+      await namespace.enqueueByIds([versionId])
+    },
     withdraw(fileId) {
       return manager.withdraw(fileId)
     },

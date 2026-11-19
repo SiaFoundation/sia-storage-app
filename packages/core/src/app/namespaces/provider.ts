@@ -905,10 +905,11 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
 
   /**
    * Deletes a version a Finder save just replaced when it never left this
-   * device, so a file saved again and again while uploads are backed up or
-   * the Mac is offline uploads its newest bytes once, not every save. Only
-   * this path calls it: a phone or CLI import of a same-name file never
-   * deletes the version it stacks on.
+   * device, so a file saved again and again uploads its newest bytes once,
+   * not every save. A save is still unsent when the next one arrives if it
+   * was held because the file was saved moments before, or if the Mac is
+   * offline or uploads are backed up. Only this path calls it: a phone or
+   * CLI import of a same-name file never deletes the version it stacks on.
    *
    * The version stays when it or one of its thumbnails has an object on any
    * indexer, since another device may have it, when a share link names it,
@@ -1400,7 +1401,7 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
           await recordInMount(unchanged.id, current.id, current.size)
         return unchanged
       }
-      await service.uploader.enqueueByIds([versionId])
+      await service.uploader.enqueueSave(id, versionId)
 
       // Freed now rather than by the eviction pass, which leaves a superseded version's copy for an
       // hour. An object on any indexer is enough: an older version left on an earlier indexer is
