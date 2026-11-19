@@ -42,7 +42,6 @@ function notes(version: string, platform: MobilePlatform): string {
   const entry = readWhatsNew().find((e) => e.version === version)
   if (!entry) throw new Error(`release-notes/whats-new.json has no entry for ${version}`)
   const text = storeText(entry, platform)
-  if (!text) throw new Error(`the ${version} entry has no items for ${platform}`)
   if (text.length > storeLimit(platform)) {
     throw new Error(
       `the ${platform} notes are ${text.length} characters, over ${storeLimit(platform)}`,

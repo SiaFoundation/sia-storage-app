@@ -271,6 +271,13 @@ Keys are the short names in `knope.toml`: `core`, `logger`, `web`, `mobile`, `de
 (`node-adapters`, `sdk-mock`), is dropped from the release with no error, which is why
 `bun run check-changesets` runs in CI.
 
+A change that reaches only some of an app's platforms adds a `platforms:` line, such as
+`platforms: macos` for a Finder-only change or `platforms: ios` for an iCloud one. The
+platforms are `ios` and `android` for `mobile`, and `macos`, `windows` and `linux` for
+`desktop`, separated by commas. The release notes keep the change to those platforms, and the
+others show no change. Leave the line out when every platform gets the change.
+`apps/mobile/release-notes/GUIDE.md` describes how the notes use it.
+
 The description is one line in the present tense, for whoever reads the changelog. App
 packages (`mobile`, `web`, `desktop`, `cli`) cover user-facing changes only, in the words
 a user would use for what they now see or can do. Library packages (`core`, `logger`)

@@ -24,10 +24,10 @@ for the person using the app, who is not technical.
   the app is suspended".
 - **Only what a person can notice.** Internal speed or memory work is an item only when it
   shows as something visible, such as faster previews.
-- **Mark platforms.** An item that only applies to one platform lists only that platform:
-  iCloud and the Photos picker are iOS, storage permissions and the system navigation bar are
-  Android, VoiceOver is iOS and TalkBack is Android. Never mention the other platform in an
-  item.
+- **Keep platforms apart.** Each item's platforms come from the changelog entries it cites,
+  and an entry marked [only ios] applies to iOS alone. Never combine entries for different
+  platforms in one item, and never mention the other platform in an item. A store with
+  nothing new in a version shows "Bug fixes and performance improvements." on its own.
 - **Never list file formats.** "Support for many more audio, video, and image formats."
 - **Google Play allows 500 characters.** The Android items, one per line with "- " in front,
   must fit in 500. Shorten every item before dropping one. The App Store allows 4000.
@@ -35,6 +35,22 @@ for the person using the app, who is not technical.
   This text ships inside the app.
 
 The 1.15.0 entry is an example of the length and tone.
+
+## Platforms in a changeset
+
+A changeset for a change that reaches only some of an app's platforms names them, so the notes
+keep it to those platforms:
+
+```
+---
+desktop: patch
+platforms: macos
+---
+```
+
+The platforms are `ios` and `android` for `mobile`, and `macos`, `windows` and `linux` for
+`desktop`, separated by commas. A changeset without the line applies to every platform of its
+apps. Knope skips the line, and `bun run check-changesets` checks it.
 
 | Release candidate wording                                                                   | What's New wording                                      |
 | ------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
@@ -55,9 +71,8 @@ Each app in the round gets its own lists, from its own changelog.
   a stable release.
 - **Since the last release:** everything in the version so far, grouped by theme, one item per
   theme.
-- **Mark platforms.** Each item lists the platforms a tester can try it on, from that app's
-  platforms only. Mark an item for one platform when it names that platform's own things, such
-  as iCloud on iOS, Finder on macOS or File Explorer on Windows, and otherwise for all of them.
+- **Keep platforms apart.** As in What's New, an item's platforms come from the entries it
+  cites, so never combine entries for different platforms in one item.
 - **One sentence per item, friendly and not technical.** For a pile of related fixes, say
   "Fixed some issues with importing files". No function, table or library names.
 - **Never list file formats**, and leave out dependency updates, refactors and build changes.

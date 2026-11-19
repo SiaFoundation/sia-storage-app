@@ -12,6 +12,7 @@ Route by whether the author must act before merge:
 | ----------------------------------------------------------- | ------------------- |
 | Important, or a defect this diff introduced                 | its own thread      |
 | A missing changeset                                         | its own thread      |
+| A one-platform change whose changeset has no `platforms:`   | its own thread      |
 | Everything else: nits, cleanup, code the diff only revealed | one summary comment |
 | The linter, formatter or type checker catches it            | nowhere             |
 
