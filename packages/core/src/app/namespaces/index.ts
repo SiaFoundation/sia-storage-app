@@ -225,6 +225,7 @@ export function createAppService(adapters: AppServiceAdapters): AppServiceResult
     (indexerURL) => authNamespace.getAppKey(indexerURL),
     () => caches.shareLinks.invalidateAll(),
     (indexerURL) => service.files.trashOlderVersions(indexerURL),
+    (ids) => uploadManager.releaseHeldSaves(ids),
   )
 
   const databaseNamespaces = (db: DatabaseAdapter, namespaceCaches: AppCaches = caches) =>
