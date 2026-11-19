@@ -30,6 +30,7 @@ import { SlotPool } from '../lib/slotPool'
 import { TransferSpeedTracker } from '../lib/transferSpeed'
 import { uploadPeakBytes } from './transferMemoryBudget'
 import { tidyCopies } from './localCopies'
+import { RepeatSaveHold } from './repeatSaves'
 import { uniqueId } from '../lib/uniqueId'
 import type { FileQueryOpts } from '../db/operations/files'
 import type { FileRecordRow } from '../types/files'
@@ -196,6 +197,12 @@ export class UploadManager {
    * again at once.
    */
   private retries = new Map<string, { failures: number; retryAt: number; network: boolean }>()
+  /** Finder saves held back because the file was saved again moments before. */
+  private repeatSaves = new RepeatSaveHold((fileId) => {
+    this.app.uploader.enqueueByIds([fileId]).catch((e) => {
+      logger.warn('uploadManager', 'held_save_enqueue_failed', { fileId, error: e as Error })
+    })
+  })
   /**
    * Whether the indexer stopped answering while a file waited to retry a
    * network failure, as a failed account check or a poll skipped for want of
@@ -275,6 +282,8 @@ export class UploadManager {
   enqueue(files: FileEntry[]): number {
     const fresh = this.notActive(files)
     if (fresh.length === 0) return 0
+    // A held save asked for directly goes now, like a file waiting to retry.
+    for (const f of fresh) this.repeatSaves.drop(f.fileId)
     // The explicit queue never waits on `retries`, so a file asked for
     // directly goes now. Dropping its count restarts the delay at the base if
     // this attempt fails too.
@@ -302,11 +311,29 @@ export class UploadManager {
    */
   withdraw(fileId: string): 'held' | 'withdrawn' | 'absent' {
     const status = this.app.uploads.getEntry(fileId)?.status
-    if (status === undefined) return 'absent'
+    // A Finder save held back for a repeat save has no uploads-store entry
+    // yet, and dropping its hold takes it out of the uploader the same way.
+    if (status === undefined) return this.repeatSaves.drop(fileId) ? 'withdrawn' : 'absent'
     if (status !== 'queued' && status !== 'error') return 'held'
     this.app.uploads.remove(fileId)
     this.retries.delete(fileId)
+    this.repeatSaves.drop(fileId)
     return 'withdrawn'
+  }
+
+  /**
+   * Records a Finder save of the file Finder names `stackId` as the version
+   * `versionId`, and returns whether its upload is held because the file was
+   * saved moments before. A version not held is the caller's to queue. See
+   * RepeatSaveHold for when a held save is released.
+   */
+  holdSave(stackId: string, versionId: string): boolean {
+    return this.repeatSaves.save(stackId, versionId)
+  }
+
+  /** Queues now any held save among `ids`, matched by version or by the file's stack id. */
+  releaseHeldSaves(ids: string[]): void {
+    this.repeatSaves.releaseNow(ids)
   }
 
   // Each file passed is taken once, so a list naming a file twice queues it once.
@@ -473,6 +500,8 @@ export class UploadManager {
     this.explicitQueue = []
     this.polledFiles = []
     this.retries.clear()
+    // Like the retry schedule, so the next loop's poll uploads a held save at once.
+    this.repeatSaves.clear()
     this.packer = null
     this.batch = null
     this.wake()
@@ -759,6 +788,7 @@ export class UploadManager {
     this.explicitQueue = []
     this.polledFiles = []
     this.retries.clear()
+    this.repeatSaves.clear()
     this.app = null!
     this.internal = null!
     this._flushHistory = []
@@ -1323,7 +1353,11 @@ export class UploadManager {
     }
 
     try {
-      const activeIds = [...this.app.uploads.getActiveIds(), ...this.waitingToRetry()]
+      const activeIds = [
+        ...this.app.uploads.getActiveIds(),
+        ...this.waitingToRetry(),
+        ...this.repeatSaves.heldIds(),
+      ]
       const indexerURL = await this.app.settings.getIndexerURL()
       await this.dropFailedNotTaken(indexerURL)
       const candidateFiles = await this.app.files.query(
@@ -1381,7 +1415,15 @@ export class UploadManager {
       // activeIds was read before the query, and enqueue() can take a file
       // while the query runs. Checked again here, with no await before the
       // register, so a file is never in both queues.
-      const fresh = this.notActive(stillWanted)
+      //
+      // A Finder save can also be held while the query runs, and a held
+      // save's thumbnails wait with it. Uploaded on their own, they would
+      // reach other devices for a version that is deleted if the next save
+      // replaces it, and their objects would keep it from being deleted.
+      const held = new Set(this.repeatSaves.heldIds())
+      const fresh = this.notActive(stillWanted).filter(
+        (e) => !held.has(e.fileId) && !(e.file.thumbForId && held.has(e.file.thumbForId)),
+      )
       if (fresh.length > 0) {
         this.app.uploads.registerMany(
           fresh.map((e) => ({ id: e.fileId, size: e.size, kind: e.file.kind })),

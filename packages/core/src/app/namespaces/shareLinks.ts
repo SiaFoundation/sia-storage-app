@@ -85,6 +85,11 @@ type Deps = {
   invalidate: () => void
   /** Moves older versions uploaded to the indexer to the trash, returning how many. */
   trashOlderVersions: (indexerURL: string) => Promise<number>
+  /**
+   * Starts the upload of any Finder save among `ids`, by version or stack id,
+   * that the uploader holds back because the file was saved moments before.
+   */
+  releaseHeldSaves?: (ids: string[]) => void
 }
 
 function keyOf(link: ops.ShareLinkRow): SharingKeyRef {
@@ -187,6 +192,20 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
     const next = queue.then(run, run)
     queue = next.catch(() => {})
     return next
+  }
+
+  /**
+   * A link lists a file not yet uploaded as pending until its upload ends, so
+   * a Finder save held back for a repeat save would keep recipients waiting.
+   */
+  async function releaseHeldSaves(fileIds: string[]): Promise<void> {
+    if (!deps.releaseHeldSaves) return
+    const ids = [...fileIds]
+    for (const fileId of fileIds) {
+      const stackId = await ops.queryStackIdForRow(db, fileId)
+      if (stackId) ids.push(stackId)
+    }
+    deps.releaseHeldSaves(ids)
   }
 
   /**
@@ -668,12 +687,15 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
           expiresAt,
           mode,
         }
+        let files: string[] = []
         await db.withTransactionAsync(async (tx) => {
           await ops.insertShareLink(tx, link)
-          for (const fileId of await distinctFiles(tx, fileIds)) {
+          files = await distinctFiles(tx, fileIds)
+          for (const fileId of files) {
             await ops.insertShareLinkFile(tx, key.publicKey, fileId, 'pending')
           }
         })
+        await releaseHeldSaves(files)
         // Attached now rather than on the next pass, so the link opens on the
         // files already uploaded as soon as it is shown. The key and its rows
         // exist by now and the background pass attaches whatever this misses,
@@ -705,13 +727,16 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
         const sdk = deps.requireSdk()
         const indexerURL = await deps.getIndexerURL()
         const link = await requireLink(sdk, indexerURL, publicKey)
+        let added: string[] = []
         await db.withTransactionAsync(async (tx) => {
           const existing = await ops.queryShareLinkFileStacks(tx, publicKey)
           const taken = new Set(existing.filter((f) => f.name !== null).map(stackOf))
-          for (const fileId of await distinctFiles(tx, fileIds, taken)) {
+          added = await distinctFiles(tx, fileIds, taken)
+          for (const fileId of added) {
             await ops.insertShareLinkFile(tx, publicKey, fileId, 'pending')
           }
         })
+        await releaseHeldSaves(added)
         await syncLink(sdk, indexerURL, keyOf(link), link.mode)
         deps.invalidate()
       }),

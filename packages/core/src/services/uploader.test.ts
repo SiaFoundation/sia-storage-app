@@ -112,6 +112,64 @@ describe('UploadManager idle wait', () => {
   })
 })
 
+describe('UploadManager poll and held saves', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  it('does not register a save that was held while the poll queried the database', async () => {
+    const queries: Array<(files: unknown[]) => void> = []
+    const registerMany = jest.fn()
+    const version = { id: 'v2', kind: 'file', size: 10, thumbForId: null }
+    const thumbnail = { id: 't2', kind: 'thumb', size: 1, thumbForId: 'v2' }
+    const app = {
+      settings: {
+        getUploadSpeedStats: jest.fn().mockResolvedValue(null),
+        setUploadSpeedStats: jest.fn().mockResolvedValue(undefined),
+        getAutoScanUploads: jest.fn().mockResolvedValue(true),
+        getIndexerURL: jest.fn().mockResolvedValue('https://idx.example.com'),
+      },
+      sync: { getState: () => ({ syncGateStatus: 'idle' }) },
+      connection: { getState: () => ({ isConnected: true }) },
+      account: jest.fn().mockResolvedValue({ remainingStorage: 1_000_000n }),
+      files: {
+        query: jest.fn(() => new Promise<unknown[]>((resolve) => queries.push(resolve))),
+        getByIds: jest.fn().mockResolvedValue([]),
+      },
+      fs: { getFileUri: jest.fn(async (f: { id: string }) => `file:///${f.id}`) },
+      uploads: {
+        getActiveIds: () => [],
+        getEntry: (id: string) => ({ id, status: 'queued' }),
+        getState: () => ({ uploads: {}, storageFull: false }),
+        setStorageFull: () => {},
+        registerMany,
+      },
+    } as unknown as AppService
+    const manager = new UploadManager()
+    const internal = {
+      transferBudget: new TransferMemoryBudget(() => null),
+    } as unknown as AppServiceInternal
+    // The first save of a file is not held, so the second one is.
+    expect(manager.holdSave('stack', 'v1')).toBe(false)
+    manager.initialize(app, internal, { toFilePath: (uri) => uri })
+    await jest.advanceTimersByTimeAsync(0)
+    expect(queries).toHaveLength(1)
+
+    expect(manager.holdSave('stack', 'v2')).toBe(true)
+    queries.shift()!([version, thumbnail])
+    await jest.advanceTimersByTimeAsync(0)
+
+    expect(registerMany).not.toHaveBeenCalled()
+    await manager.shutdown()
+    queries.shift()?.([])
+    await jest.advanceTimersByTimeAsync(0)
+  })
+})
+
 describe('UploadManager and the memory budget', () => {
   beforeEach(() => {
     jest.useFakeTimers()
@@ -206,6 +264,21 @@ describe('UploadManager.withdraw', () => {
     const { manager } = managerWithEntries()
 
     expect(manager.withdraw('never-queued')).toBe('absent')
+  })
+
+  it('takes back a Finder save held for a repeat save, which has no uploads-store entry', () => {
+    jest.useFakeTimers()
+    try {
+      const { manager } = managerWithEntries()
+      // The first save of a file is not held, so the second one is.
+      expect(manager.holdSave('stack', 'v1')).toBe(false)
+      expect(manager.holdSave('stack', 'v2')).toBe(true)
+
+      expect(manager.withdraw('v2')).toBe('withdrawn')
+      expect(manager.withdraw('v2')).toBe('absent')
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('packs a file withdrawn and enqueued again once, though both entries are still queued', async () => {
