@@ -32,10 +32,8 @@ import {
 } from './releaseNotes'
 
 const COPILOT = '@github/copilot@1.0.114'
-// Tried in order, since the CLI refuses a model the organization's Copilot
-// plan does not offer to a workflow token. On 28 October 2026 it offered
-// claude-opus-5 and claude-opus-4.8, and not claude-opus-5.5.
-const MODELS = ['claude-opus-5.5', 'claude-opus-5', 'claude-opus-4.8']
+// Copilot picks the model. Under a workflow token it refuses Opus models by name.
+const MODEL = 'auto'
 const MOBILE_DIR = path.resolve(import.meta.dir, '..')
 
 function mobileVersion(): string {
@@ -57,15 +55,7 @@ function ask(prompt: string): string {
   if (!token) throw new Error('COPILOT_GITHUB_TOKEN is not set')
   const sandbox = mkdtempSync(path.join(tmpdir(), 'release-notes-'))
   try {
-    for (const model of MODELS) {
-      const run = runCopilot(prompt, model, sandbox, token)
-      if (run.status !== 0 && run.stderr.includes('is not available')) {
-        console.warn(`${model} is not available to this workflow`)
-        continue
-      }
-      return replyOf(run)
-    }
-    throw new Error(`none of ${MODELS.join(', ')} is available to this workflow`)
+    return replyOf(runCopilot(prompt, sandbox, token))
   } finally {
     rmSync(sandbox, { recursive: true, force: true })
   }
@@ -102,12 +92,7 @@ function cliEnv(sandbox: string, token: string): NodeJS.ProcessEnv {
   }
 }
 
-function runCopilot(
-  prompt: string,
-  model: string,
-  sandbox: string,
-  token: string,
-): SpawnSyncReturns<string> {
+function runCopilot(prompt: string, sandbox: string, token: string): SpawnSyncReturns<string> {
   return spawnSync(
     'bunx',
     [
@@ -117,7 +102,7 @@ function runCopilot(
       prompt,
       '--silent',
       '--model',
-      model,
+      MODEL,
       '--no-ask-user',
       '--no-auto-update',
       '--no-custom-instructions',
