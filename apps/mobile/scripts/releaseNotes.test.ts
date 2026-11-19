@@ -73,7 +73,11 @@ describe('reading the mobile changelog', () => {
       'Uploads resume after a crash The upload queue is restored on launch.',
     ])
     expect(changes.entries[1].platforms).toEqual(['ios'])
-    expect(changes.candidate).toEqual({ from: '1.16.0-rc.0', numbers: [1, 3] })
+    expect(changes.candidate).toEqual({
+      from: '1.16.0-rc.0',
+      numbers: [1, 3],
+      previous: ['Photos import faster.'],
+    })
   })
 
   test('the first candidate after a stable release has no previous candidate', () => {
@@ -154,6 +158,10 @@ describe("What's New", () => {
   test('the checked-in files are valid', () => {
     expect(readWhatsNew('mobile').length).toBeGreaterThan(0)
     expect(() => readWhatsNew('desktop')).not.toThrow()
+  })
+
+  test("a tree from before an app had a What's New file reads as no entries", () => {
+    expect(readWhatsNew('desktop', '/nonexistent/whats-new.json')).toEqual([])
     expect(() => readTesting()).not.toThrow()
   })
 })
@@ -258,7 +266,7 @@ function changes(platforms: Item['platforms'][], fresh: number[] | null): RoundC
     version: 'x',
     from: null,
     entries: platforms.map((p, i) => ({ text: `entry ${i + 1}`, platforms: p })),
-    candidate: fresh && { from: 'y', numbers: fresh },
+    candidate: fresh && { from: 'y', numbers: fresh, previous: [] },
   }
 }
 

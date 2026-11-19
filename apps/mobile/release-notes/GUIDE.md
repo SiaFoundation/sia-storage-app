@@ -68,8 +68,9 @@ the mobile app, and the beta desktop app. They know the app well and want to kno
 Each app in the round gets its own lists, from its own changelog.
 
 - **Since the last candidate:** two to four items on what changed since the previous
-  candidate, such as the fix for a problem found in it. Left out for the first candidate after
-  a stable release.
+  candidate, such as the fix for a problem found in it. A feature the previous candidate
+  already had, whose changeset was reworded, gets an item on what changed in it, not one
+  presenting it as new. Left out for the first candidate after a stable release.
 - **Since the last release:** everything in the version so far, grouped by theme, one item per
   theme.
 - **Keep platforms apart.** As in What's New, an item's platforms come from the entries it

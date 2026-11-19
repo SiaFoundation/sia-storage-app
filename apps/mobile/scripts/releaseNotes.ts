@@ -178,8 +178,13 @@ export function parseTesting(json: unknown, file = TESTING_FILE): TestingNotes {
   return notes
 }
 
-export function readWhatsNew(app: AppName): WhatsNewEntry[] {
-  return parseWhatsNew(JSON.parse(readFileSync(whatsNewFile(app), 'utf-8')), app)
+/**
+ * An app's What's New entries, with none for a tree older than its file, such
+ * as a candidate cut before desktop had one that is now being finalized.
+ */
+export function readWhatsNew(app: AppName, file = whatsNewFile(app)): WhatsNewEntry[] {
+  if (!existsSync(file)) return []
+  return parseWhatsNew(JSON.parse(readFileSync(file, 'utf-8')), app, file)
 }
 
 /** The tester notes, with no apps before Prepare Release has written any. */
@@ -386,8 +391,12 @@ export type CandidateChanges = {
   /** The last stable release, which `entries` lists everything since. */
   from: string | null
   entries: Entry[]
-  /** The previous candidate, and the 1-based numbers of the entries new since it. */
-  candidate: { from: string; numbers: number[] } | null
+  /**
+   * The previous candidate, the 1-based numbers of the entries new since it,
+   * and its own entries, since a changeset reworded between candidates shows
+   * up as a new entry.
+   */
+  candidate: { from: string; numbers: number[]; previous: string[] } | null
 }
 
 /**
@@ -416,6 +425,7 @@ export function candidateChanges(
     candidate: priorCandidate && {
       from: priorCandidate.version,
       numbers: top.entries.flatMap((e, i) => (priorCandidate.entries.includes(e) ? [] : [i + 1])),
+      previous: priorCandidate.entries,
     },
   }
 }
@@ -442,12 +452,18 @@ function changesPrompt(app: AppName, changes: CandidateChanges): string {
     })
     .join('\n')
   const since = changes.candidate
+  const fresh = since?.numbers.join(', ')
   return [
     `${APP_LABELS[app]}, ${app} ${changes.version}, on ${all.join(', ')}. Its entries since ${changes.from ?? 'its first release'}:`,
     `<${app}-entries>\n${entries}\n</${app}-entries>`,
-    since
-      ? `Entries new since its previous candidate, ${since.from}: ${since.numbers.join(', ') || 'none, so its sinceCandidate list is empty'}.`
-      : `This is ${app}'s first candidate since its last release, so its sinceCandidate list is empty.`,
+    !since
+      ? `This is ${app}'s first candidate since its last release, so its sinceCandidate list is empty.`
+      : !fresh
+        ? `No entries are new since its previous candidate, ${since.from}, so its sinceCandidate list is empty.`
+        : [
+            `Entries new since its previous candidate, ${since.from}: ${fresh}. A new entry can be a reworded version of one the previous candidate had, below. Then its sinceCandidate item says what changed for a tester, not that the feature is new.`,
+            `<${app}-previous-candidate>\n${since.previous.map((e) => `- ${e}`).join('\n')}\n</${app}-previous-candidate>`,
+          ].join('\n'),
   ].join('\n')
 }
 

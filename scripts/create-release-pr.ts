@@ -171,7 +171,14 @@ function notesSection(candidate: string, problem: string | null): string {
   const warning = problem
     ? `> **The release notes were not written:** ${problem}\n> Re-run Prepare Release, or write them in the apps' \`release-notes\` folders on the release branch.\n\n`
     : ''
-  const apps = APP_NAMES.filter((app) => wasChangedFromMain(join(APPS[app].dir, 'CHANGELOG.md')))
+  // A final cut releases the apps whose version it graduates. Its changelogs
+  // can also differ from main's because main has moved past the candidate, so
+  // they are no guide to which apps ship.
+  const apps = APP_NAMES.filter((app) =>
+    candidate
+      ? versionOf(app, candidate) !== versionOf(app)
+      : wasChangedFromMain(join(APPS[app].dir, 'CHANGELOG.md')),
+  )
   if (candidate) {
     const sections = apps.map((app) => {
       const version = versionOf(app)
