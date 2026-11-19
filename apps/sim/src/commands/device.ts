@@ -32,7 +32,7 @@ export function registerDeviceCommands({ program, current }: CommandContext): vo
   device
     .command('capture <name> <label>')
     .description(
-      "Save what a device shows now under the session's evidence/<label>: its library, log, a phone's screen, the desktop app's windows and Finder folder",
+      "Save what a device shows now under the session's evidence/<label>: its library, log, a phone's screen, the desktop app's windows and Finder folder, a Windows device's screen, logs and File Explorer folder",
     )
     .action(async (name: string, label: string) => {
       const session = current()
@@ -79,6 +79,17 @@ export function registerDeviceCommands({ program, current }: CommandContext): vo
       'What Finder shows for a file in the Finder folder: downloaded or not, hidden extension, type',
     )
     .action((name: string, file: string) => print(desktop(name).finderState(file)))
+
+  device
+    .command('explorer-state <name> <file>')
+    .description(
+      "What File Explorer shows for a file in a Windows device's folder: size, cloud-only, pinned, in sync",
+    )
+    .action(async (name: string, file: string) => {
+      const d = openDevice(current(), name)
+      if (!(d instanceof WindowsDevice)) throw new Error(`${name} is not a Windows device`)
+      print(await d.explorerState(file))
+    })
 
   device
     .command('download <name> <file>')

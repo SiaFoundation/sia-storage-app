@@ -76,7 +76,8 @@ data directory through `@siastorage/logger`.
 
 `folder.ts` decides everything, against the `CloudFiles` interface, and its
 tests run on any platform with Windows stood in for. `cloudFiles.ts`,
-`shim.c` and `syncRoot.ts` run only on Windows.
+`shim.c` and `syncRoot.ts` run only on Windows, where the scenarios in
+`apps/sim/scenarios/windows` cover them.
 
 Opening a placeholder to read its data makes Windows fetch the whole file
 first, through the provider. From the provider's own thread that open waits on

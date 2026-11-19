@@ -9,7 +9,7 @@ import { isDeepStrictEqual } from 'node:util'
 import type { NetworkControl } from '@siastorage/mock-network/control'
 import { waitForConvergence } from './converge'
 import { contentMismatches } from './integrity'
-import type { CliDevice, DesktopDevice, Device, PhoneDevice } from './devices'
+import type { CliDevice, DesktopDevice, Device, PhoneDevice, WindowsDevice } from './devices'
 import { addTyped, type NameStyle, seedTypedFiles, type TypedFile } from './filetypes'
 import { seedFiles } from './seed'
 import { capture } from './evidence'
@@ -51,9 +51,10 @@ export type StepRecord = { name: string; ms: number; ok: boolean; error?: string
  * `desktop` is the installed desktop app on this Mac, and a scenario asking
  * for one is skipped on a machine that has none. `desktop-signed-out` is the
  * same app started with no account, for a scenario that signs in through its
- * window.
+ * window. `windows` is the desktop app in the Windows VM, and a scenario
+ * asking for one is skipped on a machine with no such VM.
  */
-type ScenarioDeviceKind = 'cli' | 'phone' | 'desktop' | 'desktop-signed-out'
+type ScenarioDeviceKind = 'cli' | 'phone' | 'desktop' | 'desktop-signed-out' | 'windows'
 
 /** Whether a scenario's device is the desktop app, signed in or not. */
 export const isDesktopKind = (kind: ScenarioDeviceKind): boolean =>
@@ -66,7 +67,9 @@ export type ScenarioDevices<M extends DeviceMap> = {
     ? CliDevice
     : M[N] extends 'desktop' | 'desktop-signed-out'
       ? DesktopDevice
-      : PhoneDevice
+      : M[N] extends 'windows'
+        ? WindowsDevice
+        : PhoneDevice
 }
 
 export type ScenarioContext<M extends DeviceMap> = {
