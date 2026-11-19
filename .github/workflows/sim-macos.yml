@@ -60,7 +60,7 @@ jobs:
     # write the privacy grants sim needs. Tenki's have SIP on, and their
     # runner agent lacks Full Disk Access, so no grant can be written there.
     # SIM_MACOS_RUNNER names another GitHub macOS runner.
-    runs-on: ${{ vars.SIM_MACOS_RUNNER || 'macos-26' }}
+    runs-on: ${{ vars.SIM_MACOS_RUNNER || 'xcode-27' }}
     environment: desktop-sim
     timeout-minutes: 60
     steps:
@@ -86,7 +86,7 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: '26.2'
+          xcode-version: '27.2'
       - name: Fetch Electron
         run: bun run desktop:setup
       - name: Grant sim's permissions
@@ -181,7 +181,7 @@ jobs:
           SHA: ${{ github.event.pull_request.head.sha }}
           STATE: ${{ steps.suite.outcome == 'success' && 'success' || 'failure' }}
           SMOKE: ${{ steps.smoke.outcome }}
-          RUNNER: ${{ vars.SIM_MACOS_RUNNER || 'macos-26' }}
+          RUNNER: ${{ vars.SIM_MACOS_RUNNER || 'xcode-27' }}
         run: |
           summary=$(grep -E '^run [^ ]+: [0-9]+ passed' /tmp/sim-suite.out 2>/dev/null | tail -n 1 | sed -E 's/^run [^ ]+: //')
           if [ "$SMOKE" = failure ]; then

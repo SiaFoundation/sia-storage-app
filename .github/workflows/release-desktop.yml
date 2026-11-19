@@ -40,7 +40,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-26
+    runs-on: xcode-27
     strategy:
       # A release is published only once every app it owes is attached, so
       # one failed build is the whole release failed.
@@ -59,7 +59,7 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: '26.2'
+          xcode-version: '27.2'
 
       # The bun on PATH ships inside the app as the daemon runtime, so this is
       # the lockfile's version, not mobile's older pin.
