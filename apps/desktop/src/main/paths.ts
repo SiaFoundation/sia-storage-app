@@ -66,6 +66,11 @@ export function desktopLogPath(): string {
   return join(dataDir(), 'desktop.log')
 }
 
+/** The log of the Windows provider process, which serves the File Explorer folder. */
+export function providerLogPath(): string {
+  return join(dataDir(), 'provider.log')
+}
+
 /**
  * Where the extension's entries are collected to. The extension cannot write
  * here itself: it is sandboxed to its own container and logs through the system

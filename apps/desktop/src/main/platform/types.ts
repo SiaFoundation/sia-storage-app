@@ -23,6 +23,8 @@ export type ShellState = 'absent' | 'starting' | 'mounted' | 'error' | 'unsuppor
 export type ShellConfig = {
   /** Where the shell reaches the daemon. None on a platform with no shell yet. */
   shellSocket?: string
+  /** The script host the daemon runs under, for a shell that is a program run the same way. */
+  runtime: string
   /** Stable identifier for the mount, so a restart reattaches rather than duplicating. */
   domainId: string
   /** What the file manager shows in its sidebar. */
@@ -60,7 +62,7 @@ export interface PlatformIntegration {
    * for a library about to be rebuilt. False when the system kept it, or when
    * this build has no Finder folder to discard.
    */
-  discard(domainId: string): Promise<boolean>
+  discard(config: ShellConfig): Promise<boolean>
   status(): ShellState
   /** Where the OS mounted us, for "open in file manager". Null until mounted. */
   mountPath(): string | null
