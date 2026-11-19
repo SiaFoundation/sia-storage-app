@@ -9,11 +9,10 @@ import {
   parseGenerated,
   parseTesting,
   parseWhatsNew,
-  playTestingText,
   readTesting,
   readWhatsNew,
   storeText,
-  testFlightText,
+  testerNotesText,
 } from './releaseNotes'
 
 const changelog = `# Changelog
@@ -132,9 +131,9 @@ const testing: AppTesting = {
 
 describe('tester notes', () => {
   test('TestFlight gets both lists of iOS items and the changelog link', () => {
-    expect(testFlightText(testing)).toBe(
+    expect(testerNotesText(testing, 'ios')).toBe(
       [
-        'What to test since 1.16.0-rc.0:',
+        'Since 1.16.0-rc.0:',
         '- Folders can be shared.',
         '',
         'Everything in 1.16.0 since 1.15.1:',
@@ -155,23 +154,37 @@ describe('tester notes', () => {
         items: [{ text: 'iCloud photos import.', platforms: ['ios'] }],
       },
     }
-    expect(playTestingText(iosOnly)).toStartWith(
-      'Since 1.16.0-rc.0:\n- No changes since 1.16.0-rc.0.',
+    expect(testerNotesText(iosOnly, 'android')).toStartWith('Since 1.16.0-rc.0:\n- No changes.')
+  })
+
+  test('a long list is cut from the end to fit Play, keeping the changelog link', () => {
+    const long: AppTesting = {
+      ...testing,
+      sinceRelease: {
+        from: '1.15.1',
+        items: Array(20).fill({ text: 'x'.repeat(40), platforms: ['android'] }),
+      },
+    }
+    const text = testerNotesText(long, 'android')
+    expect(text.length).toBeLessThanOrEqual(500)
+    expect(text).toStartWith('Since 1.16.0-rc.0:\n- Folders can be shared.\n\nEverything in 1.16.0')
+    expect(text).toEndWith(
+      '- More in the full changelog.\n\nFull changelog: https://github.com/SiaFoundation/sia-storage-app/releases/tag/mobile/v1.16.0-rc.1',
     )
   })
 
-  test('Play testing gets the newest list, cut to 500 characters with a pointer to the rest', () => {
+  test('the candidate list is cut too once the release list is gone', () => {
     const long: AppTesting = {
       ...testing,
       sinceCandidate: {
         from: '1.16.0-rc.0',
-        items: Array(20).fill({ text: 'x'.repeat(40), platforms: ['android'] }),
+        items: Array(20).fill({ text: 'y'.repeat(40), platforms: ['android'] }),
       },
     }
-    const text = playTestingText(long)
+    const text = testerNotesText(long, 'android')
     expect(text.length).toBeLessThanOrEqual(500)
-    expect(text).toStartWith('Since 1.16.0-rc.0:\n- ')
-    expect(text).toContain('- More in the changelog.\n\nhttps://github.com/')
+    expect(text).not.toContain('Everything in')
+    expect(text).toContain('- More in the full changelog.')
   })
 
   test('a desktop item for a platform the desktop release does not build is refused', () => {

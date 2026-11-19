@@ -54,7 +54,10 @@ export const PLATFORM_NAMES: Record<Platform, string> = {
   linux: 'Linux',
 }
 
-export const LIMITS = { appStore: 4000, googlePlay: 500, testFlight: 4000 } as const
+// TestFlight is held to 2000 characters, below the 4000 App Store Connect
+// takes, because "What to Test" text over about 2 KB was reported on Apple's
+// developer forums not to show in the TestFlight app.
+export const LIMITS = { appStore: 4000, googlePlay: 500, testFlight: 2000 } as const
 
 const STABLE = /^\d+\.\d+\.\d+$/
 const ANY_VERSION = /^\d+\.\d+\.\d+(?:-rc\.\d+)?$/
@@ -186,7 +189,7 @@ export function sinceCandidateLines(notes: AppTesting, platform: Platform): stri
   const since = notes.sinceCandidate
   if (!since) return []
   const lines = on(since.items, platform)
-  return lines.length > 0 ? lines : [`No changes since ${since.from}.`]
+  return lines.length > 0 ? lines : ['No changes.']
 }
 
 export function sinceReleaseLines(notes: AppTesting, platform: Platform): string[] {
@@ -202,47 +205,49 @@ export function storeLimit(platform: MobilePlatform): number {
   return platform === 'ios' ? LIMITS.appStore : LIMITS.googlePlay
 }
 
+type Section = { header: string; lines: string[] }
+
 /**
- * The longest prefix of `items` that fits `limit` together with the header and
- * the footer. A list cut short says so before the footer, which links to the
- * full changelog.
+ * The sections in order, then the footer, within `limit`. Lines are dropped
+ * from the end, so the last section gives way first, and a cut list ends by
+ * saying there is more. The footer is always kept.
  */
-function fitted(header: string, items: string[], footer: string, limit: number): string {
-  for (let n = items.length; n >= 0; n--) {
-    const more = n < items.length ? '\n- More in the changelog.' : ''
-    const text = `${header}\n${bullets(items.slice(0, n))}${more}\n\n${footer}`
+function fitted(sections: Section[], footer: string, limit: number): string {
+  const total = sections.reduce((sum, s) => sum + s.lines.length, 0)
+  for (let kept = total; kept >= 0; kept--) {
+    let left = kept
+    const parts = sections.flatMap(({ header, lines }) => {
+      const take = Math.min(left, lines.length)
+      left -= take
+      return take > 0 ? [`${header}\n${bullets(lines.slice(0, take))}`] : []
+    })
+    if (parts.length === 0) break
+    const more = kept < total ? '\n- More in the full changelog.' : ''
+    const text = `${parts.join('\n\n')}${more}\n\n${footer}`
     if (text.length <= limit) return text
   }
   return footer
 }
 
-/** TestFlight's "What to Test": both lists, then the changelog link. */
-export function testFlightText(notes: AppTesting): string {
-  const footer = `Full changelog: ${releaseNotesUrl(notes.version)}`
+/**
+ * A mobile platform's tester text: what changed since the last candidate, then
+ * everything since the last release, then the changelog link. TestFlight
+ * shows a link in this text as plain text, for a tester to copy.
+ */
+export function testerNotesText(notes: AppTesting, platform: MobilePlatform): string {
+  const since = notes.sinceCandidate
   const from = notes.sinceRelease.from ? ` since ${notes.sinceRelease.from}` : ''
-  const release = `Everything in ${marketingVersion(notes.version)}${from}:`
-  const items = sinceReleaseLines(notes, 'ios')
-  if (!notes.sinceCandidate) return fitted(release, items, footer, LIMITS.testFlight)
-  const candidate = `What to test since ${notes.sinceCandidate.from}:\n${bullets(sinceCandidateLines(notes, 'ios'))}`
-  return fitted(`${candidate}\n\n${release}`, items, footer, LIMITS.testFlight)
-}
-
-/** Play internal testing allows 500 characters, so it gets the newest list only. */
-export function playTestingText(notes: AppTesting): string {
-  const footer = releaseNotesUrl(notes.version)
-  return notes.sinceCandidate
-    ? fitted(
-        `Since ${notes.sinceCandidate.from}:`,
-        sinceCandidateLines(notes, 'android'),
-        footer,
-        LIMITS.googlePlay,
-      )
-    : fitted(
-        `New in ${marketingVersion(notes.version)}:`,
-        sinceReleaseLines(notes, 'android'),
-        footer,
-        LIMITS.googlePlay,
-      )
+  const sections: Section[] = [
+    ...(since
+      ? [{ header: `Since ${since.from}:`, lines: sinceCandidateLines(notes, platform) }]
+      : []),
+    {
+      header: `Everything in ${marketingVersion(notes.version)}${from}:`,
+      lines: sinceReleaseLines(notes, platform),
+    },
+  ]
+  const limit = platform === 'ios' ? LIMITS.testFlight : LIMITS.googlePlay
+  return fitted(sections, `Full changelog: ${releaseNotesUrl(notes.version)}`, limit)
 }
 
 /**
@@ -261,7 +266,7 @@ export function testerText(version: string, platform: MobilePlatform): string {
     console.warn(`WARNING: testing.json is not for ${version}, sending the changelog link only`)
     return `Read what's new in ${version}:\n${releaseNotesUrl(version)}`
   }
-  return platform === 'ios' ? testFlightText(notes) : playTestingText(notes)
+  return testerNotesText(notes, platform)
 }
 
 export type ChangelogSection = { version: string; entries: string[] }
