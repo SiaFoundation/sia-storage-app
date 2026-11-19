@@ -182,6 +182,16 @@ export function readTesting(): TestingNotes {
   return parseTesting(JSON.parse(readFileSync(TESTING_FILE, 'utf-8')))
 }
 
+/**
+ * An app's tester notes when they were written for `version`. A failed run of
+ * Prepare Release leaves the previous candidate's notes in the file, and they
+ * must not be shown or sent as the new candidate's.
+ */
+export function notesFor(testing: TestingNotes, app: AppName, version: string): AppTesting | null {
+  const notes = testing[app]
+  return notes?.version === version ? notes : null
+}
+
 function bullets(lines: string[]): string {
   return lines.map((line) => `- ${line}`).join('\n')
 }
@@ -267,13 +277,13 @@ export function testerNotesText(notes: AppTesting, platform: MobilePlatform): st
  * ships another candidate's notes.
  */
 export function testerText(version: string, platform: MobilePlatform): string {
-  let notes: AppTesting | undefined
+  let notes: AppTesting | null = null
   try {
-    notes = readTesting().mobile
+    notes = notesFor(readTesting(), 'mobile', version)
   } catch (error) {
     console.warn(`WARNING: ${error}`)
   }
-  if (!notes || notes.version !== version) {
+  if (!notes) {
     console.warn(`WARNING: testing.json is not for ${version}, sending the changelog link only`)
     return `Read what's new in ${version}:\n${releaseNotesUrl(version)}`
   }

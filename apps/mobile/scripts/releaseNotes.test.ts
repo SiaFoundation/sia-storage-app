@@ -8,6 +8,7 @@ import {
   candidateChanges,
   changelogSections,
   entryPlatforms,
+  notesFor,
   parseChangeset,
   parseGenerated,
   parseTesting,
@@ -227,6 +228,12 @@ describe('tester notes', () => {
     expect(text.length).toBeLessThanOrEqual(500)
     expect(text).not.toContain('Everything in')
     expect(text).toContain('- More in the full changelog.')
+  })
+
+  test('notes left from an earlier candidate are not used for the next one', () => {
+    expect(notesFor({ mobile: testing }, 'mobile', '1.16.0-rc.1')).toBe(testing)
+    expect(notesFor({ mobile: testing }, 'mobile', '1.16.0-rc.2')).toBeNull()
+    expect(notesFor({ mobile: testing }, 'desktop', '0.0.3-rc.0')).toBeNull()
   })
 
   test('a desktop item for a platform the desktop release does not build is refused', () => {
