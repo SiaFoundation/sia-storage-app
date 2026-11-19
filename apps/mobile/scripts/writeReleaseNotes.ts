@@ -1,11 +1,12 @@
 /**
- * Writes the mobile release notes into the release commit. Called by
+ * Writes the release notes into the release commit. Called by
  * scripts/prepare-release.ts after knope has bumped the versions.
  *
- * For a release candidate it asks Copilot for the What's New entry and the
- * tester notes, from the mobile changelog. For a final cut it only dates the
- * candidate's entry: the store submission reuses the candidate's build, so the
- * entry that build bundled is the one the stores get.
+ * For a release candidate it asks Copilot, in one call, for the tester notes of
+ * every app in the round and, when mobile is in it, the What's New entry, from
+ * each app's changelog. For a final cut it only dates the mobile candidate's
+ * entry: the store submission reuses the candidate's build, so the entry that
+ * build bundled is the one the stores get.
  *
  * The model runs with every tool denied, in an empty directory, and without
  * the release bot's token, so text in a changeset can steer what it writes but
@@ -18,32 +19,32 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import {
+  APPS,
+  APP_NAMES,
+  type AppName,
   GUIDE_FILE,
+  type GeneratedNotes,
+  type RoundChanges,
   TESTING_FILE,
-  type TestingNotes,
   WHATS_NEW_FILE,
   type WhatsNewEntry,
   candidateChanges,
   isCandidate,
   marketingVersion,
   notesPrompt,
+  packageVersion,
   parseGenerated,
+  readTesting,
   readWhatsNew,
 } from './releaseNotes'
 
 const COPILOT = '@github/copilot@1.0.114'
 // Copilot picks the model. Under a workflow token it refuses Opus models by name.
 const MODEL = 'auto'
-const MOBILE_DIR = path.resolve(import.meta.dir, '..')
-
-function mobileVersion(): string {
-  return JSON.parse(readFileSync(path.join(MOBILE_DIR, 'package.json'), 'utf-8')).version
-}
-
-/** Whether knope bumped the mobile version in this cut. */
-function mobileInCut(): boolean {
+/** Whether knope bumped the app's version in this cut. */
+function inCut(app: AppName): boolean {
   try {
-    execFileSync('git', ['diff', '--quiet', 'HEAD', '--', 'package.json'], { cwd: MOBILE_DIR })
+    execFileSync('git', ['diff', '--quiet', 'HEAD', '--', 'package.json'], { cwd: APPS[app].dir })
     return false
   } catch {
     return true
@@ -133,39 +134,52 @@ function withEntry(entries: WhatsNewEntry[], entry: WhatsNewEntry): WhatsNewEntr
   return [entry, ...entries.filter((e) => e.version !== entry.version)]
 }
 
-function writeCandidateNotes(version: string): void {
-  const changes = candidateChanges(
-    readFileSync(path.join(MOBILE_DIR, 'CHANGELOG.md'), 'utf-8'),
-    version,
-  )
-  const marketing = marketingVersion(version)
-  const entries = readWhatsNew()
-  const draft = entries.find((e) => e.version === marketing) ?? null
-  const prompt = notesPrompt(readFileSync(GUIDE_FILE, 'utf-8'), changes, draft)
-
-  const newSinceCandidate = changes.sinceCandidate?.entries.length ?? null
-  let reply = ask(prompt)
-  let notes: ReturnType<typeof parseGenerated>
+function generate(round: RoundChanges, draft: WhatsNewEntry | null): GeneratedNotes {
+  const prompt = notesPrompt(readFileSync(GUIDE_FILE, 'utf-8'), round, draft)
+  const reply = ask(prompt)
   try {
-    notes = parseGenerated(reply, newSinceCandidate)
+    return parseGenerated(reply, round)
   } catch (error) {
     console.warn(`the first reply was rejected (${error}), asking again`)
-    reply = ask(`${prompt}\n\nYour previous reply was rejected: ${error}. Reply again.`)
-    notes = parseGenerated(reply, newSinceCandidate)
+    return parseGenerated(
+      ask(`${prompt}\n\nYour previous reply was rejected: ${error}. Reply again.`),
+      round,
+    )
   }
+}
 
-  const testing: TestingNotes = {
-    version,
-    sinceCandidate: changes.sinceCandidate && {
-      from: changes.sinceCandidate.from,
-      items: notes.sinceCandidate,
-    },
-    sinceRelease: { from: changes.sinceRelease.from, items: notes.sinceRelease },
+function writeCandidateNotes(apps: AppName[]): void {
+  const round: RoundChanges = {}
+  for (const app of apps) {
+    const changelog = readFileSync(path.join(APPS[app].dir, 'CHANGELOG.md'), 'utf-8')
+    round[app] = candidateChanges(changelog, packageVersion(app))
   }
-  writeJson(
-    WHATS_NEW_FILE,
-    withEntry(entries, { version: marketing, released: null, items: notes.whatsNew }),
-  )
+  const entries = readWhatsNew()
+  const marketing = round.mobile && marketingVersion(round.mobile.version)
+  const notes = generate(round, entries.find((e) => e.version === marketing) ?? null)
+
+  if (marketing && notes.whatsNew) {
+    writeJson(
+      WHATS_NEW_FILE,
+      withEntry(entries, { version: marketing, released: null, items: notes.whatsNew }),
+    )
+  }
+  // An app outside this round keeps its notes, which still describe the
+  // candidate its testers have.
+  const testing = readTesting()
+  for (const app of apps) {
+    const changes = round[app]
+    const written = notes.testing[app]
+    if (!changes || !written) continue
+    testing[app] = {
+      version: changes.version,
+      sinceCandidate: changes.sinceCandidate && {
+        from: changes.sinceCandidate.from,
+        items: written.sinceCandidate,
+      },
+      sinceRelease: { from: changes.sinceRelease.from, items: written.sinceRelease },
+    }
+  }
   writeJson(TESTING_FILE, testing)
 }
 
@@ -185,14 +199,17 @@ function dateFinalEntry(version: string): void {
  * stop the cut, and CI keeps the PR from merging until the notes exist.
  */
 export function writeReleaseNotes(final: boolean): string | null {
-  if (!mobileInCut()) return null
-  const version = mobileVersion()
+  const apps = APP_NAMES.filter(inCut)
   try {
-    if (final) dateFinalEntry(version)
-    else if (isCandidate(version)) writeCandidateNotes(version)
+    if (final) {
+      if (apps.includes('mobile')) dateFinalEntry(packageVersion('mobile'))
+    } else {
+      const candidates = apps.filter((app) => isCandidate(packageVersion(app)))
+      if (candidates.length > 0) writeCandidateNotes(candidates)
+    }
     return null
   } catch (error) {
-    console.error(`WARNING: release notes for mobile ${version} were not written: ${error}`)
+    console.error(`WARNING: release notes were not written: ${error}`)
     return `${error}`
   }
 }

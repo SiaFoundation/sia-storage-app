@@ -3,14 +3,15 @@
 /**
  * Checks the files in release-notes/ in CI. Every PR checks their shape and the
  * store length limits. The release PR (RELEASE_PR=true) must also carry notes
- * for the version it releases, so it cannot merge while Prepare Release failed
- * to write them or they were written for another version.
+ * for every app it releases a candidate of, so it cannot merge while Prepare
+ * Release failed to write them or they were written for another version.
  */
 
-import pkg from '../package.json'
 import {
+  APP_NAMES,
   isCandidate,
   marketingVersion,
+  packageVersion,
   readTesting,
   readWhatsNew,
   storeLimit,
@@ -33,18 +34,21 @@ function problems(): string[] {
   }
   if (process.env.RELEASE_PR !== 'true') return found
 
-  const version = pkg.version
-  const entry = entries.find((e) => e.version === marketingVersion(version))
-  if (!entry) found.push(`whats-new.json has no entry for ${marketingVersion(version)}`)
+  for (const app of APP_NAMES) {
+    const version = packageVersion(app)
+    if (isCandidate(version) && testing[app]?.version !== version) {
+      found.push(`testing.json has ${app} ${testing[app]?.version ?? 'missing'}, not ${version}`)
+    }
+  }
+  const mobile = packageVersion('mobile')
+  const entry = entries.find((e) => e.version === marketingVersion(mobile))
+  if (!entry) found.push(`whats-new.json has no entry for ${marketingVersion(mobile)}`)
   for (const platform of ['ios', 'android'] as const) {
     if (entry && !storeText(entry, platform))
       found.push(`${entry.version} has no ${platform} items`)
   }
-  if (isCandidate(version) && testing?.version !== version) {
-    found.push(`testing.json is for ${testing?.version ?? 'no version'}, not ${version}`)
-  }
-  if (!isCandidate(version) && entry && !entry.released) {
-    found.push(`${version} has no released date`)
+  if (!isCandidate(mobile) && entry && !entry.released) {
+    found.push(`${mobile} has no released date`)
   }
   return found
 }

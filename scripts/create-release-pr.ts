@@ -3,11 +3,17 @@ import { readFileSync, unlinkSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
+  APPS,
+  APP_NAMES,
+  type AppName,
+  type AppTesting,
+  type MobilePlatform,
+  PLATFORM_NAMES,
   marketingVersion,
-  type Platform,
   readTesting,
   readWhatsNew,
-  sinceCandidateItems,
+  sinceCandidateLines,
+  sinceReleaseLines,
   storeLimit,
   storeText,
 } from '../apps/mobile/scripts/releaseNotes'
@@ -106,7 +112,7 @@ function deferredSection(candidate: string): string {
   return `\n\n## Not in this release\n\nMerged after ${candidate} and held for the next train:\n\n${packages.join('\n\n')}`
 }
 
-const STORES: { platform: Platform; name: string }[] = [
+const STORES: { platform: MobilePlatform; name: string }[] = [
   { platform: 'ios', name: 'App Store' },
   { platform: 'android', name: 'Google Play' },
 ]
@@ -120,8 +126,8 @@ function mobileVersion(ref?: string): string {
   return JSON.parse(json).version
 }
 
-function list(items: string[]): string {
-  return items.map((item) => `- ${item}`).join('\n')
+function list(lines: string[]): string {
+  return lines.map((line) => `- ${line}`).join('\n')
 }
 
 function storeBlocks(version: string): string {
@@ -133,30 +139,40 @@ function storeBlocks(version: string): string {
   }).join('\n\n')
 }
 
-// The mobile notes from apps/mobile/release-notes, which prepare-release.ts
-// writes into this same commit. Shown above the changelogs so a reviewer reads
-// the text testers and the stores will get.
+function testingSection(app: AppName, notes: AppTesting): string {
+  const platforms = APPS[app].platforms.map((platform) => {
+    const candidate = notes.sinceCandidate
+      ? `Since ${notes.sinceCandidate.from}:\n\n${list(sinceCandidateLines(notes, platform))}\n\n`
+      : ''
+    const from = notes.sinceRelease.from ? ` since ${notes.sinceRelease.from}` : ''
+    return `### ${PLATFORM_NAMES[platform]}\n\n${candidate}Everything${from}:\n\n${list(sinceReleaseLines(notes, platform))}`
+  })
+  return `## What to test in ${app} ${notes.version}\n\n${platforms.join('\n\n')}\n\n`
+}
+
+// The notes from apps/mobile/release-notes, which prepare-release.ts writes
+// into this same commit. Shown above the changelogs so a reviewer reads the
+// text testers and the stores will get.
 function notesSection(candidate: string, problem: string | null): string {
-  if (!wasChangedFromMain('apps/mobile/CHANGELOG.md')) return ''
-  const version = mobileVersion()
   const warning = problem
     ? `> **The release notes were not written:** ${problem}\n> Re-run Prepare Release, or write them in \`${NOTES_PATH}\` on the release branch.\n\n`
     : ''
+  const mobile = wasChangedFromMain('apps/mobile/CHANGELOG.md') ? mobileVersion() : null
   if (candidate) {
+    if (!mobile) return warning
     const shipped = mobileVersion(candidate)
-    return `${warning}## Store notes for mobile ${version}\n\nMerging this PR submits the ${shipped} build to App Store and Google Play review with this text. Change it in \`${NOTES_PATH}/whats-new.json\` on this branch.\n\n${storeBlocks(version)}\n\n`
+    return `${warning}## Store notes for mobile ${mobile}\n\nMerging this PR submits the ${shipped} build to App Store and Google Play review with this text. Change it in \`${NOTES_PATH}/whats-new.json\` on this branch.\n\n${storeBlocks(mobile)}\n\n`
   }
-  let testing = ''
-  const notes = readTesting()
-  if (notes && notes.version === version) {
-    const sinceCandidate = notes.sinceCandidate
-      ? `Since ${notes.sinceCandidate.from}:\n\n${list(sinceCandidateItems(notes))}\n\n`
-      : ''
-    const from = notes.sinceRelease.from ? ` since ${notes.sinceRelease.from}` : ''
-    testing = `## What to test in mobile ${version}\n\n${sinceCandidate}Everything${from}:\n\n${list(notes.sinceRelease.items)}\n\n`
-  }
-  const marketing = marketingVersion(version)
-  return `${warning}${testing}## What's New in ${marketing}\n\nShown in the app, and sent to the stores when ${marketing} is finalized. Change it in \`${NOTES_PATH}/whats-new.json\` on the release branch.\n\n${storeBlocks(marketing)}\n\n`
+  const testing = readTesting()
+  const tested = APP_NAMES.flatMap((app) => {
+    const notes = testing[app]
+    const changed = wasChangedFromMain(join(APPS[app].dir, 'CHANGELOG.md'))
+    return notes && changed ? [testingSection(app, notes)] : []
+  })
+  const whatsNew = mobile
+    ? `## What's New in ${marketingVersion(mobile)}\n\nShown in the app, and sent to the stores when ${marketingVersion(mobile)} is finalized. Change it in \`${NOTES_PATH}/whats-new.json\` on the release branch.\n\n${storeBlocks(marketingVersion(mobile))}\n\n`
+    : ''
+  return `${warning}${tested.join('')}${whatsNew}`
 }
 
 // A notes file CI would reject must still leave a release PR to fix it in.
