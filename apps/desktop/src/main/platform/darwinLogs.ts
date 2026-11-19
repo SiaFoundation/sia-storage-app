@@ -1,5 +1,5 @@
 /*
- * Opening the logs, all three of them.
+ * Opening the logs on macOS, all three of them.
  *
  * Which one holds the answer depends on what went wrong: a mount that will not
  * register is in this process's, a stalled sync in the daemon's, a folder that
@@ -12,8 +12,8 @@ import { execFile, spawn } from 'node:child_process'
 import { createWriteStream } from 'node:fs'
 import { mkdir, open, rename, rm } from 'node:fs/promises'
 import { promisify } from 'node:util'
-import { log } from './log'
-import { dataDir, daemonLogPath, desktopLogPath, extensionLogPath } from './paths'
+import { log } from '../log'
+import { dataDir, daemonLogPath, desktopLogPath, extensionLogPath } from '../paths'
 
 const run = promisify(execFile)
 

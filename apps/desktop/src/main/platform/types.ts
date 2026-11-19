@@ -20,8 +20,8 @@ import type { DesktopConfig } from '../config'
 export type ShellState = 'absent' | 'starting' | 'mounted' | 'error' | 'unsupported'
 
 export type ShellConfig = {
-  /** Where the shell reaches the daemon: a unix socket, or a named pipe. */
-  shellSocket: string
+  /** Where the shell reaches the daemon. None on a platform with no shell yet. */
+  shellSocket?: string
   /** Stable identifier for the mount, so a restart reattaches rather than duplicating. */
   domainId: string
   /** What the file manager shows in its sidebar. */
@@ -30,7 +30,8 @@ export type ShellConfig = {
 
 /** What the daemon has to be told before it starts, for this platform's shell. */
 export type ShellPaths = {
-  shellSocket: string
+  /** None on a platform with no shell yet, which leaves the daemon serving none. */
+  shellSocket?: string
   /** Only where the shell is sandboxed and cannot read managed storage. */
   handoffDir?: string
 }

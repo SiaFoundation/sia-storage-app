@@ -1,3 +1,12 @@
+import {
+  authenticateServer,
+  clientEndpoint,
+  HELLO,
+  newPipeEndpoint,
+  pipeFile,
+  pipeFileText,
+  pipeProof,
+} from '@siastorage/core/lib/ipcEndpoint'
 import { logger } from '@siastorage/logger'
 import * as fs from 'fs'
 import * as net from 'net'
@@ -41,6 +50,16 @@ export function startIpcServer(sockPath: string, handler: IpcHandler): IpcServer
     // may not exist
   }
 
+  // See ipcEndpoint.ts for why Windows serves a randomly named pipe and
+  // answers a hello before anything else.
+  const pipe = process.platform === 'win32' ? newPipeEndpoint() : null
+  const serve: IpcHandler = pipe
+    ? async (method, params, connection) =>
+        method === HELLO
+          ? { proof: await pipeProof(pipe.secret, String(params.nonce)) }
+          : handler(method, params, connection)
+    : handler
+
   const server = net.createServer((socket) => {
     let buffer = ''
     const closeHandlers: Array<() => void> = []
@@ -61,7 +80,7 @@ export function startIpcServer(sockPath: string, handler: IpcHandler): IpcServer
 
       for (const line of lines) {
         if (!line.trim()) continue
-        handleMessage(line, socket, handler, connection)
+        handleMessage(line, socket, serve, connection)
       }
     })
 
@@ -75,16 +94,24 @@ export function startIpcServer(sockPath: string, handler: IpcHandler): IpcServer
     })
   })
 
-  server.listen(sockPath, () => {
-    // Restrict the socket to the owning user. Without this, a permissive
-    // umask could leave it group/world-accessible and any local user could
-    // invoke daemon methods (e.g. `upload` reading arbitrary paths).
-    try {
-      fs.chmodSync(sockPath, 0o600)
-    } catch (err) {
-      logger.error('ipc', 'chmod_failed', { error: err as Error })
+  const endpoint = pipe ? pipe.name : sockPath
+  server.listen(endpoint, () => {
+    if (pipe) {
+      // Written once the pipe accepts connections, and through a rename, so
+      // a client never reads half a file or a name before it is served.
+      fs.writeFileSync(`${pipeFile(sockPath)}.tmp`, pipeFileText(pipe), { mode: 0o600 })
+      fs.renameSync(`${pipeFile(sockPath)}.tmp`, pipeFile(sockPath))
+    } else {
+      // Restrict the socket to the owning user. Without this, a permissive
+      // umask could leave it group/world-accessible and any local user could
+      // invoke daemon methods (e.g. `upload` reading arbitrary paths).
+      try {
+        fs.chmodSync(sockPath, 0o600)
+      } catch (err) {
+        logger.error('ipc', 'chmod_failed', { error: err as Error })
+      }
     }
-    logger.debug('ipc', 'server_listening', { path: sockPath })
+    logger.debug('ipc', 'server_listening', { path: sockPath, endpoint })
   })
 
   server.on('error', (err) => {
@@ -95,7 +122,7 @@ export function startIpcServer(sockPath: string, handler: IpcHandler): IpcServer
     close() {
       server.close()
       try {
-        fs.unlinkSync(sockPath)
+        fs.unlinkSync(pipe ? pipeFile(sockPath) : sockPath)
       } catch {
         // may not exist
       }
@@ -161,10 +188,27 @@ async function handleMessage(
   }
 }
 
-export function connectToIpc(sockPath: string): Promise<net.Socket> {
+function readIfExists(path: string): string | null {
+  try {
+    return fs.readFileSync(path, 'utf8')
+  } catch {
+    return null
+  }
+}
+
+/** `timeoutMs` bounds the Windows pipe's hello, which a stalled server never answers. */
+export function connectToIpc(sockPath: string, timeoutMs?: number): Promise<net.Socket> {
+  const { address, secret } = clientEndpoint(sockPath, readIfExists)
   return new Promise((resolve, reject) => {
-    const socket = net.createConnection(sockPath, () => {
-      resolve(socket)
+    const socket = net.createConnection(address, () => {
+      if (!secret) return resolve(socket)
+      authenticateServer(socket, secret, timeoutMs).then(
+        () => resolve(socket),
+        (e: Error) => {
+          socket.destroy()
+          reject(e)
+        },
+      )
     })
     socket.on('error', reject)
   })
@@ -176,14 +220,20 @@ export async function sendIpcCommand(
   params: Record<string, unknown> = {},
   timeout = 30_000,
 ): Promise<unknown> {
-  const socket = await connectToIpc(sockPath)
+  // One deadline covers the Windows pipe's hello and the reply, so a server
+  // that never answers the hello fails a 2s ping after 2s, not 7s.
+  const deadline = Date.now() + timeout
+  const socket = await connectToIpc(sockPath, timeout)
   const id = `${Date.now()}-${Math.random()}`
 
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      socket.destroy()
-      reject(new Error(`IPC command '${method}' timed out after ${timeout}ms`))
-    }, timeout)
+    const timer = setTimeout(
+      () => {
+        socket.destroy()
+        reject(new Error(`IPC command '${method}' timed out after ${timeout}ms`))
+      },
+      Math.max(0, deadline - Date.now()),
+    )
 
     let buffer = ''
 
