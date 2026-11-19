@@ -10,6 +10,8 @@ import {
   type MobilePlatform,
   PLATFORM_NAMES,
   marketingVersion,
+  notesFor,
+  packageVersion,
   readTesting,
   readWhatsNew,
   sinceCandidateLines,
@@ -165,7 +167,7 @@ function notesSection(candidate: string, problem: string | null): string {
   }
   const testing = readTesting()
   const tested = APP_NAMES.flatMap((app) => {
-    const notes = testing[app]
+    const notes = notesFor(testing, app, packageVersion(app))
     const changed = wasChangedFromMain(join(APPS[app].dir, 'CHANGELOG.md'))
     return notes && changed ? [testingSection(app, notes)] : []
   })
