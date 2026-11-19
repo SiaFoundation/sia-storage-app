@@ -56,13 +56,39 @@ function ask(prompt: string): string {
   try {
     return copilot(prompt, sandbox, token)
   } catch (error) {
-    // The failure goes into the public release PR's description, so it names
-    // only how the CLI ended. Its own error text repeats the whole command line
-    // and whatever the CLI printed.
-    const { status, signal } = error as { status?: number | null; signal?: string | null }
+    // The returned message goes into the public release PR's description, so
+    // it names only how the CLI ended. What the CLI printed goes to the job log
+    // alone, where Actions masks the token.
+    const { status, signal, stderr } = error as {
+      status?: number | null
+      signal?: string | null
+      stderr?: string
+    }
+    if (stderr) console.error(`Copilot CLI output:\n${stderr.slice(-4000)}`)
     throw new Error(`the Copilot CLI failed (${signal ?? `exit ${status}`})`)
   } finally {
     rmSync(sandbox, { recursive: true, force: true })
+  }
+}
+
+/**
+ * With only its token in the environment the CLI exited 1 in Actions, while
+ * GitHub's own agentic workflows give it the whole run context. So the run's
+ * GITHUB_* and RUNNER_* variables pass through, except GITHUB_TOKEN, which in
+ * Prepare Release is the release bot's app token.
+ */
+function cliEnv(sandbox: string, token: string): NodeJS.ProcessEnv {
+  const context = Object.entries(process.env).filter(
+    ([name, value]) =>
+      value !== undefined && /^(GITHUB|RUNNER)_/.test(name) && name !== 'GITHUB_TOKEN',
+  )
+  return {
+    ...Object.fromEntries(context),
+    CI: process.env.CI,
+    PATH: process.env.PATH,
+    HOME: sandbox,
+    COPILOT_GITHUB_TOKEN: token,
+    NODE_ENV: 'production',
   }
 }
 
@@ -90,12 +116,8 @@ function copilot(prompt: string, sandbox: string, token: string): string {
     {
       cwd: sandbox,
       encoding: 'utf-8',
-      env: {
-        PATH: process.env.PATH,
-        HOME: sandbox,
-        COPILOT_GITHUB_TOKEN: token,
-        NODE_ENV: 'production',
-      },
+      env: cliEnv(sandbox, token),
+      stdio: ['ignore', 'pipe', 'pipe'],
       maxBuffer: 16 * 1024 * 1024,
       timeout: 10 * 60 * 1000,
     },
