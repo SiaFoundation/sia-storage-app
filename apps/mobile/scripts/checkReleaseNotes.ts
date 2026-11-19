@@ -43,10 +43,6 @@ function problems(): string[] {
   const mobile = packageVersion('mobile')
   const entry = entries.find((e) => e.version === marketingVersion(mobile))
   if (!entry) found.push(`whats-new.json has no entry for ${marketingVersion(mobile)}`)
-  for (const platform of ['ios', 'android'] as const) {
-    if (entry && !storeText(entry, platform))
-      found.push(`${entry.version} has no ${platform} items`)
-  }
   if (!isCandidate(mobile) && entry && !entry.released) {
     found.push(`${mobile} has no released date`)
   }

@@ -15,13 +15,15 @@
  */
 
 import { type SpawnSyncReturns, execFileSync, spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import {
   APPS,
   APP_NAMES,
   type AppName,
+  CHANGESET_DIR,
+  type Changeset,
   GUIDE_FILE,
   type GeneratedNotes,
   type RoundChanges,
@@ -29,10 +31,12 @@ import {
   WHATS_NEW_FILE,
   type WhatsNewEntry,
   candidateChanges,
+  entryPlatforms,
   isCandidate,
   marketingVersion,
   notesPrompt,
   packageVersion,
+  parseChangeset,
   parseGenerated,
   readTesting,
   readWhatsNew,
@@ -148,11 +152,25 @@ function generate(round: RoundChanges, draft: WhatsNewEntry | null): GeneratedNo
   }
 }
 
+/**
+ * The pending changesets. Knope keeps them across release candidates and
+ * deletes them only at a stable release, so every entry in a candidate's
+ * changelog section still has its file here.
+ */
+function pendingChangesets(): Changeset[] {
+  return readdirSync(CHANGESET_DIR)
+    .filter((file) => file.endsWith('.md'))
+    .map((file) => parseChangeset(readFileSync(path.join(CHANGESET_DIR, file), 'utf-8')))
+}
+
 function writeCandidateNotes(apps: AppName[]): void {
+  const changesets = pendingChangesets()
   const round: RoundChanges = {}
   for (const app of apps) {
     const changelog = readFileSync(path.join(APPS[app].dir, 'CHANGELOG.md'), 'utf-8')
-    round[app] = candidateChanges(changelog, packageVersion(app))
+    round[app] = candidateChanges(changelog, packageVersion(app), (entry) =>
+      entryPlatforms(app, entry, changesets),
+    )
   }
   const entries = readWhatsNew()
   const marketing = round.mobile && marketingVersion(round.mobile.version)
@@ -173,11 +191,11 @@ function writeCandidateNotes(apps: AppName[]): void {
     if (!changes || !written) continue
     testing[app] = {
       version: changes.version,
-      sinceCandidate: changes.sinceCandidate && {
-        from: changes.sinceCandidate.from,
+      sinceCandidate: changes.candidate && {
+        from: changes.candidate.from,
         items: written.sinceCandidate,
       },
-      sinceRelease: { from: changes.sinceRelease.from, items: written.sinceRelease },
+      sinceRelease: { from: changes.from, items: written.sinceRelease },
     }
   }
   writeJson(TESTING_FILE, testing)

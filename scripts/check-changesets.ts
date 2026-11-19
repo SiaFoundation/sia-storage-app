@@ -15,6 +15,7 @@
 
 import { readFileSync, readdirSync } from 'fs'
 import { join } from 'path'
+import { APPS, APP_NAMES, parsePlatforms } from '../apps/mobile/scripts/releaseNotes'
 
 const bumps = new Set(['patch', 'minor', 'major'])
 const kebabFileName = /^[a-z0-9]+(?:-[a-z0-9]+)*\.md$/
@@ -36,6 +37,24 @@ function describeBadKey(key: string, packages: string[]): string {
     : `"${key}" is not a knope package, expected one of ${packages.join(', ')}`
 }
 
+// `platforms:` must name a platform of every app the changeset names, since an
+// app left with none would drop the change from its notes altogether.
+function platformProblems(value: string, named: string[]): string[] {
+  let listed: string[]
+  try {
+    listed = parsePlatforms(value)
+  } catch (error) {
+    return [`platforms: ${error instanceof Error ? error.message : error}`]
+  }
+  const apps = APP_NAMES.filter((app) => named.includes(app))
+  if (apps.length === 0) return ['platforms: only mobile and desktop changesets name platforms']
+  return apps.flatMap((app) =>
+    APPS[app].platforms.some((p) => listed.includes(p))
+      ? []
+      : [`platforms: names none of ${app}'s platforms, ${APPS[app].platforms.join(', ')}`],
+  )
+}
+
 function validate(fileName: string, content: string, packages: string[]): string[] {
   const problems: string[] = []
   if (!kebabFileName.test(fileName)) {
@@ -55,6 +74,8 @@ function validate(fileName: string, content: string, packages: string[]): string
   if (frontmatter.length === 0) {
     problems.push('frontmatter names no package')
   }
+  const named: string[] = []
+  let platforms: string | null = null
   for (const line of frontmatter) {
     const colon = line.indexOf(':')
     if (colon === -1) {
@@ -63,14 +84,22 @@ function validate(fileName: string, content: string, packages: string[]): string
       continue
     }
     const key = line.slice(0, colon).trim()
-    const bump = line.slice(colon + 1).trim()
+    const value = line.slice(colon + 1).trim()
+    // Knope looks up only its package names, so it skips this line. The
+    // release notes read it to keep a change to the platforms it names.
+    if (key === 'platforms') {
+      platforms = value
+      continue
+    }
+    named.push(key)
     if (!packages.includes(key)) {
       problems.push(describeBadKey(key, packages))
     }
-    if (!bumps.has(bump)) {
-      problems.push(`"${bump}" is not a bump level, use patch, minor, or major`)
+    if (!bumps.has(value)) {
+      problems.push(`"${value}" is not a bump level, use patch, minor, or major`)
     }
   }
+  if (platforms !== null) problems.push(...platformProblems(platforms, named))
 
   const summary = lines
     .slice(close + 1)
