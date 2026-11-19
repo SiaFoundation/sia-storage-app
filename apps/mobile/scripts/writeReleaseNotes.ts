@@ -7,13 +7,13 @@
  * candidate's entry: the store submission reuses the candidate's build, so the
  * entry that build bundled is the one the stores get.
  *
- * The model runs with every tool denied, in an empty directory, with only the
- * Copilot token in its environment, so text in a changeset can steer what it
- * writes but cannot reach the checkout or the bot token. Its output is checked
- * here and again in CI, and reviewed in the release PR.
+ * The model runs with every tool denied, in an empty directory, and without
+ * the release bot's token, so text in a changeset can steer what it writes but
+ * cannot reach the checkout or the bot token. Its output is checked here and
+ * again in CI, and reviewed in the release PR.
  */
 
-import { execFileSync } from 'node:child_process'
+import { type SpawnSyncReturns, execFileSync, spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -32,7 +32,10 @@ import {
 } from './releaseNotes'
 
 const COPILOT = '@github/copilot@1.0.114'
-const MODEL = 'claude-opus-5.5'
+// Tried in order, since the CLI refuses a model the organization's Copilot
+// plan does not offer to a workflow token. On 28 October 2026 it offered
+// claude-opus-5 and claude-opus-4.8, and not claude-opus-5.5.
+const MODELS = ['claude-opus-5.5', 'claude-opus-5', 'claude-opus-4.8']
 const MOBILE_DIR = path.resolve(import.meta.dir, '..')
 
 function mobileVersion(): string {
@@ -54,28 +57,35 @@ function ask(prompt: string): string {
   if (!token) throw new Error('COPILOT_GITHUB_TOKEN is not set')
   const sandbox = mkdtempSync(path.join(tmpdir(), 'release-notes-'))
   try {
-    return copilot(prompt, sandbox, token)
-  } catch (error) {
-    // The returned message goes into the public release PR's description, so
-    // it names only how the CLI ended. What the CLI printed goes to the job log
-    // alone, where Actions masks the token.
-    const { status, signal, stderr } = error as {
-      status?: number | null
-      signal?: string | null
-      stderr?: string
+    for (const model of MODELS) {
+      const run = runCopilot(prompt, model, sandbox, token)
+      if (run.status !== 0 && run.stderr.includes('is not available')) {
+        console.warn(`${model} is not available to this workflow`)
+        continue
+      }
+      return replyOf(run)
     }
-    if (stderr) console.error(`Copilot CLI output:\n${stderr.slice(-4000)}`)
-    throw new Error(`the Copilot CLI failed (${signal ?? `exit ${status}`})`)
+    throw new Error(`none of ${MODELS.join(', ')} is available to this workflow`)
   } finally {
     rmSync(sandbox, { recursive: true, force: true })
   }
 }
 
+function replyOf(run: SpawnSyncReturns<string>): string {
+  if (run.status === 0) return run.stdout
+  // The thrown message goes into the public release PR's description, so it
+  // names only how the CLI ended. What the CLI printed goes to the job log
+  // alone, where Actions masks the token.
+  console.error(`Copilot CLI output:\n${run.stderr.slice(-4000)}`)
+  throw new Error(
+    `the Copilot CLI failed (${run.error?.message ?? run.signal ?? `exit ${run.status}`})`,
+  )
+}
+
 /**
- * With only its token in the environment the CLI exited 1 in Actions, while
- * GitHub's own agentic workflows give it the whole run context. So the run's
- * GITHUB_* and RUNNER_* variables pass through, except GITHUB_TOKEN, which in
- * Prepare Release is the release bot's app token.
+ * The run's GITHUB_* and RUNNER_* variables pass through, as GitHub's own
+ * agentic workflows give the CLI the run's context, except GITHUB_TOKEN, which
+ * in Prepare Release is the release bot's app token.
  */
 function cliEnv(sandbox: string, token: string): NodeJS.ProcessEnv {
   const context = Object.entries(process.env).filter(
@@ -92,8 +102,13 @@ function cliEnv(sandbox: string, token: string): NodeJS.ProcessEnv {
   }
 }
 
-function copilot(prompt: string, sandbox: string, token: string): string {
-  return execFileSync(
+function runCopilot(
+  prompt: string,
+  model: string,
+  sandbox: string,
+  token: string,
+): SpawnSyncReturns<string> {
+  return spawnSync(
     'bunx',
     [
       '--bun',
@@ -102,7 +117,7 @@ function copilot(prompt: string, sandbox: string, token: string): string {
       prompt,
       '--silent',
       '--model',
-      MODEL,
+      model,
       '--no-ask-user',
       '--no-auto-update',
       '--no-custom-instructions',
