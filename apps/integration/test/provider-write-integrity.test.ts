@@ -305,16 +305,21 @@ describe('Saving a file through the provider', () => {
       const released = new Promise<void>((resolve) => {
         release = resolve
       })
-      const uploadPacked = A.sdk.uploadPacked.bind(A.sdk)
-      jest.spyOn(A.sdk, 'uploadPacked').mockImplementationOnce(async (options) => {
-        await released
-        return uploadPacked(options)
-      })
+      // Held inside its add, so the version is in a batch when the next save
+      // replaces it. One still queued would be deleted by that save instead.
+      shared.beforeAdd = () => released
       await save(id, v2)
+      const [packing] = await A.app.files.getVersionHistory('late.txt', null)
+      await waitForCondition(() => A.getUploadState(packing.id)?.status === 'packing', {
+        timeout: 30_000,
+        message: 'the saved version to be in a batch',
+      })
       await save(id, Buffer.from('third'))
       const [, replaced] = await A.app.files.getVersionHistory('late.txt', null)
+      expect(replaced.id).toBe(packing.id)
       expect(await A.app.fs.getFileUri(replaced)).not.toBeNull()
 
+      shared.beforeAdd = null
       release()
       await waitForCondition(async () => (await A.app.localObjects.countForFile(replaced.id)) > 0, {
         timeout: 30_000,

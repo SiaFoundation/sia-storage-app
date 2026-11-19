@@ -657,6 +657,15 @@ export function buildDbNamespaces(
       getLostCount: (indexerURL) => ops.queryLostFileCount(db, indexerURL),
       getLostStats: (indexerURL) => ops.queryLostFileStats(db, indexerURL),
       getLost: (indexerURL) => ops.queryLostFiles(db, indexerURL),
+      deleteIfUnsentOlderVersion: async (file) => {
+        if (!(await ops.tombstoneUnsentOlderVersion(db, file.id))) return false
+        // Its thumbnails leave the uploads store only now, so a version the
+        // check keeps still uploads them.
+        await dropUploads([file.id])
+        caches.directories.invalidateAll()
+        await removeTombstoned([file])
+        return true
+      },
       getUnuploadedCount: () => ops.queryUnuploadedFileCount(db),
       getUnuploadedBytes: () => ops.queryUnuploadedFileBytes(db),
       getUnuploaded: () => ops.queryUnuploadedFiles(db),
@@ -930,6 +939,11 @@ export function buildDbNamespaces(
       getInfoForFiles: (fileIds) => ops.queryThumbnailFileInfoByFileIds(db, fileIds),
       getSizesForFile: (fileId) => ops.queryThumbnailSizesForFileId(db, fileId),
       getSizesForFiles: (fileIds) => ops.queryThumbnailSizesForFileIds(db, fileIds),
+      createForLiveFile: async (record) => {
+        const created = await ops.insertThumbnailForLiveFile(db, withNormalizedName(record))
+        if (created) invalidateLibrary()
+        return created
+      },
       existsForFileAndSize: (fileId, size) =>
         ops.queryThumbnailExistsForFileIdAndSize(db, fileId, size),
       queryCandidatePage: (pageSize, cursor, allowedTypes) =>

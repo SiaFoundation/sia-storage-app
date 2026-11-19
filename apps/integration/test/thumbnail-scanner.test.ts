@@ -459,4 +459,97 @@ describe('ThumbnailScanner', () => {
     expect(sizes).not.toContain(64)
     await errorApp.shutdown()
   })
+
+  describe('a file deleted while its thumbnails are made', () => {
+    let goneApp: TestApp
+
+    /**
+     * An app whose thumbnail generator deletes file1, as a Finder save
+     * dropping the version it replaced does, before it hands back the
+     * thumbnail. file1 lacks the sizes in `missing`.
+     */
+    async function appDeletingFile1(missing: readonly number[]) {
+      const thumb = () => ({ data: new ArrayBuffer(64), mimeType: 'image/webp' })
+      const deleteFile1 = () =>
+        goneApp.app.files.tombstoneWithThumbnailsAndCleanup([{ id: 'file1', type: 'image/jpeg' }])
+      goneApp = createTestApp(undefined, {
+        fsIO: {},
+        thumbnail: {
+          async generateImageThumbnail() {
+            await deleteFile1()
+            return thumb()
+          },
+          async generateImageThumbnails(_source, sizes) {
+            await deleteFile1()
+            return new Map(sizes.map((size) => [size, thumb()]))
+          },
+        },
+        crypto: { sha256: async () => String(++hashCounter).padStart(64, '0') },
+        detectMimeType: async () => 'image/jpeg',
+      })
+      await goneApp.start()
+      const now = Date.now()
+      await goneApp.createFileRecord({
+        id: 'file1',
+        name: 'test.jpg',
+        type: 'image/jpeg',
+        kind: 'file',
+        size: 1000,
+        hash: 'sha256:hash1',
+        createdAt: now,
+        updatedAt: now,
+        mediaAssetId: 'local-file1',
+      })
+      for (const size of ThumbSizes) {
+        if (missing.includes(size)) continue
+        await goneApp.createFileRecord({
+          id: `thumb-${size}`,
+          name: 'thumbnail.webp',
+          type: 'image/webp',
+          kind: 'thumb',
+          size: 100,
+          hash: `sha256:thumb-hash-${size}` as const,
+          createdAt: now,
+          updatedAt: now,
+          mediaAssetId: null,
+          thumbForId: 'file1',
+          thumbSize: size,
+        })
+      }
+      return jest.spyOn(goneApp.app.fs, 'writeFileData')
+    }
+
+    /** Asserts every thumbnail written has neither a row nor bytes left. */
+    async function expectNoneKept(written: string[]) {
+      expect(written.length).toBeGreaterThan(0)
+      const thumbIds = (await goneApp.readThumbnailsByFileId('file1')).map((t) => t.id)
+      for (const id of written) {
+        expect(thumbIds).not.toContain(id)
+        expect(await goneApp.app.fs.readMeta(id)).toBeNull()
+      }
+    }
+
+    afterEach(async () => {
+      await goneApp.shutdown()
+    })
+
+    it('records no thumbnail from a scan, and removes its bytes', async () => {
+      const write = await appDeletingFile1([64])
+
+      const result = await goneApp.thumbnailScanner.runScan()
+
+      expect(result.produced).toEqual([])
+      expect(result.errors).toEqual([])
+      await expectNoneKept(write.mock.calls.map(([file]) => file.id))
+    })
+
+    it('records no thumbnail from a batch of sizes, and removes their bytes', async () => {
+      const write = await appDeletingFile1(ThumbSizes)
+      const file = await goneApp.getFileById('file1')
+
+      await goneApp.thumbnailScanner.generateThumbnailsForFile(file!)
+
+      await expectNoneKept(write.mock.calls.map(([f]) => f.id))
+    })
+  })
 })

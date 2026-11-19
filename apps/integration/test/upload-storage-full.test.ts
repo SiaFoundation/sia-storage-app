@@ -85,24 +85,25 @@ describe('Uploads while the account is full', () => {
     await uploaded(file.id)
   })
 
-  it('uploads each Finder save made while the account is full once there is room', async () => {
+  it('uploads only the last of the Finder saves made while the account is full once there is room', async () => {
     storage.remainingStorage = 0n
     await app.start()
     await app.waitForCondition(() => app.app.uploads.getState().storageFull)
     const created = await app.app.provider.create(null, 'notes.txt', 'file', stage('one'))
     await app.app.provider.write(created.id, stage('two'))
     await app.app.provider.write(created.id, stage('three'))
-    const { versions } = await newestVersion('notes.txt')
     expect(added).toEqual([])
 
-    // A replaced version's copy is freed only once it has uploaded, so each
-    // one goes up rather than staying on disk for good.
+    // Each save replaced a version still queued behind the full account, and
+    // deleted it.
+    const { versions, newest } = await newestVersion('notes.txt')
+    expect(versions.map((v) => v.id)).toEqual([newest.id])
     storage.remainingStorage = 1_000_000n
-    for (const v of versions) await uploaded(v.id)
-    expect(added).toHaveLength(3)
+    await uploaded(newest.id)
+    expect(added).toHaveLength(1)
   })
 
-  it('counts no failed file once a version that failed to upload is replaced and both upload', async () => {
+  it('counts no failed file once a Finder save replaces a version that failed to upload', async () => {
     let failing = true
     storage.beforeAdd = async (p) => {
       if (failing) throw new Error(`could not read ${p}`)
@@ -114,10 +115,9 @@ describe('Uploads while the account is full', () => {
 
     failing = false
     await app.app.provider.write(created.id, stage('two'))
-    const { newest } = await newestVersion('notes.txt')
+    const { versions, newest } = await newestVersion('notes.txt')
+    expect(versions.map((v) => v.id)).toEqual([newest.id])
     await uploaded(newest.id)
-
-    await uploaded(created.id)
     await app.waitForCondition(() => summary().failedFiles === 0)
   })
 
