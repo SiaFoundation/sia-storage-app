@@ -39,7 +39,7 @@ export function shippedCandidate(version: string): string {
 }
 
 function notes(version: string, platform: MobilePlatform): string {
-  const entry = readWhatsNew().find((e) => e.version === version)
+  const entry = readWhatsNew('mobile').find((e) => e.version === version)
   if (!entry) throw new Error(`release-notes/whats-new.json has no entry for ${version}`)
   const text = storeText(entry, platform)
   if (text.length > storeLimit(platform)) {

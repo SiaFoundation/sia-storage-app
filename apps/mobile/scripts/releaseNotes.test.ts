@@ -142,15 +142,18 @@ describe("What's New", () => {
   })
 
   test('a candidate version, an unknown platform and an unknown field are refused', () => {
-    expect(() => parseWhatsNew([{ ...entry, version: '1.16.0-rc.1' }])).toThrow('plain X.Y.Z')
-    expect(() => parseWhatsNew([{ ...entry, items: [{ text: 'x', platforms: ['web'] }] }])).toThrow(
-      'platforms',
+    expect(() => parseWhatsNew([{ ...entry, version: '1.16.0-rc.1' }], 'mobile')).toThrow(
+      'plain X.Y.Z',
     )
-    expect(() => parseWhatsNew([{ ...entry, note: 'x' }])).toThrow('unknown fields')
+    expect(() =>
+      parseWhatsNew([{ ...entry, items: [{ text: 'x', platforms: ['macos'] }] }], 'mobile'),
+    ).toThrow('platforms')
+    expect(() => parseWhatsNew([{ ...entry, note: 'x' }], 'mobile')).toThrow('unknown fields')
   })
 
   test('the checked-in files are valid', () => {
-    expect(readWhatsNew().length).toBeGreaterThan(0)
+    expect(readWhatsNew('mobile').length).toBeGreaterThan(0)
+    expect(() => readWhatsNew('desktop')).not.toThrow()
     expect(() => readTesting()).not.toThrow()
   })
 })
@@ -265,9 +268,10 @@ describe("the model's reply", () => {
     mobile: changes([both, ['ios']], [2]),
     desktop: changes([['macos']], [1]),
   }
-  const reply = (whatsNew: unknown, mobileCandidate: unknown = [{ text: 'b', entries: [2] }]) =>
+  const desktopNew = [{ text: 'Finder.', entries: [1] }]
+  const reply = (mobileNew: unknown, mobileCandidate: unknown = [{ text: 'b', entries: [2] }]) =>
     JSON.stringify({
-      whatsNew,
+      whatsNew: { mobile: mobileNew, desktop: desktopNew },
       testing: {
         mobile: { sinceCandidate: mobileCandidate, sinceRelease: [{ text: 'a', entries: [1] }] },
         desktop: {
@@ -283,10 +287,11 @@ describe("the model's reply", () => {
 
   test('items take their platforms from the entries they cite', () => {
     const notes = parseGenerated('```json\n' + reply(whatsNew) + '\n```', round)
-    expect(notes.whatsNew).toEqual([
+    expect(notes.whatsNew.mobile).toEqual([
       { text: 'Shared.', platforms: both },
       { text: 'iCloud.', platforms: ['ios'] },
     ])
+    expect(notes.whatsNew.desktop).toEqual([{ text: 'Finder.', platforms: ['macos'] }])
     expect(notes.testing.mobile?.sinceCandidate).toEqual([{ text: 'b', platforms: ['ios'] }])
     expect(notes.testing.desktop?.sinceRelease).toEqual([{ text: 'd', platforms: ['macos'] }])
   })
@@ -311,10 +316,14 @@ describe("the model's reply", () => {
     )
   })
 
-  test("a round without mobile needs no What's New entry", () => {
+  test("a round without mobile writes only desktop's What's New", () => {
     const notes = parseGenerated(reply(undefined), { desktop: round.desktop })
-    expect(notes.whatsNew).toBeNull()
+    expect(notes.whatsNew).toEqual({ desktop: [{ text: 'Finder.', platforms: ['macos'] }] })
     expect(notes.testing.mobile).toBeUndefined()
+  })
+
+  test("an app in the round with no What's New items is refused", () => {
+    expect(() => parseGenerated(reply([]), round)).toThrow('whatsNew.mobile has no items')
   })
 
   test("Android What's New items over 500 characters are refused", () => {

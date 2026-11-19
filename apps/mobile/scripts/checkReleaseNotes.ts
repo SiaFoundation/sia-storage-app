@@ -2,9 +2,10 @@
 
 /**
  * Checks the files in release-notes/ in CI. Every PR checks their shape and the
- * store length limits. The release PR (RELEASE_PR=true) must also carry notes
- * for every app it releases a candidate of, so it cannot merge while Prepare
- * Release failed to write them or they were written for another version.
+ * store length limits. The release PR (RELEASE_PR=true) must also carry the
+ * What's New entry and tester notes for every app it releases a candidate of,
+ * so it cannot merge while Prepare Release failed to write them or they were
+ * written for another version, and a final must date them.
  */
 
 import {
@@ -20,9 +21,9 @@ import {
 
 function problems(): string[] {
   const found: string[] = []
-  const entries = readWhatsNew()
+  const whatsNew = { mobile: readWhatsNew('mobile'), desktop: readWhatsNew('desktop') }
   const testing = readTesting()
-  for (const entry of entries) {
+  for (const entry of whatsNew.mobile) {
     for (const platform of ['ios', 'android'] as const) {
       const length = storeText(entry, platform).length
       if (length > storeLimit(platform)) {
@@ -36,15 +37,19 @@ function problems(): string[] {
 
   for (const app of APP_NAMES) {
     const version = packageVersion(app)
-    if (isCandidate(version) && testing[app]?.version !== version) {
-      found.push(`testing.json has ${app} ${testing[app]?.version ?? 'missing'}, not ${version}`)
+    const marketing = marketingVersion(version)
+    const entry = whatsNew[app].find((e) => e.version === marketing)
+    if (isCandidate(version)) {
+      if (testing[app]?.version !== version) {
+        found.push(`testing.json has ${app} ${testing[app]?.version ?? 'missing'}, not ${version}`)
+      }
+      if (!entry) found.push(`${app}'s whats-new.json has no entry for ${marketing}`)
+    } else if (entry && !entry.released) {
+      found.push(`${app} ${version} has no released date`)
+    } else if (!entry && app === 'mobile') {
+      // The store submission sends this entry.
+      found.push(`mobile's whats-new.json has no entry for ${version}`)
     }
-  }
-  const mobile = packageVersion('mobile')
-  const entry = entries.find((e) => e.version === marketingVersion(mobile))
-  if (!entry) found.push(`whats-new.json has no entry for ${marketingVersion(mobile)}`)
-  if (!isCandidate(mobile) && entry && !entry.released) {
-    found.push(`${mobile} has no released date`)
   }
   return found
 }

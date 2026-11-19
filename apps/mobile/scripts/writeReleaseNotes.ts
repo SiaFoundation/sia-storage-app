@@ -2,11 +2,11 @@
  * Writes the release notes into the release commit. Called by
  * scripts/prepare-release.ts after knope has bumped the versions.
  *
- * For a release candidate it asks Copilot, in one call, for the tester notes of
- * every app in the round and, when mobile is in it, the What's New entry, from
- * each app's changelog. For a final cut it only dates the mobile candidate's
- * entry: the store submission reuses the candidate's build, so the entry that
- * build bundled is the one the stores get.
+ * For a release candidate it asks Copilot, in one call, for the What's New
+ * entry and the tester notes of every app in the round, from each app's
+ * changelog. For a final cut it only dates each candidate's entry: the stable
+ * release reuses the candidate's build, so the entry that build bundled is the
+ * one its users get.
  *
  * The model runs with every tool denied, in an empty directory, and without
  * the release bot's token, so text in a changeset can steer what it writes but
@@ -28,7 +28,6 @@ import {
   type GeneratedNotes,
   type RoundChanges,
   TESTING_FILE,
-  WHATS_NEW_FILE,
   type WhatsNewEntry,
   candidateChanges,
   entryPlatforms,
@@ -40,6 +39,7 @@ import {
   parseGenerated,
   readTesting,
   readWhatsNew,
+  whatsNewFile,
 } from './releaseNotes'
 
 const COPILOT = '@github/copilot@1.0.114'
@@ -138,8 +138,11 @@ function withEntry(entries: WhatsNewEntry[], entry: WhatsNewEntry): WhatsNewEntr
   return [entry, ...entries.filter((e) => e.version !== entry.version)]
 }
 
-function generate(round: RoundChanges, draft: WhatsNewEntry | null): GeneratedNotes {
-  const prompt = notesPrompt(readFileSync(GUIDE_FILE, 'utf-8'), round, draft)
+function generate(
+  round: RoundChanges,
+  drafts: Partial<Record<AppName, WhatsNewEntry>>,
+): GeneratedNotes {
+  const prompt = notesPrompt(readFileSync(GUIDE_FILE, 'utf-8'), round, drafts)
   const reply = ask(prompt)
   try {
     return parseGenerated(reply, round)
@@ -172,15 +175,19 @@ function writeCandidateNotes(apps: AppName[]): void {
       entryPlatforms(app, entry, changesets),
     )
   }
-  const entries = readWhatsNew()
-  const marketing = round.mobile && marketingVersion(round.mobile.version)
-  const notes = generate(round, entries.find((e) => e.version === marketing) ?? null)
+  const drafts: Partial<Record<AppName, WhatsNewEntry>> = {}
+  for (const app of apps) {
+    const marketing = marketingVersion(packageVersion(app))
+    const draft = readWhatsNew(app).find((e) => e.version === marketing)
+    if (draft) drafts[app] = draft
+  }
+  const notes = generate(round, drafts)
 
-  if (marketing && notes.whatsNew) {
-    writeJson(
-      WHATS_NEW_FILE,
-      withEntry(entries, { version: marketing, released: null, items: notes.whatsNew }),
-    )
+  for (const app of apps) {
+    const items = notes.whatsNew[app]
+    if (!items) continue
+    const entry = { version: marketingVersion(packageVersion(app)), released: null, items }
+    writeJson(whatsNewFile(app), withEntry(readWhatsNew(app), entry))
   }
   // An app outside this round keeps its notes, which still describe the
   // candidate its testers have.
@@ -201,14 +208,19 @@ function writeCandidateNotes(apps: AppName[]): void {
   writeJson(TESTING_FILE, testing)
 }
 
-function dateFinalEntry(version: string): void {
-  const entries = readWhatsNew()
+/**
+ * Dates the candidate's entry. Only mobile's is required, because the store
+ * submission sends it: desktop's What's New is not read by anything yet, so a
+ * candidate cut without one still finalizes.
+ */
+function dateFinalEntry(app: AppName): void {
+  const version = packageVersion(app)
+  const entries = readWhatsNew(app)
   const entry = entries.find((e) => e.version === version)
-  if (!entry) {
-    throw new Error(`the candidate has no What's New entry for ${version}`)
-  }
+  if (!entry && app !== 'mobile') return
+  if (!entry) throw new Error(`the candidate has no What's New entry for ${app} ${version}`)
   const released = new Date().toISOString().slice(0, 10)
-  writeJson(WHATS_NEW_FILE, withEntry(entries, { ...entry, released }))
+  writeJson(whatsNewFile(app), withEntry(entries, { ...entry, released }))
 }
 
 /**
@@ -220,7 +232,7 @@ export function writeReleaseNotes(final: boolean): string | null {
   const apps = APP_NAMES.filter(inCut)
   try {
     if (final) {
-      if (apps.includes('mobile')) dateFinalEntry(packageVersion('mobile'))
+      for (const app of apps) dateFinalEntry(app)
     } else {
       const candidates = apps.filter((app) => isCandidate(packageVersion(app)))
       if (candidates.length > 0) writeCandidateNotes(candidates)

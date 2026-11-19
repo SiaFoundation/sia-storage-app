@@ -9,15 +9,16 @@ import {
   type AppTesting,
   type MobilePlatform,
   PLATFORM_NAMES,
+  type WhatsNewEntry,
   marketingVersion,
   notesFor,
-  packageVersion,
   readTesting,
   readWhatsNew,
   sinceCandidateLines,
   sinceReleaseLines,
   storeLimit,
   storeText,
+  whatsNewLines,
 } from '../apps/mobile/scripts/releaseNotes'
 
 const changelogs = [
@@ -119,12 +120,11 @@ const STORES: { platform: MobilePlatform; name: string }[] = [
   { platform: 'android', name: 'Google Play' },
 ]
 
-const NOTES_PATH = 'apps/mobile/release-notes'
-
-function mobileVersion(ref?: string): string {
+function versionOf(app: AppName, ref?: string): string {
+  const file = `apps/${app}/package.json`
   const json = ref
-    ? execSync(`git show "${ref}:apps/mobile/package.json"`, { encoding: 'utf-8' })
-    : readFileSync('apps/mobile/package.json', 'utf-8')
+    ? execSync(`git show "${ref}:${file}"`, { encoding: 'utf-8' })
+    : readFileSync(file, 'utf-8')
   return JSON.parse(json).version
 }
 
@@ -132,13 +132,25 @@ function list(lines: string[]): string {
   return lines.map((line) => `- ${line}`).join('\n')
 }
 
-function storeBlocks(version: string): string {
-  const entry = readWhatsNew().find((e) => e.version === version)
-  if (!entry) return `No What's New entry for ${version} in \`${NOTES_PATH}/whats-new.json\`.`
-  return STORES.map(({ platform, name }) => {
-    const text = storeText(entry, platform)
-    return `**${name}** (${text.length} of ${storeLimit(platform)} characters)\n\n${text}`
-  }).join('\n\n')
+// Mobile shows each store's exact text and its count against the store's
+// limit, since that is what review gets. Other apps show their platforms.
+function whatsNewBody(app: AppName, entry: WhatsNewEntry): string {
+  if (app === 'mobile') {
+    return STORES.map(({ platform, name }) => {
+      const text = storeText(entry, platform)
+      return `**${name}** (${text.length} of ${storeLimit(platform)} characters)\n\n${text}`
+    }).join('\n\n')
+  }
+  return APPS[app].platforms
+    .map((platform) => `### ${PLATFORM_NAMES[platform]}\n\n${list(whatsNewLines(entry, platform))}`)
+    .join('\n\n')
+}
+
+function whatsNewSection(app: AppName, version: string, note: string): string {
+  const entry = readWhatsNew(app).find((e) => e.version === version)
+  const file = `apps/${app}/release-notes/whats-new.json`
+  const body = entry ? whatsNewBody(app, entry) : `No entry for ${version} in \`${file}\`.`
+  return `## What's New in ${app} ${version}\n\n${note} Change it in \`${file}\` on the release branch.\n\n${body}\n\n`
 }
 
 function testingSection(app: AppName, notes: AppTesting): string {
@@ -152,29 +164,37 @@ function testingSection(app: AppName, notes: AppTesting): string {
   return `## What to test in ${app} ${notes.version}\n\n${platforms.join('\n\n')}\n\n`
 }
 
-// The notes from apps/mobile/release-notes, which prepare-release.ts writes
-// into this same commit. Shown above the changelogs so a reviewer reads the
-// text testers and the stores will get.
+// The notes from each app's release-notes folder, which prepare-release.ts
+// writes into this same commit. Shown above the changelogs so a reviewer reads
+// the text testers, the stores and the apps' users will get.
 function notesSection(candidate: string, problem: string | null): string {
   const warning = problem
-    ? `> **The release notes were not written:** ${problem}\n> Re-run Prepare Release, or write them in \`${NOTES_PATH}\` on the release branch.\n\n`
+    ? `> **The release notes were not written:** ${problem}\n> Re-run Prepare Release, or write them in the apps' \`release-notes\` folders on the release branch.\n\n`
     : ''
-  const mobile = wasChangedFromMain('apps/mobile/CHANGELOG.md') ? mobileVersion() : null
+  const apps = APP_NAMES.filter((app) => wasChangedFromMain(join(APPS[app].dir, 'CHANGELOG.md')))
   if (candidate) {
-    if (!mobile) return warning
-    const shipped = mobileVersion(candidate)
-    return `${warning}## Store notes for mobile ${mobile}\n\nMerging this PR submits the ${shipped} build to App Store and Google Play review with this text. Change it in \`${NOTES_PATH}/whats-new.json\` on this branch.\n\n${storeBlocks(mobile)}\n\n`
+    const sections = apps.map((app) => {
+      const version = versionOf(app)
+      const note =
+        app === 'mobile'
+          ? `Merging this PR submits the ${versionOf(app, candidate)} build to App Store and Google Play review with this text.`
+          : 'Shown to users of this version.'
+      return whatsNewSection(app, version, note)
+    })
+    return `${warning}${sections.join('')}`
   }
   const testing = readTesting()
-  const tested = APP_NAMES.flatMap((app) => {
-    const notes = notesFor(testing, app, packageVersion(app))
-    const changed = wasChangedFromMain(join(APPS[app].dir, 'CHANGELOG.md'))
-    return notes && changed ? [testingSection(app, notes)] : []
+  const sections = apps.map((app) => {
+    const version = versionOf(app)
+    const notes = notesFor(testing, app, version)
+    const marketing = marketingVersion(version)
+    const note =
+      app === 'mobile'
+        ? `Shown in the app, and sent to the stores when ${marketing} is finalized.`
+        : `Shown to users when ${marketing} is finalized.`
+    return `${notes ? testingSection(app, notes) : ''}${whatsNewSection(app, marketing, note)}`
   })
-  const whatsNew = mobile
-    ? `## What's New in ${marketingVersion(mobile)}\n\nShown in the app, and sent to the stores when ${marketingVersion(mobile)} is finalized. Change it in \`${NOTES_PATH}/whats-new.json\` on the release branch.\n\n${storeBlocks(marketingVersion(mobile))}\n\n`
-    : ''
-  return `${warning}${tested.join('')}${whatsNew}`
+  return `${warning}${sections.join('')}`
 }
 
 // A notes file CI would reject must still leave a release PR to fix it in.
