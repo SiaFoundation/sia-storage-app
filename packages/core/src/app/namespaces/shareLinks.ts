@@ -189,18 +189,44 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
     return next
   }
 
-  /** One version row per stack, skipping stacks in `taken` and anything trashed, deleted or not a file. */
-  async function distinctFiles(fileIds: string[], taken = new Set<string>()): Promise<string[]> {
+  /**
+   * The version row each given id puts on a link, one per stack, skipping
+   * stacks in `taken` and anything trashed or not a file. A live id names
+   * itself. An id deleted straight from the library, never through the trash,
+   * names its stack's current version: a caller can hold a version id from
+   * before a Finder save, and that save deletes the version it replaced when
+   * it never uploaded. The stack is found by its id, not the deleted row's
+   * name and folder, because a rename or move leaves deleted rows at the old
+   * path, where another file can be by then. A row deleted from the trash is
+   * skipped, since someone deleted that version on purpose. Trashing sets
+   * `trashedAt`, and deleting from the library sets `trashedAt` and
+   * `deletedAt` to the same time.
+   *
+   * Run in the transaction that inserts the link's rows, so a version picked
+   * here is still live when its row goes in, and a Finder save deleting it
+   * afterwards sees the row and keeps it.
+   */
+  async function distinctFiles(
+    tx: DatabaseAdapter,
+    fileIds: string[],
+    taken = new Set<string>(),
+  ): Promise<string[]> {
     const picked: string[] = []
     for (const fileId of fileIds) {
-      const row = await ops.queryFileById(db, fileId)
-      if (!row || row.kind !== 'file' || row.trashedAt !== null || row.deletedAt !== null) continue
-      const stack = await ops.queryFileStackKey(db, fileId)
+      let row = await ops.queryFileById(tx, fileId)
+      if (!row || row.kind !== 'file') continue
+      if (row.deletedAt !== null && row.trashedAt === row.deletedAt) {
+        const stackId = await ops.queryStackIdForRow(tx, fileId)
+        row = stackId ? await ops.queryCurrentVersionOfStack(tx, stackId) : null
+        if (!row) continue
+      }
+      if (row.trashedAt !== null || row.deletedAt !== null) continue
+      const stack = await ops.queryFileStackKey(tx, row.id)
       if (!stack) continue
       const id = stackOf(stack)
       if (taken.has(id)) continue
       taken.add(id)
-      picked.push(fileId)
+      picked.push(row.id)
     }
     return picked
   }
@@ -625,8 +651,11 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
         }
         const sdk = deps.requireSdk()
         const indexerURL = await deps.getIndexerURL()
-        const files = await distinctFiles(fileIds)
-        if (files.length === 0) throw new Error('None of these files can be shared')
+        // Read again below, in the transaction that inserts the rows. This
+        // read only keeps a key from being made for nothing.
+        if ((await distinctFiles(db, fileIds)).length === 0) {
+          throw new Error('None of these files can be shared')
+        }
         const key = await sdk.createSharingKey(
           DESCRIPTIONS[mode],
           expiresAt === null ? undefined : new Date(expiresAt),
@@ -641,7 +670,7 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
         }
         await db.withTransactionAsync(async (tx) => {
           await ops.insertShareLink(tx, link)
-          for (const fileId of files) {
+          for (const fileId of await distinctFiles(tx, fileIds)) {
             await ops.insertShareLinkFile(tx, key.publicKey, fileId, 'pending')
           }
         })
@@ -676,11 +705,10 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
         const sdk = deps.requireSdk()
         const indexerURL = await deps.getIndexerURL()
         const link = await requireLink(sdk, indexerURL, publicKey)
-        const existing = await ops.queryShareLinkFileStacks(db, publicKey)
-        const taken = new Set(existing.filter((f) => f.name !== null).map(stackOf))
-        const added = await distinctFiles(fileIds, taken)
         await db.withTransactionAsync(async (tx) => {
-          for (const fileId of added) {
+          const existing = await ops.queryShareLinkFileStacks(tx, publicKey)
+          const taken = new Set(existing.filter((f) => f.name !== null).map(stackOf))
+          for (const fileId of await distinctFiles(tx, fileIds, taken)) {
             await ops.insertShareLinkFile(tx, publicKey, fileId, 'pending')
           }
         })
