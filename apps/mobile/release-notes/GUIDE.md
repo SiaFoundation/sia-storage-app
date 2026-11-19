@@ -6,9 +6,10 @@ too.
 
 ## What's New (`whats-new.json`)
 
-The list a user reads in the App Store, on Google Play and in the app's own What's New
-screen. One entry per version, for everything since the last stable release. It is written
-for the person using the app, who is not technical.
+The list a user reads about a new version: for mobile in the App Store, on Google Play and in
+the app's What's New screen, and for desktop in the desktop app. Each app has its own file in
+its `release-notes` folder, with one entry per version, for everything since that app's last
+stable release. It is written for the person using the app, who is not technical.
 
 - **One short item, usually one sentence.** No lists inside an item, no parentheticals.
 - **4 to 6 items.** Group related changes under one item. Lead with the biggest wins for the
@@ -29,7 +30,7 @@ for the person using the app, who is not technical.
   platforms in one item, and never mention the other platform in an item. A store with
   nothing new in a version shows "Bug fixes and performance improvements." on its own.
 - **Never list file formats.** "Support for many more audio, video, and image formats."
-- **Google Play allows 500 characters.** The Android items, one per line with "- " in front,
+- **Google Play allows 500 characters.** Mobile's Android items, one per line with "- " in front,
   must fit in 500. Shorten every item before dropping one. The App Store allows 4000.
 - **Nothing about testing.** No release candidate numbers, no "since rc.2", no TestFlight.
   This text ships inside the app.
