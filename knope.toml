@@ -49,18 +49,6 @@ command = "bun install"
 type = "Command"
 command = "bunx oxfmt --write ."
 
-[[workflows.steps]]
-type = "Command"
-command = "git add -A"
-
-[[workflows.steps]]
-type = "Command"
-command = "git commit -m \"chore: release\""
-
-[[workflows.steps]]
-type = "Command"
-command = "git push --force --set-upstream origin release"
-
 [[workflows]]
 name = "document-change"
 

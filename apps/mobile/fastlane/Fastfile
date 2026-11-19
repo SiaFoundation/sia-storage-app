@@ -146,19 +146,6 @@ platform :ios do
     )
   end
 
-  desc "Upload iOS app to App Store Connect"
-  lane :distribute_app_store do
-    # Build IPA if it doesn't exist
-    build_ipa unless File.exist?(IOS_RELEASE_IPA_PATH)
-    
-    upload_to_app_store(
-      api_key: get_app_store_connect_api_key,
-      ipa: IOS_RELEASE_IPA_PATH,
-      skip_screenshots: true, # Don't upload screenshots - we manage them manually in App Store Connect
-      skip_metadata: true, # Don't upload metadata - we manage descriptions, keywords, etc. manually in App Store Connect
-    )
-  end
-
   desc "Upload iOS app to TestFlight"
   lane :distribute_testflight do
     # Build IPA if it doesn't exist
@@ -184,7 +171,7 @@ platform :ios do
     upload_to_testflight(
       ipa: IOS_RELEASE_IPA_PATH,
       skip_waiting_for_build_processing: false, # Wait for processing - ensures build is ready before command completes (takes 10-30 min)
-      changelog: ENV["IOS_WHATS_NEW"], # "What to Test" - releaseIos.ts sets it to the version's release-notes link
+      changelog: ENV["IOS_WHATS_NEW"], # "What to Test" - releaseIos.ts sets it from release-notes/testing.json
       distribute_external: has_external, # External groups go through Beta App Review; internal testers always auto-receive
       groups: has_external ? external_groups : nil,
       notify_external_testers: has_external
@@ -264,25 +251,6 @@ def google_play_service_account_key
 end
 
 platform :android do
-  desc "Upload Android app to Google Play Store"
-  lane :distribute_play_store do
-    if !File.exist?(ANDROID_AAB_PATH)
-      UI.user_error!("AAB file not found at #{ANDROID_AAB_PATH}. Run 'bun run release:android:build' first.")
-    end
-    
-    upload_to_play_store(
-      track: "production", # Production track - for public release
-      aab: ANDROID_AAB_PATH,
-      release_status: "draft", # Use draft status until app is published in Play Console
-      skip_upload_apk: true, # Don't upload APK - Google Play requires AAB format for new apps (smaller size, better optimization)
-      skip_upload_aab: false, # Upload AAB - this is the required format for Play Store distribution
-      skip_upload_metadata: true, # Don't upload metadata - we manage descriptions, changelogs, etc. manually in Play Console
-      skip_upload_images: true, # Don't upload images - we manage app icons and feature graphics manually
-      skip_upload_screenshots: true, # Don't upload screenshots - we manage them manually in Play Console
-      json_key_data: google_play_service_account_key
-    )
-  end
-
   desc "Upload Android app to internal testing track"
   lane :distribute_internal do
     if !File.exist?(ANDROID_AAB_PATH)

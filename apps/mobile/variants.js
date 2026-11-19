@@ -8,8 +8,9 @@
 //   dev  — local development build. Built by scripts/dev.ts.
 //   beta — CI-distributed parallel beta app. Ships to TestFlight + Play internal
 //          on every release and is NEVER promoted to a public store listing.
-//   prod — the public app. Same code/version as beta; promoted to the App Store /
-//          Play production manually once the matching beta build looks good.
+//   prod — the public app. Same code/version as beta. Its candidate build ships to
+//          TestFlight + Play internal, and that same build is submitted to App Store
+//          and Google Play review when the candidate is finalized (release-stores.yml).
 //
 // Each variant has a distinct bundle id / package, so all three can be installed
 // side by side on one device.

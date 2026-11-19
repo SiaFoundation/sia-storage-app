@@ -1,0 +1,40 @@
+[
+  {
+    "version": "1.15.0",
+    "released": "2026-10-30",
+    "items": [
+      {
+        "text": "Uploads can now continue in the background on Wi-Fi. Turn on Upload in the background in the menu.",
+        "platforms": ["android"]
+      },
+      {
+        "text": "Share files with anyone using a link, and manage or revoke links at any time.",
+        "platforms": ["ios", "android"]
+      },
+      {
+        "text": "Deleted files now go to a new Trash, where you can restore them.",
+        "platforms": ["ios", "android"]
+      },
+      {
+        "text": "Faster, more reliable downloads that use less storage space.",
+        "platforms": ["ios", "android"]
+      },
+      {
+        "text": "Smoother photo backup and imports, with better raw photo support.",
+        "platforms": ["ios", "android"]
+      },
+      {
+        "text": "More reliable syncing between your devices.",
+        "platforms": ["ios", "android"]
+      },
+      {
+        "text": "Improved VoiceOver support and stability fixes.",
+        "platforms": ["ios"]
+      },
+      {
+        "text": "Improved TalkBack support and stability fixes.",
+        "platforms": ["android"]
+      }
+    ]
+  }
+]

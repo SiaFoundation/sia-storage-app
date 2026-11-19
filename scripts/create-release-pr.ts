@@ -2,6 +2,15 @@ import { execSync } from 'child_process'
 import { readFileSync, unlinkSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import {
+  marketingVersion,
+  type Platform,
+  readTesting,
+  readWhatsNew,
+  sinceCandidateItems,
+  storeLimit,
+  storeText,
+} from '../apps/mobile/scripts/releaseNotes'
 
 const changelogs = [
   { name: 'core', path: 'packages/core/CHANGELOG.md' },
@@ -97,13 +106,76 @@ function deferredSection(candidate: string): string {
   return `\n\n## Not in this release\n\nMerged after ${candidate} and held for the next train:\n\n${packages.join('\n\n')}`
 }
 
+const STORES: { platform: Platform; name: string }[] = [
+  { platform: 'ios', name: 'App Store' },
+  { platform: 'android', name: 'Google Play' },
+]
+
+const NOTES_PATH = 'apps/mobile/release-notes'
+
+function mobileVersion(ref?: string): string {
+  const json = ref
+    ? execSync(`git show "${ref}:apps/mobile/package.json"`, { encoding: 'utf-8' })
+    : readFileSync('apps/mobile/package.json', 'utf-8')
+  return JSON.parse(json).version
+}
+
+function list(items: string[]): string {
+  return items.map((item) => `- ${item}`).join('\n')
+}
+
+function storeBlocks(version: string): string {
+  const entry = readWhatsNew().find((e) => e.version === version)
+  if (!entry) return `No What's New entry for ${version} in \`${NOTES_PATH}/whats-new.json\`.`
+  return STORES.map(({ platform, name }) => {
+    const text = storeText(entry, platform)
+    return `**${name}** (${text.length} of ${storeLimit(platform)} characters)\n\n${text}`
+  }).join('\n\n')
+}
+
+// The mobile notes from apps/mobile/release-notes, which prepare-release.ts
+// writes into this same commit. Shown above the changelogs so a reviewer reads
+// the text testers and the stores will get.
+function notesSection(candidate: string, problem: string | null): string {
+  if (!wasChangedFromMain('apps/mobile/CHANGELOG.md')) return ''
+  const version = mobileVersion()
+  const warning = problem
+    ? `> **The release notes were not written:** ${problem}\n> Re-run Prepare Release, or write them in \`${NOTES_PATH}\` on the release branch.\n\n`
+    : ''
+  if (candidate) {
+    const shipped = mobileVersion(candidate)
+    return `${warning}## Store notes for mobile ${version}\n\nMerging this PR submits the ${shipped} build to App Store and Google Play review with this text. Change it in \`${NOTES_PATH}/whats-new.json\` on this branch.\n\n${storeBlocks(version)}\n\n`
+  }
+  let testing = ''
+  const notes = readTesting()
+  if (notes && notes.version === version) {
+    const sinceCandidate = notes.sinceCandidate
+      ? `Since ${notes.sinceCandidate.from}:\n\n${list(sinceCandidateItems(notes))}\n\n`
+      : ''
+    const from = notes.sinceRelease.from ? ` since ${notes.sinceRelease.from}` : ''
+    testing = `## What to test in mobile ${version}\n\n${sinceCandidate}Everything${from}:\n\n${list(notes.sinceRelease.items)}\n\n`
+  }
+  const marketing = marketingVersion(version)
+  return `${warning}${testing}## What's New in ${marketing}\n\nShown in the app, and sent to the stores when ${marketing} is finalized. Change it in \`${NOTES_PATH}/whats-new.json\` on the release branch.\n\n${storeBlocks(marketing)}\n\n`
+}
+
+// A notes file CI would reject must still leave a release PR to fix it in.
+function safeNotesSection(candidate: string, problem: string | null): string {
+  try {
+    return notesSection(candidate, problem)
+  } catch (error) {
+    console.error(`WARNING: could not show the release notes: ${error}`)
+    return `> **The release notes could not be read:** ${error}\n\n`
+  }
+}
+
 // Called by prepare-release.ts rather than run as a knope step. Finalizing
 // checks out the shipped candidate, replacing the working tree with that
 // commit's, so anything knope spawns afterwards executes months-old code. This
 // describes the current process rather than the released content, so it has to
 // be the current version: a static import is resolved before that checkout and
 // runs from memory.
-export function createReleasePr(candidate: string): void {
+export function createReleasePr(candidate: string, notesProblem: string | null): void {
   const sections: string[] = []
   const versions: string[] = []
   for (const { name, path } of changelogs) {
@@ -119,11 +191,11 @@ export function createReleasePr(candidate: string): void {
   const isRc = versions.some((v) => v.includes('-rc.'))
   const final = candidate !== ''
   const note = final
-    ? `Merging this PR graduates ${candidate} to a stable release. The tags are created at that candidate's commit, the source that shipped, rather than at main's tip. A desktop tag builds the release app and attaches its disk image.`
+    ? `Merging this PR graduates ${candidate} to a stable release. The tags are created at that candidate's commit, the source that shipped, rather than at main's tip. A mobile tag submits that candidate's build to App Store and Google Play review, and a desktop tag builds the release app and attaches its disk image.`
     : isRc
       ? 'Merging this PR will create release candidates: mobile ships to TestFlight and Play internal testing, and desktop attaches a notarized beta disk image to its prerelease. Run the Finalize Release workflow to cut the stable release.'
       : 'Merging this PR will create a GitHub release.'
-  const body = `${sections.join('\n\n')}${final ? deferredSection(candidate) : ''}\n\n---\n${note}`
+  const body = `${safeNotesSection(candidate, notesProblem)}${sections.join('\n\n')}${final ? deferredSection(candidate) : ''}\n\n---\n${note}`
 
   // Every title keeps the "chore: release" prefix the prepare-release skip check
   // matches on. The suffix is one of the two signals publish-releases.ts reads off

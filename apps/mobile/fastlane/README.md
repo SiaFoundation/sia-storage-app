@@ -22,14 +22,6 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 
 Build and export iOS IPA for App Store
 
-### ios distribute_app_store
-
-```sh
-[bundle exec] fastlane ios distribute_app_store
-```
-
-Upload iOS app to App Store Connect
-
 ### ios distribute_testflight
 
 ```sh
@@ -41,14 +33,6 @@ Upload iOS app to TestFlight
 ---
 
 ## Android
-
-### android distribute_play_store
-
-```sh
-[bundle exec] fastlane android distribute_play_store
-```
-
-Upload Android app to Google Play Store
 
 ### android distribute_internal
 

@@ -3,10 +3,12 @@
 /**
  * iOS Release Build & Distribution
  *
- * Builds a signed iOS IPA and uploads to App Store Connect.
+ * Builds a signed iOS IPA and uploads it to TestFlight, with the tester notes
+ * from release-notes/testing.json as "What to Test". The App Store gets the
+ * same build later, through submitStores.ts.
  *
  * Usage:
- *   bun scripts/releaseIos.ts [testflight|appstore]
+ *   bun scripts/releaseIos.ts
  *
  * Environment variables:
  *   APP_VARIANT                    - Which app to build: beta | prod (default prod)
@@ -18,19 +20,9 @@ import path from 'node:path'
 import { $ } from 'bun'
 import pkg from '../package.json'
 import { resolveVariant } from '../variants'
-import { whatsNewText } from './releaseNotes'
+import { testerText } from './releaseNotes'
 
 const projectRoot = path.resolve(import.meta.dir, '..')
-
-// Get track from command line args
-const track = Bun.argv[2] || 'testflight'
-
-if (track !== 'testflight' && track !== 'appstore') {
-  console.error('Usage: bun scripts/releaseIos.ts [testflight|appstore]')
-  console.error('  testflight - Upload to TestFlight (default)')
-  console.error('  appstore   - Upload to App Store')
-  process.exit(1)
-}
 
 // Which app identity to build. CI sets APP_VARIANT per matrix leg; default to
 // prod so a bare `release:ios:*` invocation builds the public app.
@@ -58,7 +50,7 @@ process.env.IOS_SHARE_EXTENSION_PROFILE_NAME = variant.shareExtProfileName
 
 $.cwd(projectRoot)
 
-console.log(`=== iOS Release Build (${variant.name} / ${track}) ===`)
+console.log(`=== iOS Release Build (${variant.name}) ===`)
 
 // Step 1: Clean and prebuild
 console.log('Step 1/3: Cleaning and prebuilding...')
@@ -69,20 +61,16 @@ await $`bunx expo prebuild --platform ios`
 console.log('Step 2/3: Building release IPA...')
 await $`fastlane ios build_ipa`
 
-// Step 3: Upload to App Store Connect
+// Step 3: Upload to TestFlight
 if (Bun.env.DRY_RUN === 'true') {
-  console.log('Step 3/3: DRY_RUN=true — skipping App Store Connect upload.')
+  console.log('Step 3/3: DRY_RUN=true, skipping the TestFlight upload.')
 } else {
-  console.log(`Step 3/3: Uploading to App Store Connect (${track})...`)
-  if (track === 'testflight') {
-    // Fastfile reads both via ENV: the "What to Test" link and the variant's
-    // external tester groups.
-    process.env.IOS_WHATS_NEW = whatsNewText(pkg.version)
-    process.env.IOS_EXTERNAL_GROUPS = JSON.stringify(variant.testflightExternalGroups)
-    await $`fastlane ios distribute_testflight`
-  } else {
-    await $`fastlane ios distribute_app_store`
-  }
+  console.log('Step 3/3: Uploading to TestFlight...')
+  // Fastfile reads both via ENV: the "What to Test" text and the variant's
+  // external tester groups.
+  process.env.IOS_WHATS_NEW = testerText(pkg.version, 'ios')
+  process.env.IOS_EXTERNAL_GROUPS = JSON.stringify(variant.testflightExternalGroups)
+  await $`fastlane ios distribute_testflight`
 }
 
 console.log('=== iOS release complete! ===')

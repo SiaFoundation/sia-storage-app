@@ -23,16 +23,8 @@ on:
           - prod
           - beta
         default: both
-      track:
-        description: 'Release track'
-        required: true
-        type: choice
-        options:
-          - internal
-          - production
-        default: internal
       dry_run:
-        description: 'Build only — skip store upload (for verifying CI changes)'
+        description: 'Build only, skip the upload (for verifying CI changes)'
         required: false
         type: boolean
         default: false
@@ -42,12 +34,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Only prerelease `mobile/` releases (X.Y.Z-rc.N) build: the stable release is
-  # cut after a candidate already shipped, and the store submission is that
-  # candidate's tested build. Both variants build from the SAME commit:
-  #   prod (sia.storage)      → TestFlight + Play internal — promoted to the store manually
-  #   beta (sia.storage.beta) → TestFlight + Play internal — never promoted
-  # Manual dispatch can target a single variant via the `variant` input.
+  # Only prerelease `mobile/` releases (X.Y.Z-rc.N) build. Both variants build
+  # from the same commit and upload to TestFlight and Play internal testing.
+  # The stable release builds nothing: release-stores.yml submits the prod
+  # build of the candidate it graduated, so the stores get the tested binary.
+  # The beta app is never submitted. Manual dispatch can target a single
+  # variant via the `variant` input.
   release-android:
     if: ${{ (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'mobile/') && github.event.release.prerelease) || inputs.platform == 'android' || inputs.platform == 'both' }}
     runs-on: ubuntu-latest
@@ -115,7 +107,7 @@ jobs:
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
           DRY_RUN: ${{ inputs.dry_run || 'false' }}
           CI: true
-        run: bun scripts/releaseAndroid.ts ${{ inputs.track || 'internal' }}
+        run: bun scripts/releaseAndroid.ts
         shell: bash
 
   release-ios:
@@ -193,14 +185,7 @@ jobs:
           APP_STORE_CONNECT_API_KEY_JSON: ${{ secrets.APP_STORE_CONNECT_API_KEY_JSON }}
           DRY_RUN: ${{ inputs.dry_run || 'false' }}
           CI: true
-        run: |
-          TRACK="${{ inputs.track || 'internal' }}"
-          if [[ "$TRACK" == "internal" ]]; then
-            bun scripts/releaseIos.ts testflight
-          else
-            bun scripts/releaseIos.ts appstore
-          fi
-        shell: bash
+        run: bun scripts/releaseIos.ts
 
       - name: Sanitize dSYMs artifact name
         if: always()
