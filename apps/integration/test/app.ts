@@ -579,15 +579,15 @@ export function createTestApp(
             (u) => u.status !== 'error' && u.status !== 'done',
           )
           if (active.length > 0) return false
-          // Mirror the uploader's scope: it only uploads current versions, so a
-          // superseded version that never uploaded isn't "pending" — counting
-          // it here would never drain.
+          // The uploader sends older versions too, so one replaced before it
+          // uploaded is still pending.
           const pending = await appService.files.query({
             limit: 1,
             order: 'ASC',
             pinned: { indexerURL: INDEXER_URL, isPinned: false },
             fileExistsLocally: true,
             includeThumbnails: true,
+            includeOldVersions: true,
             includeTrashed: true,
             includeDeleted: true,
           })

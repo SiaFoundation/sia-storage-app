@@ -1356,9 +1356,9 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       await service.uploader.enqueueByIds([versionId])
 
       // Freed now rather than by the eviction pass, which leaves a superseded version's copy for an
-      // hour. One never uploaded keeps it, since that copy is the only one. An object on any indexer
-      // is enough: the uploader sends current versions only, so this copy would never reach a newer
-      // indexer anyway.
+      // hour. One never uploaded keeps it, since that copy is the only one, and the uploader still
+      // sends it. An object on any indexer is enough: an older version left on an earlier indexer is
+      // not worth keeping this copy to send to the current one.
       if ((await service.localObjects.countForFile(replaced.id)) > 0) {
         await service.fs.removeFile({ id: replaced.id, type: replaced.type })
       }

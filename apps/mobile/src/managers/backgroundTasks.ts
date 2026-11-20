@@ -320,13 +320,13 @@ type PendingWork = {
 }
 
 /**
- * Reads what is still pending. Uploads count the files waiting and any the
- * uploader holds that no longer count as waiting, such as a file a newer
- * version superseded mid-upload. Imports count while a file is being copied,
- * a file is ready to copy now, or the photo library walk is still finding
- * files, so a task does not wait out an import's retry backoff. Sync-down
- * counts until one run has finished since the task started, because a quiet
- * check finds no events and leaves nothing else to see.
+ * Reads what is still pending. Uploads count the files waiting, older
+ * versions included, and any the uploader holds. Imports count while a file
+ * is being copied, a file is ready to copy now, or the photo library walk is
+ * still finding files, so a task does not wait out an import's retry
+ * backoff. Sync-down counts until one run has finished since the task
+ * started, because a quiet check finds no events and leaves nothing else to
+ * see.
  */
 async function readPendingWork(
   longTask: boolean,

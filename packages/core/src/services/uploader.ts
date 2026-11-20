@@ -31,6 +31,7 @@ import { TransferSpeedTracker } from '../lib/transferSpeed'
 import { uploadPeakBytes } from './transferMemoryBudget'
 import { tidyCopies } from './localCopies'
 import { uniqueId } from '../lib/uniqueId'
+import type { FileQueryOpts } from '../db/operations/files'
 import type { FileRecordRow } from '../types/files'
 
 export type BatchFile = {
@@ -190,15 +191,11 @@ export class UploadManager {
   private polledFiles: FileEntry[] = []
   /**
    * Files whose last upload attempt failed: how many attempts in a row have
-   * failed, and when the file may be tried again. A file whose pin or batch
-   * send failed also keeps its entry here, and the poll queues it again
-   * itself once its delay passes. Kept in memory and cleared by shutdown(),
-   * so a relaunch or Cancel uploads tries every file again at once.
+   * failed, and when the poll may take the file again. Kept in memory and
+   * cleared by shutdown(), so a relaunch or Cancel uploads tries every file
+   * again at once.
    */
-  private retries = new Map<
-    string,
-    { failures: number; retryAt: number; entry?: FileEntry; queued?: boolean }
-  >()
+  private retries = new Map<string, { failures: number; retryAt: number; network: boolean }>()
   /**
    * Whether the indexer stopped answering while a file waited to retry a
    * network failure, as a failed account check or a poll skipped for want of
@@ -391,7 +388,7 @@ export class UploadManager {
       })
 
       for (const entry of batch.files) {
-        this.failEntry(entry, e, message, 'network')
+        this.failEntry(entry.fileId, e, message, 'network')
       }
     } finally {
       this.uploadingBatch = null
@@ -558,20 +555,15 @@ export class UploadManager {
    * error mid-add waits on that longer schedule too. A failed pin or batch
    * send fails on the network and waits at most a couple of minutes, which
    * keeps short the window in which another device's newer version can sync
-   * down first. A file that fails on the network is also queued again from
-   * here rather than found by the poll's query, which takes current versions
-   * only: an edit made here while offline becomes an older version once
-   * another device's newer one syncs down, and the query would never upload
-   * it. The schedule is in memory, so a restart tries every file at once,
-   * and the poll makes every file due when the connection comes back.
+   * down first. The schedule is in memory, so a restart tries every file at
+   * once, and the poll makes every file due when the connection comes back.
    */
   private failEntry(
-    entry: FileEntry,
+    fileId: string,
     error: unknown,
     message: string,
     retry: 'add' | 'network' = 'add',
   ): void {
-    const { fileId } = entry
     if (isSuspendedDbError(error)) {
       this.app.uploads.remove(fileId)
     } else {
@@ -580,16 +572,12 @@ export class UploadManager {
         retry === 'add'
           ? [UPLOAD_RETRY_BASE_DELAY, UPLOAD_RETRY_MAX_DELAY]
           : [UPLOAD_NETWORK_RETRY_BASE_DELAY, UPLOAD_NETWORK_RETRY_MAX_DELAY]
-      const previous = this.retries.get(fileId)
-      const failures = (previous?.failures ?? 0) + 1
+      const failures = (this.retries.get(fileId)?.failures ?? 0) + 1
       const delay = Math.min(max, base * 2 ** (failures - 1))
-      // Once a file has failed on the network it keeps its entry, so a later
-      // failure of another kind does not leave it to a poll that may no
-      // longer take it.
       this.retries.set(fileId, {
         failures,
         retryAt: Date.now() + delay,
-        entry: retry === 'network' || previous?.entry ? entry : undefined,
+        network: retry === 'network',
       })
       logger.info('uploadManager', 'file_retry_scheduled', {
         fileId,
@@ -603,7 +591,7 @@ export class UploadManager {
   /** Whether a file waits out the delay after a failed pin or batch send. */
   private waitingOnNetwork(): boolean {
     const now = Date.now()
-    return [...this.retries.values()].some((r) => r.entry && !r.queued && r.retryAt > now)
+    return [...this.retries.values()].some((r) => r.network && r.retryAt > now)
   }
 
   /**
@@ -632,41 +620,19 @@ export class UploadManager {
     }
   }
 
-  /** Files still waiting out the delay after a failed upload, which the poll leaves alone. */
+  /**
+   * Files still waiting out the delay after a failed upload, which the poll
+   * leaves alone. A file trashed or deleted since it failed has left the
+   * uploads store, and its schedule is dropped here.
+   */
   private waitingToRetry(): string[] {
     const now = Date.now()
-    return [...this.retries].filter(([, r]) => r.retryAt > now).map(([id]) => id)
-  }
-
-  /**
-   * Queues again each file whose pin or batch send failed and whose delay has
-   * passed, when the poll's query did not take it, which happens once it is
-   * no longer the current version. A file the query took goes through the
-   * poll's own checks, such as the one that gives up on an empty file, and
-   * an empty file is never queued from here, since it can never upload. A
-   * file trashed or deleted meanwhile has left the uploads store and is let
-   * go.
-   */
-  private requeueNetworkFailures(polled: Set<string>): void {
-    const now = Date.now()
-    const due: FileEntry[] = []
-    for (const [fileId, r] of this.retries) {
-      if (!r.entry || r.queued || r.retryAt > now) continue
-      if (!this.app.uploads.getEntry(fileId)) {
-        this.retries.delete(fileId)
-        continue
-      }
-      if (r.entry.size === 0) r.entry = undefined
-      else if (!polled.has(fileId)) due.push(r.entry)
-      r.queued = true
+    const waiting: string[] = []
+    for (const [id, r] of this.retries) {
+      if (!this.app.uploads.getEntry(id)) this.retries.delete(id)
+      else if (r.retryAt > now) waiting.push(id)
     }
-    if (due.length === 0) return
-    const fresh = this.notActive(due)
-    if (fresh.length === 0) return
-    this.app.uploads.registerMany(
-      fresh.map((e) => ({ id: e.fileId, size: e.size, kind: e.file.kind })),
-    )
-    this.polledFiles.push(...fresh)
+    return waiting
   }
 
   /**
@@ -1043,7 +1009,7 @@ export class UploadManager {
         fileId: entry.fileId,
         error: e as Error,
       })
-      this.failEntry(entry, e, message)
+      this.failEntry(entry.fileId, e, message)
       // Keep this.packer / this.batch alive — the SDK leaves the packer
       // usable after add() errors, so subsequent entries continue in the
       // same batch instead of orphaning already-successful adds.
@@ -1184,7 +1150,7 @@ export class UploadManager {
         })
         // The SDK leaves the packer usable after an add fails, so the
         // batch carries on with the adds that succeeded.
-        this.failEntry(entry, failure.error, getErrorMessage(failure.error))
+        this.failEntry(entry.fileId, failure.error, getErrorMessage(failure.error))
         continue
       }
       const addMs = Date.now() - t1
@@ -1256,25 +1222,18 @@ export class UploadManager {
 
   /**
    * Removes the failed entries of files the poll would no longer take, along
-   * with their retry schedules. A version replaced here or by another device,
-   * a file marked lost, or one uploaded from elsewhere is never tried again,
-   * and its failed entry would otherwise stay in the status for good. The
-   * check uses the poll's own filter. A file that failed on the network is
-   * left alone, since the uploader queues it again itself whether or not
-   * it is still the current version.
+   * with their retry schedules. A file whose local copy is gone or one
+   * uploaded from elsewhere is never tried again, and its failed entry would
+   * otherwise stay in the status for good. The check uses the poll's own
+   * filter, so a version that keeps failing still shows as failed after a
+   * newer version replaces it.
    */
   private async dropFailedNotTaken(indexerURL: string): Promise<void> {
     const failed = Object.values(this.app.uploads.getState().uploads)
-      .filter((u) => u.status === 'error' && !this.retries.get(u.id)?.entry)
+      .filter((u) => u.status === 'error')
       .map((u) => u.id)
     if (failed.length === 0) return
-    const taken = await this.app.files.query({
-      order: 'ASC',
-      pinned: { indexerURL, isPinned: false },
-      fileExistsLocally: true,
-      includeThumbnails: true,
-      ids: failed,
-    })
+    const taken = await this.app.files.query(this.notUploadedQuery(indexerURL, { ids: failed }))
     const keep = new Set(taken.map((f) => f.id))
     // An enqueue during the query can replace a failed entry with a queued
     // one, which stays.
@@ -1284,6 +1243,28 @@ export class UploadManager {
     if (gone.length === 0) return
     this.app.uploads.removeMany(gone)
     for (const id of gone) this.retries.delete(id)
+  }
+
+  /**
+   * Every file and thumbnail with a local copy and no object on `indexerURL`,
+   * which is what the uploader sends. Older versions are included. A version
+   * edited here can be replaced before it uploads, by a newer save here or
+   * by another device's version syncing down, and its local copy is then the
+   * only one. The version history on other devices lacks it until it
+   * uploads, and eviction keeps the copy for good.
+   */
+  private notUploadedQuery(
+    indexerURL: string,
+    opts: Pick<FileQueryOpts, 'limit' | 'excludeIds' | 'ids'>,
+  ): FileQueryOpts {
+    return {
+      ...opts,
+      order: 'ASC',
+      pinned: { indexerURL, isPinned: false },
+      fileExistsLocally: true,
+      includeThumbnails: true,
+      includeOldVersions: true,
+    }
   }
 
   /**
@@ -1315,18 +1296,12 @@ export class UploadManager {
       const activeIds = [...this.app.uploads.getActiveIds(), ...this.waitingToRetry()]
       const indexerURL = await this.app.settings.getIndexerURL()
       await this.dropFailedNotTaken(indexerURL)
-      // Back up current versions only. Omitting includeOldVersions excludes
-      // superseded (current=0) files and orphan thumbnails (whose original is no
-      // longer current), so we don't re-upload stale duplicates — and the
-      // uploader's scope matches the stats sheet, which counts current=1 only.
-      const candidateFiles = await this.app.files.query({
-        limit: 200,
-        order: 'ASC',
-        pinned: { indexerURL, isPinned: false },
-        fileExistsLocally: true,
-        excludeIds: activeIds.length > 0 ? activeIds : undefined,
-        includeThumbnails: true,
-      })
+      const candidateFiles = await this.app.files.query(
+        this.notUploadedQuery(indexerURL, {
+          limit: 200,
+          excludeIds: activeIds.length > 0 ? activeIds : undefined,
+        }),
+      )
 
       const newEntries: FileEntry[] = []
       for (const file of candidateFiles) {
@@ -1345,9 +1320,11 @@ export class UploadManager {
               fileId: file.id,
               name: file.name,
             })
+            // The file may be an older version, and stamping it now would
+            // rank it above the version that replaced it and make it current.
             await this.app.files.update(
               { id: file.id, lostReason: 'Empty file' },
-              { updatedAt: 'now' },
+              { updatedAt: 'preserve' },
             )
             await this.app.fs.removeFile({ id: file.id, type: file.type })
             continue
@@ -1386,7 +1363,6 @@ export class UploadManager {
           noUri: candidateFiles.length - newEntries.length,
         })
       }
-      this.requeueNetworkFailures(new Set(candidateFiles.map((f) => f.id)))
 
       return this.explicitQueue.length + this.polledFiles.length
     } catch (e) {
@@ -1561,7 +1537,7 @@ export class UploadManager {
               index: i,
             })
             const message = 'No pinned object returned'
-            this.failEntry(entry, new Error(message), message, 'network')
+            this.failEntry(entry.fileId, new Error(message), message, 'network')
             return { type: 'missing', fileId: entry.fileId }
           }
 
@@ -1603,7 +1579,7 @@ export class UploadManager {
               fileId: entry.fileId,
               error: e as Error,
             })
-            this.failEntry(entry, e, message, 'network')
+            this.failEntry(entry.fileId, e, message, 'network')
             return { type: 'error', fileId: entry.fileId }
           }
         }),

@@ -11,10 +11,14 @@ import * as path from 'path'
 import { createTestApp, type TestApp, waitForCondition } from './app'
 import { toContentHash } from '@siastorage/core/lib/contentHash'
 
-async function addVersionFile(app: TestApp, id: string, name: string): Promise<void> {
+async function addVersionFile(
+  app: TestApp,
+  id: string,
+  name: string,
+  content: Buffer = crypto.randomBytes(1024),
+): Promise<void> {
   const type = 'application/octet-stream'
   const ext = extFromMime(type)
-  const content = crypto.randomBytes(1024)
   const hash = toContentHash(crypto.createHash('sha256').update(content).digest('hex'))
   const filePath = path.join(app.tempDir, `${id}${ext}`)
   nodeFs.writeFileSync(filePath, content)
@@ -585,41 +589,68 @@ describe('Version Sync', () => {
     await appC.shutdown()
   }, 60_000)
 
-  it('superseded-before-upload version stays local; only the current version converges', async () => {
-    // The uploader backs up current versions only. A version superseded before
-    // it uploads never reaches the indexer: it stays a local-only history entry
-    // on the device that made it, while every device still converges on the
-    // same current version.
+  it('a version replaced before it uploads still uploads, and every device has both with the newer one current', async () => {
     const indexerStorage = createEmptyIndexerStorage()
     const appA = createTestApp(indexerStorage)
     const appB = createTestApp(indexerStorage)
     await appA.start()
     await appB.start()
 
-    // A creates v1 then v2 while disconnected, so v1 is superseded before any
+    // A creates v1 then v2 while disconnected, so v1 is replaced before any
     // upload runs (the uploader's pollDB skips work while disconnected).
     appA.setConnected(false)
     await addVersionFile(appA, 'loc-v1', 'doc.txt')
     await addVersionFile(appA, 'loc-v2', 'doc.txt')
     appA.setConnected(true)
 
-    // Only the current version (v2) uploads and reaches B.
-    await appA.waitForNoActiveUploads()
-    await waitForCondition(async () => (await appB.getFileById('loc-v2')) != null, {
+    await waitForCondition(
+      async () => (await appB.app.files.getVersionHistory('doc.txt', null)).length === 2,
+      { timeout: 15_000, message: 'B sees both versions' },
+    )
+
+    // Version history is newest first, and the newest is current.
+    for (const app of [appA, appB]) {
+      const history = await app.app.files.getVersionHistory('doc.txt', null)
+      expect(history.map((f) => f.id)).toEqual(['loc-v2', 'loc-v1'])
+      expect(await app.app.library.fileCount()).toBe(1)
+    }
+    expect((await appA.readLocalObjectsForFile('loc-v1')).length).toBeGreaterThan(0)
+
+    await appA.shutdown()
+    await appB.shutdown()
+  }, 60_000)
+
+  it('an empty version replaced before the poll is marked lost and the newer version stays current', async () => {
+    const indexerStorage = createEmptyIndexerStorage()
+    const appA = createTestApp(indexerStorage)
+    const appB = createTestApp(indexerStorage)
+    await appA.start()
+    await appB.start()
+
+    appA.setConnected(false)
+    await addVersionFile(appA, 'empty-v1', 'notes.txt', Buffer.alloc(0))
+    await addVersionFile(appA, 'empty-v2', 'notes.txt')
+    appA.setConnected(true)
+
+    await waitForCondition(
+      async () => (await appA.getFileById('empty-v1'))?.lostReason === 'Empty file',
+      { timeout: 15_000, message: 'A marks the empty version lost' },
+    )
+    await waitForCondition(async () => (await appB.getFileById('empty-v2')) !== null, {
       timeout: 15_000,
-      message: 'B sees the current version',
+      message: 'B receives the newer version',
     })
 
-    // B converged on the current version only — it never saw the superseded v1.
-    expect(await appB.getFileById('loc-v1')).toBeNull()
-    expect(await appB.app.library.fileCount()).toBe(1)
-    const histB = await appB.app.files.getVersionHistory('doc.txt', null)
-    expect(histB.map((f) => f.id)).toEqual(['loc-v2'])
-
-    // A keeps v1 as a local-only history entry. Version history is
-    // newest-first, so v1 is ordered after the current v2.
-    const histA = await appA.app.files.getVersionHistory('doc.txt', null)
-    expect(histA.map((f) => f.id)).toEqual(['loc-v2', 'loc-v1'])
+    for (const app of [appA, appB]) {
+      const history = await app.app.files.getVersionHistory('notes.txt', null)
+      expect(history[0].id).toBe('empty-v2')
+      const ids = await app.app.library.sortedFileIds(
+        { sortBy: 'NAME', sortDir: 'ASC', tags: [] },
+        10,
+        0,
+      )
+      expect(ids).toEqual(['empty-v2'])
+    }
 
     await appA.shutdown()
     await appB.shutdown()
