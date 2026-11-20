@@ -1,7 +1,7 @@
 [
   {
     "version": "1.15.1",
-    "released": null,
+    "released": "2026-11-20",
     "items": [
       {
         "text": "Browsing large libraries feels faster, and photo swiping and loading states recover correctly while you scroll.",
