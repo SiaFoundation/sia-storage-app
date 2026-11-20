@@ -1,1 +1,32 @@
-[]
+[
+  {
+    "version": "0.0.2",
+    "released": null,
+    "items": [
+      {
+        "text": "Clear Local Files now does a better job freeing Mac storage while keeping files you still need.",
+        "platforms": ["macos"]
+      },
+      {
+        "text": "The Finder folder is more reliable after login and launch, with better thumbnails and clearer upload indicators.",
+        "platforms": ["macos"]
+      },
+      {
+        "text": "The Activity tab is more useful with thumbnails or file icons, quick Finder access, and one-click sharing.",
+        "platforms": ["macos"]
+      },
+      {
+        "text": "Deleting and restoring folders now behaves more predictably across devices, and trashed files are removed from share links until restored.",
+        "platforms": ["macos"]
+      },
+      {
+        "text": "Upload and update progress is clearer and more dependable, with better waiting, retry, and storage-full status.",
+        "platforms": ["macos"]
+      },
+      {
+        "text": "The app window now matches macOS light and dark mode colors for better readability.",
+        "platforms": ["macos"]
+      }
+    ]
+  }
+]
