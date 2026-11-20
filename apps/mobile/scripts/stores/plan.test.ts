@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test'
-import { type AppStoreVersion, planAppStore, planGooglePlay } from './plan'
+import {
+  type AppStoreVersion,
+  appStoreReview,
+  planAppStore,
+  planAppStoreRelease,
+  planGooglePlay,
+} from './plan'
+import { requestShape } from './appStore'
 
 const version = (versionString: string, state: string, buildId: string | null = null) =>
   ({ id: `v-${versionString}`, versionString, state, buildId }) satisfies AppStoreVersion
@@ -30,12 +37,25 @@ describe('an App Store submission run', () => {
     }
   })
 
-  test('stops when the version is in review with another build', () => {
-    const plan = planAppStore([version('1.15.1', 'WAITING_FOR_REVIEW', 'b9')], '1.15.1', 'b2')
-    expect(plan).toEqual({
-      kind: 'blocked',
-      reason: '1.15.1 is WAITING_FOR_REVIEW with another build',
-    })
+  test('replaces the build of a version waiting for review or in review', () => {
+    for (const state of ['WAITING_FOR_REVIEW', 'IN_REVIEW']) {
+      expect(planAppStore([version('1.15.1', state, 'b9')], '1.15.1', 'b2')).toEqual({
+        kind: 'replace',
+        versionId: 'v-1.15.1',
+      })
+    }
+  })
+
+  test('stops when the version is approved with another build', () => {
+    const plan = planAppStore(
+      [version('1.15.1', 'PENDING_DEVELOPER_RELEASE', 'b9')],
+      '1.15.1',
+      'b2',
+    )
+    expect(plan.kind).toBe('blocked')
+    expect(plan.kind === 'blocked' && plan.reason).toContain(
+      'Reject that build in App Store Connect',
+    )
   })
 
   test('stops while an older version waits for review or to be released', () => {
@@ -74,5 +94,87 @@ describe('a Google Play submission run', () => {
     expect(
       planGooglePlay([{ status: 'completed', versionCodes: ['1160000'] }], '1150103').kind,
     ).toBe('blocked')
+  })
+})
+
+describe('an App Store review state', () => {
+  test('is pending while the version waits for review or is in review', () => {
+    expect(appStoreReview([version('1.15.1', 'WAITING_FOR_REVIEW', 'b2')], '1.15.1', 'b2')).toEqual(
+      {
+        label: 'Waiting for review',
+        status: 'pending',
+        approved: false,
+      },
+    )
+    expect(appStoreReview([version('1.15.1', 'IN_REVIEW', 'b2')], '1.15.1', 'b2').label).toBe(
+      'In review',
+    )
+  })
+
+  test('fails when review rejects the version', () => {
+    const review = appStoreReview([version('1.15.1', 'REJECTED', 'b2')], '1.15.1', 'b2')
+    expect(review.status).toBe('failure')
+    expect(review.approved).toBe(false)
+  })
+
+  test('is approved once Apple accepts the version', () => {
+    const review = appStoreReview(
+      [version('1.15.1', 'PENDING_DEVELOPER_RELEASE', 'b2')],
+      '1.15.1',
+      'b2',
+    )
+    expect(review).toEqual({ label: 'Approved', status: 'success', approved: true })
+  })
+
+  test("fails when the version carries another candidate's build", () => {
+    expect(appStoreReview([version('1.15.1', 'IN_REVIEW', 'b9')], '1.15.1', 'b2').status).toBe(
+      'failure',
+    )
+  })
+
+  test('names a state it does not know without failing', () => {
+    expect(appStoreReview([version('1.15.1', 'SOMETHING_NEW', 'b2')], '1.15.1', 'b2')).toEqual({
+      label: 'In state SOMETHING_NEW',
+      status: 'pending',
+      approved: false,
+    })
+  })
+})
+
+describe('releasing an approved App Store version', () => {
+  test('releases a version waiting for its manual release', () => {
+    expect(
+      planAppStoreRelease([version('1.15.1', 'PENDING_DEVELOPER_RELEASE', 'b2')], '1.15.1', 'b2'),
+    ).toEqual({ kind: 'release', versionId: 'v-1.15.1' })
+  })
+
+  test('does nothing for a version already released', () => {
+    expect(
+      planAppStoreRelease([version('1.15.1', 'READY_FOR_DISTRIBUTION', 'b2')], '1.15.1', 'b2').kind,
+    ).toBe('done')
+  })
+
+  test('stops for a version still in review or with another build', () => {
+    expect(planAppStoreRelease([version('1.15.1', 'IN_REVIEW', 'b2')], '1.15.1', 'b2').kind).toBe(
+      'blocked',
+    )
+    expect(
+      planAppStoreRelease([version('1.15.1', 'PENDING_DEVELOPER_RELEASE', 'b9')], '1.15.1', 'b2')
+        .kind,
+    ).toBe('blocked')
+  })
+})
+
+describe('an App Store request named in an error', () => {
+  test('keeps the resource kinds and drops every id and the query', () => {
+    expect(
+      requestShape('PATCH', '/v1/appStoreVersions/8a3f-21c/appStoreVersionLocalizations'),
+    ).toBe('PATCH /v1/appStoreVersions/{id}/appStoreVersionLocalizations')
+    expect(requestShape('GET', '/v1/builds?filter[app]=1234567890&filter[version]=1150103')).toBe(
+      'GET /v1/builds',
+    )
+    expect(requestShape('GET', '/v1/apps/1234567890/appStoreVersions?limit=50')).toBe(
+      'GET /v1/apps/{id}/appStoreVersions',
+    )
   })
 })

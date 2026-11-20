@@ -1,0 +1,42 @@
+name: Store Review
+
+# While a mobile final PR is open, writes where its version is in App Store
+# review into the PR: the header's App Store line and the store/app-store
+# status. Marks the PR ready to merge once Apple approves, and it stays a
+# draft until then. Google Play's API reports no review state, so the header
+# leaves that to Play Console.
+#
+# A scheduled run uses main's code, and the job installs no dependencies, so
+# nothing from a pull request or a package's install script runs next to the
+# App Store key. Only the review state's name is written to the PR.
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: write
+
+concurrency:
+  group: store-review
+  cancel-in-progress: false
+
+jobs:
+  app-store:
+    runs-on: ubuntu-latest
+    steps:
+      # Every branch, for the candidate the final PR records.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - name: Read App Store review
+        working-directory: apps/mobile
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_STORE_CONNECT_API_KEY_JSON: ${{ secrets.APP_STORE_CONNECT_API_KEY_JSON }}
+        run: bun scripts/storeReview.ts

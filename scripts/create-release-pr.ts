@@ -1,10 +1,14 @@
-import { execSync } from 'child_process'
+// Opens or updates a train's release PR. Called by prepare-release.ts rather
+// than run as a knope step, and imported statically there, so the body is
+// written by the current code even when the working tree holds an older
+// commit's files.
+
+import { execFileSync } from 'child_process'
 import { readFileSync, unlinkSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
   APPS,
-  APP_NAMES,
   type AppName,
   type AppTesting,
   type MobilePlatform,
@@ -20,20 +24,27 @@ import {
   storeText,
   whatsNewLines,
 } from '../apps/mobile/scripts/releaseNotes'
+import {
+  type Header,
+  desktopCandidateHeader,
+  desktopFinalHeader,
+  mobileCandidateHeader,
+  mobileFinalHeader,
+  packagesHeader,
+  renderHeader,
+} from './release-header'
+import type { Train } from './release-trains'
 
-const changelogs = [
-  { name: 'core', path: 'packages/core/CHANGELOG.md' },
-  { name: 'logger', path: 'packages/logger/CHANGELOG.md' },
-  { name: 'mobile', path: 'apps/mobile/CHANGELOG.md' },
-  { name: 'web', path: 'apps/web/CHANGELOG.md' },
-  { name: 'desktop', path: 'apps/desktop/CHANGELOG.md' },
-  { name: 'cli', path: 'apps/cli/CHANGELOG.md' },
-]
+const CHANGELOGS: Record<string, string> = {
+  core: 'packages/core/CHANGELOG.md',
+  logger: 'packages/logger/CHANGELOG.md',
+  mobile: 'apps/mobile/CHANGELOG.md',
+  web: 'apps/web/CHANGELOG.md',
+  desktop: 'apps/desktop/CHANGELOG.md',
+  cli: 'apps/cli/CHANGELOG.md',
+}
 
-function getLatestEntry(filePath: string): {
-  version: string
-  body: string
-} | null {
+function latestEntry(filePath: string): { version: string; body: string } | null {
   let content: string
   try {
     content = readFileSync(filePath, 'utf-8')
@@ -55,64 +66,23 @@ function getLatestEntry(filePath: string): {
   return body ? { version, body } : null
 }
 
-function wasChangedFromMain(filePath: string): boolean {
+function changedFromMain(filePath: string): boolean {
   try {
-    const result = execSync(`git diff main -- "${filePath}"`, {
-      encoding: 'utf-8',
-    })
-    return result.trim().length > 0
-  } catch {
+    execFileSync('git', ['diff', '--quiet', 'origin/main', '--', filePath])
     return false
+  } catch {
+    return true
   }
 }
 
-// A graduating cut is prepared from the shipped candidate's commit, so anything
-// merged after it is held back for the next train. The sections above say what
-// ships; without this one, what is being left out is only inferable from which
-// changesets survive the merge.
-function deferredSummaries(candidate: string): Map<string, string[]> {
-  const consumed = new Set(
-    execSync(`git diff --diff-filter=D --name-only "${candidate}" HEAD -- .changeset/`, {
-      encoding: 'utf-8',
-    })
-      .split('\n')
-      .filter(Boolean),
-  )
-  const byPackage = new Map<string, string[]>()
-  const onMain = execSync('git ls-tree --name-only main .changeset/', { encoding: 'utf-8' })
-    .split('\n')
-    .filter((path) => path.endsWith('.md'))
-
-  for (const path of onMain) {
-    if (consumed.has(path)) continue
-    const content = execSync(`git show "main:${path}"`, { encoding: 'utf-8' })
-    const frontmatter = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(content)
-    if (!frontmatter) continue
-    const summary = frontmatter[2].trim().split('\n')[0]
-    for (const line of frontmatter[1].split('\n')) {
-      const name = line.split(':')[0]?.trim()
-      if (!name) continue
-      byPackage.set(name, [...(byPackage.get(name) ?? []), summary])
-    }
-  }
-  return byPackage
-}
-
-function deferredSection(candidate: string): string {
-  let byPackage: Map<string, string[]>
-  try {
-    byPackage = deferredSummaries(candidate)
-  } catch (error) {
-    // Losing this section costs a reader some context; throwing here would cost
-    // them the release PR, which is the only way the cut reaches main.
-    console.error(`WARNING: could not list deferred changesets: ${error}`)
-    return ''
-  }
-  if (byPackage.size === 0) return ''
-  const packages = [...byPackage.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([name, summaries]) => `**${name}**\n${summaries.map((s) => `- ${s}`).join('\n')}`)
-  return `\n\n## Not in this release\n\nMerged after ${candidate} and held for the next train:\n\n${packages.join('\n\n')}`
+/** Each of the train's packages this cut bumps, with its new changelog entry. */
+export function bumped(train: Train): { name: string; version: string; body: string }[] {
+  return train.packages.flatMap((name) => {
+    const path = CHANGELOGS[name]
+    if (!path || !changedFromMain(path)) return []
+    const entry = latestEntry(path)
+    return entry ? [{ name, ...entry }] : []
+  })
 }
 
 const STORES: { platform: MobilePlatform; name: string }[] = [
@@ -120,20 +90,12 @@ const STORES: { platform: MobilePlatform; name: string }[] = [
   { platform: 'android', name: 'Google Play' },
 ]
 
-function versionOf(app: AppName, ref?: string): string {
-  const file = `apps/${app}/package.json`
-  const json = ref
-    ? execSync(`git show "${ref}:${file}"`, { encoding: 'utf-8' })
-    : readFileSync(file, 'utf-8')
-  return JSON.parse(json).version
-}
-
 function list(lines: string[]): string {
   return lines.map((line) => `- ${line}`).join('\n')
 }
 
 // Mobile shows each store's exact text and its count against the store's
-// limit, since that is what review gets. Other apps show their platforms.
+// limit, since that is what review gets. Desktop shows its platforms.
 function whatsNewBody(app: AppName, entry: WhatsNewEntry): string {
   if (app === 'mobile') {
     return STORES.map(({ platform, name }) => {
@@ -150,7 +112,7 @@ function whatsNewSection(app: AppName, version: string, note: string): string {
   const entry = readWhatsNew(app).find((e) => e.version === version)
   const file = `apps/${app}/release-notes/whats-new.json`
   const body = entry ? whatsNewBody(app, entry) : `No entry for ${version} in \`${file}\`.`
-  return `## What's New in ${app} ${version}\n\n${note} Change it in \`${file}\` on the release branch.\n\n${body}\n\n`
+  return `## What's New in ${version}\n\n${note}\n\n${body}\n\n`
 }
 
 function testingSection(app: AppName, notes: AppTesting): string {
@@ -161,107 +123,170 @@ function testingSection(app: AppName, notes: AppTesting): string {
     const from = notes.sinceRelease.from ? ` since ${notes.sinceRelease.from}` : ''
     return `### ${PLATFORM_NAMES[platform]}\n\n${candidate}Everything${from}:\n\n${list(sinceReleaseLines(notes, platform))}`
   })
-  return `## What to test in ${app} ${notes.version}\n\n${platforms.join('\n\n')}\n\n`
+  return `## What to test in ${notes.version}\n\n${platforms.join('\n\n')}\n\n`
 }
 
-// The notes from each app's release-notes folder, which prepare-release.ts
-// writes into this same commit. Shown above the changelogs so a reviewer reads
-// the text testers, the stores and the apps' users will get.
-function notesSection(candidate: string, problem: string | null): string {
-  const warning = problem
-    ? `> **The release notes were not written:** ${problem}\n> Re-run Prepare Release, or write them in the apps' \`release-notes\` folders on the release branch.\n\n`
-    : ''
-  // A final cut releases the apps whose version it graduates. Its changelogs
-  // can also differ from main's because main has moved past the candidate, so
-  // they are no guide to which apps ship.
-  const apps = APP_NAMES.filter((app) =>
-    candidate
-      ? versionOf(app, candidate) !== versionOf(app)
-      : wasChangedFromMain(join(APPS[app].dir, 'CHANGELOG.md')),
-  )
-  if (candidate) {
-    const sections = apps.map((app) => {
-      const version = versionOf(app)
-      const note =
-        app === 'mobile'
-          ? `Merging this PR submits the ${versionOf(app, candidate)} build to App Store and Google Play review with this text.`
-          : 'Shown to users of this version.'
-      return whatsNewSection(app, version, note)
-    })
-    return `${warning}${sections.join('')}`
-  }
-  const testing = readTesting()
-  const sections = apps.map((app) => {
-    const version = versionOf(app)
-    const notes = notesFor(testing, app, version)
-    const marketing = marketingVersion(version)
-    const note =
-      app === 'mobile'
-        ? `Shown in the app, and sent to the stores when ${marketing} is finalized.`
-        : `Shown to users when ${marketing} is finalized.`
-    return `${notes ? testingSection(app, notes) : ''}${whatsNewSection(app, marketing, note)}`
-  })
-  return `${warning}${sections.join('')}`
+function candidateNotes(app: AppName, version: string): string {
+  const notes = notesFor(readTesting(app), version)
+  const marketing = marketingVersion(version)
+  const note =
+    app === 'mobile'
+      ? `Shown in the app, and sent to the stores when ${marketing} is finalized. Change it in \`apps/mobile/release-notes/whats-new.json\` on this branch.`
+      : `Shown to users when ${marketing} is finalized. Change it in \`apps/desktop/release-notes/whats-new.json\` on this branch.`
+  return `${notes ? testingSection(app, notes) : ''}${whatsNewSection(app, marketing, note)}`
 }
 
-// A notes file CI would reject must still leave a release PR to fix it in.
-function safeNotesSection(candidate: string, problem: string | null): string {
+function finalNotes(app: AppName, version: string): string {
+  const note =
+    app === 'mobile'
+      ? 'Sent to App Store and Google Play review with the candidate.'
+      : 'Shown to users of this version.'
+  return whatsNewSection(app, version, note)
+}
+
+/** A body section that can't be built must still leave a release PR to fix it in. */
+function safely(what: string, build: () => string): string {
   try {
-    return notesSection(candidate, problem)
+    return build()
   } catch (error) {
-    console.error(`WARNING: could not show the release notes: ${error}`)
-    return `> **The release notes could not be read:** ${error}\n\n`
+    console.error(`WARNING: could not show the ${what}: ${error}`)
+    return `> **The ${what} could not be read:** ${error}\n\n`
   }
 }
 
-// Called by prepare-release.ts rather than run as a knope step. Finalizing
-// checks out the shipped candidate, replacing the working tree with that
-// commit's, so anything knope spawns afterwards executes months-old code. This
-// describes the current process rather than the released content, so it has to
-// be the current version: a static import is resolved before that checkout and
-// runs from memory.
-export function createReleasePr(candidate: string, notesProblem: string | null): void {
-  const sections: string[] = []
-  const versions: string[] = []
-  for (const { name, path } of changelogs) {
-    if (!wasChangedFromMain(path)) continue
-    const entry = getLatestEntry(path)
-    if (entry) {
-      sections.push(`## ${name} ${entry.version}\n\n${entry.body}`)
-      versions.push(entry.version)
+export type ReleasePr =
+  | { kind: 'candidate'; train: Train; app: AppName; version: string; inReview: string | null }
+  | {
+      kind: 'final'
+      train: Train
+      app: AppName
+      version: string
+      candidate: string
+      buildNumber: string
+      appStore: string
+      deferred: string[]
     }
+  | { kind: 'packages'; train: Train }
+
+function headerOf(pr: ReleasePr, versions: string[]): Header {
+  if (pr.kind === 'packages') return packagesHeader(versions)
+  if (pr.kind === 'candidate') {
+    return pr.app === 'mobile'
+      ? mobileCandidateHeader(pr.version, pr.inReview)
+      : desktopCandidateHeader(pr.version)
   }
+  return pr.app === 'mobile'
+    ? mobileFinalHeader({
+        version: pr.version,
+        candidate: pr.candidate,
+        buildNumber: pr.buildNumber,
+        appStore: pr.appStore,
+      })
+    : desktopFinalHeader(pr.version, pr.candidate)
+}
 
-  // Versions, not sections: a changelog body may mention "-rc." in prose.
-  const isRc = versions.some((v) => v.includes('-rc.'))
-  const final = candidate !== ''
-  const note = final
-    ? `Merging this PR graduates ${candidate} to a stable release. The tags are created at that candidate's commit, the source that shipped, rather than at main's tip. A mobile tag submits that candidate's build to App Store and Google Play review, and a desktop tag builds the release app and attaches its disk image.`
-    : isRc
-      ? 'Merging this PR will create release candidates: mobile ships to TestFlight and Play internal testing, and desktop attaches a notarized beta disk image to its prerelease. Run the Finalize Release workflow to cut the stable release.'
-      : 'Merging this PR will create a GitHub release.'
-  const body = `${safeNotesSection(candidate, notesProblem)}${sections.join('\n\n')}${final ? deferredSection(candidate) : ''}\n\n---\n${note}`
+export function titleOf(pr: ReleasePr, versions: string[]): string {
+  // Every title keeps the "chore: release" prefix the prepare-release skip
+  // check matches on. "(final)" is one of the two signals publish-releases.ts
+  // reads off the merged PR to tell a graduation from an ordinary cut.
+  if (pr.kind === 'packages') return `chore: release ${versions.join(', ')}`
+  return `chore: release ${pr.app} ${pr.version}${pr.kind === 'final' ? ' (final)' : ''}`
+}
 
-  // Every title keeps the "chore: release" prefix the prepare-release skip check
-  // matches on. The suffix is one of the two signals publish-releases.ts reads off
-  // the merged PR to tell a graduation from an ordinary cut.
-  const title = final ? 'chore: release (final)' : isRc ? 'chore: release (rc)' : 'chore: release'
-  const bodyFile = join(tmpdir(), 'release-pr-body.md')
-  writeFileSync(bodyFile, body)
+/** Opens the warning on a candidate PR whose notes Copilot failed to write, which Prepare Release looks for to try again. */
+export const NOTES_NOT_WRITTEN = 'The release notes were not written'
 
+export function releasePrBody(pr: ReleasePr, notesProblem: string | null): string {
+  const changes = bumped(pr.train)
+  const versions = changes.map((c) => `${c.name} ${c.version}`)
+  const warning =
+    pr.kind === 'candidate' && notesProblem
+      ? `> **${NOTES_NOT_WRITTEN}:** ${notesProblem}\n> Re-run Prepare Release, or write them in \`apps/${pr.app}/release-notes\` on this branch.\n\n`
+      : ''
+  const notes =
+    pr.kind === 'candidate'
+      ? safely('release notes', () => candidateNotes(pr.app, pr.version))
+      : pr.kind === 'final'
+        ? safely('release notes', () => finalNotes(pr.app, pr.version))
+        : ''
+  const changelogs = changes.map((c) => `## ${c.name} ${c.version}\n\n${c.body}`).join('\n\n')
+  const deferred =
+    pr.kind === 'final' && pr.deferred.length > 0
+      ? `\n\n## Not in this release\n\nMerged after ${pr.candidate}, for the next version:\n\n${list(pr.deferred)}`
+      : ''
+  return `${renderHeader(headerOf(pr, versions))}\n\n${warning}${notes}${changelogs}${deferred}\n`
+}
+
+type OpenPr = { number: number; isDraft: boolean; body: string }
+
+export function openPr(branch: string): OpenPr | null {
+  const json = execFileSync(
+    'gh',
+    ['pr', 'list', '--head', branch, '--state', 'open', '--json', 'number,isDraft,body'],
+    { encoding: 'utf-8' },
+  )
+  return (JSON.parse(json) as OpenPr[])[0] ?? null
+}
+
+/**
+ * Opens the branch's PR, or updates the one open. `draft` opens it as a draft,
+ * and also turns an open one back into a draft, as when a mobile final is
+ * submitted again with a new candidate.
+ */
+export function publishPr(
+  branch: string,
+  pr: ReleasePr,
+  notesProblem: string | null,
+  draft: boolean,
+): void {
+  const versions = bumped(pr.train).map((c) => `${c.name} ${c.version}`)
+  const bodyFile = join(tmpdir(), `release-pr-${branch.replace('/', '-')}.md`)
+  writeFileSync(bodyFile, releasePrBody(pr, notesProblem))
+  const title = titleOf(pr, versions)
   try {
-    try {
-      execSync(`gh pr create --base main --title "${title}" --body-file "${bodyFile}"`, {
-        stdio: 'inherit',
-      })
-    } catch {
-      execSync(`gh pr edit --title "${title}" --body-file "${bodyFile}"`, {
-        stdio: 'inherit',
-      })
+    const open = openPr(branch)
+    if (open) {
+      execFileSync(
+        'gh',
+        ['pr', 'edit', String(open.number), '--title', title, '--body-file', bodyFile],
+        {
+          stdio: 'inherit',
+        },
+      )
+      if (draft && !open.isDraft) {
+        execFileSync('gh', ['pr', 'ready', String(open.number), '--undo'], { stdio: 'inherit' })
+      }
+    } else {
+      execFileSync(
+        'gh',
+        [
+          'pr',
+          'create',
+          '--base',
+          'main',
+          '--head',
+          branch,
+          '--title',
+          title,
+          '--body-file',
+          bodyFile,
+          ...(draft ? ['--draft'] : []),
+        ],
+        { stdio: 'inherit' },
+      )
     }
   } finally {
     try {
       unlinkSync(bodyFile)
     } catch {}
   }
+}
+
+/** Closes the branch's open PR, when its train has nothing left to release. */
+export function closePr(branch: string, reason: string): void {
+  const open = openPr(branch)
+  if (!open) return
+  execFileSync('gh', ['pr', 'close', String(open.number), '--comment', reason], {
+    stdio: 'inherit',
+  })
 }

@@ -30,10 +30,6 @@ repo = "sia-storage-app"
 name = "prepare-release"
 
 [[workflows.steps]]
-type = "Command"
-command = "git switch -c release"
-
-[[workflows.steps]]
 type = "PrepareRelease"
 ignore_conventional_commits = true
 

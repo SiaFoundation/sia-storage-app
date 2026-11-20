@@ -1,5 +1,4 @@
 ---
-cli: minor
 desktop: minor
 ---
 

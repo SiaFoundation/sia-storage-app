@@ -1,5 +1,4 @@
 ---
-core: patch
 mobile: patch
 ---
 

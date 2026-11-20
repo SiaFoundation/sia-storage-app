@@ -1,12 +1,11 @@
 /**
- * Writes the release notes into the release commit. Called by
- * scripts/prepare-release.ts after knope has bumped the versions.
+ * Writes an app's release notes into its release commit. Called by
+ * scripts/prepare-release.ts after knope has bumped the app's version.
  *
- * For a release candidate it asks Copilot, in one call, for the What's New
- * entry and the tester notes of every app in the round, from each app's
- * changelog. For a final cut it only dates each candidate's entry: the stable
- * release reuses the candidate's build, so the entry that build bundled is the
- * one its users get.
+ * For a release candidate it asks Copilot for the app's What's New entry and
+ * tester notes, from its changelog. For a final cut it copies the candidate's
+ * own entry and dates it: the stable release reuses the candidate's build, so
+ * the entry that build bundled is the one its users get.
  *
  * The model runs with every tool denied, in an empty directory, and without
  * the release bot's token, so text in a changeset can steer what it writes but
@@ -20,40 +19,29 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import {
   APPS,
-  APP_NAMES,
   type AppName,
   CHANGESET_DIR,
   type Changeset,
   GUIDE_FILE,
   type GeneratedNotes,
   type RoundChanges,
-  TESTING_FILE,
   type WhatsNewEntry,
   candidateChanges,
   entryPlatforms,
-  isCandidate,
   marketingVersion,
   notesPrompt,
   packageVersion,
   parseChangeset,
   parseGenerated,
-  readTesting,
+  parseWhatsNew,
   readWhatsNew,
+  testingFile,
   whatsNewFile,
 } from './releaseNotes'
 
 const COPILOT = '@github/copilot@1.0.114'
 // Copilot picks the model. Under a workflow token it refuses Opus models by name.
 const MODEL = 'auto'
-/** Whether knope bumped the app's version in this cut. */
-function inCut(app: AppName): boolean {
-  try {
-    execFileSync('git', ['diff', '--quiet', 'HEAD', '--', 'package.json'], { cwd: APPS[app].dir })
-    return false
-  } catch {
-    return true
-  }
-}
 
 function ask(prompt: string): string {
   const token = process.env.COPILOT_GITHUB_TOKEN
@@ -166,80 +154,64 @@ function pendingChangesets(): Changeset[] {
     .map((file) => parseChangeset(readFileSync(path.join(CHANGESET_DIR, file), 'utf-8')))
 }
 
-function writeCandidateNotes(apps: AppName[]): void {
+function writeNotes(app: AppName): void {
+  const changelog = readFileSync(path.join(APPS[app].dir, 'CHANGELOG.md'), 'utf-8')
   const changesets = pendingChangesets()
-  const round: RoundChanges = {}
-  for (const app of apps) {
-    const changelog = readFileSync(path.join(APPS[app].dir, 'CHANGELOG.md'), 'utf-8')
-    round[app] = candidateChanges(changelog, packageVersion(app), (entry) =>
-      entryPlatforms(app, entry, changesets),
-    )
-  }
-  const drafts: Partial<Record<AppName, WhatsNewEntry>> = {}
-  for (const app of apps) {
-    const marketing = marketingVersion(packageVersion(app))
-    const draft = readWhatsNew(app).find((e) => e.version === marketing)
-    if (draft) drafts[app] = draft
-  }
-  const notes = generate(round, drafts)
+  const changes = candidateChanges(changelog, packageVersion(app), (entry) =>
+    entryPlatforms(app, entry, changesets),
+  )
+  const marketing = marketingVersion(packageVersion(app))
+  const draft = readWhatsNew(app).find((e) => e.version === marketing)
+  const round: RoundChanges = { [app]: changes }
+  const notes = generate(round, draft ? { [app]: draft } : {})
 
-  for (const app of apps) {
-    const items = notes.whatsNew[app]
-    if (!items) continue
-    const entry = { version: marketingVersion(packageVersion(app)), released: null, items }
-    writeJson(whatsNewFile(app), withEntry(readWhatsNew(app), entry))
-  }
-  // An app outside this round keeps its notes, which still describe the
-  // candidate its testers have.
-  const testing = readTesting()
-  for (const app of apps) {
-    const changes = round[app]
-    const written = notes.testing[app]
-    if (!changes || !written) continue
-    testing[app] = {
-      version: changes.version,
-      sinceCandidate: changes.candidate && {
-        from: changes.candidate.from,
-        items: written.sinceCandidate,
-      },
-      sinceRelease: { from: changes.from, items: written.sinceRelease },
-    }
-  }
-  writeJson(TESTING_FILE, testing)
+  const items = notes.whatsNew[app]
+  const written = notes.testing[app]
+  if (!items || !written) throw new Error(`the reply has no notes for ${app}`)
+  writeJson(
+    whatsNewFile(app),
+    withEntry(readWhatsNew(app), { version: marketing, released: null, items }),
+  )
+  writeJson(testingFile(app), {
+    version: changes.version,
+    sinceCandidate: changes.candidate && {
+      from: changes.candidate.from,
+      items: written.sinceCandidate,
+    },
+    sinceRelease: { from: changes.from, items: written.sinceRelease },
+  })
 }
 
 /**
- * Dates the candidate's entry. Only mobile's is required, because the store
- * submission sends it: desktop's What's New is not read by anything yet, so a
- * candidate cut without one still finalizes.
+ * Writes a candidate's notes. Returns why they could not be written, for the
+ * release PR to show, rather than throwing: a failed model call must not stop
+ * the cut, and CI keeps the PR from merging until the notes exist.
  */
-function dateFinalEntry(app: AppName): void {
-  const version = packageVersion(app)
-  const entries = readWhatsNew(app)
-  const entry = entries.find((e) => e.version === version)
-  if (!entry && app !== 'mobile') return
-  if (!entry) throw new Error(`the candidate has no What's New entry for ${app} ${version}`)
-  const released = new Date().toISOString().slice(0, 10)
-  writeJson(whatsNewFile(app), withEntry(entries, { ...entry, released }))
-}
-
-/**
- * Writes the notes for this cut. Returns why they could not be written, for
- * the release PR to show, rather than throwing: a failed model call must not
- * stop the cut, and CI keeps the PR from merging until the notes exist.
- */
-export function writeReleaseNotes(final: boolean): string | null {
-  const apps = APP_NAMES.filter(inCut)
+export function writeCandidateNotes(app: AppName): string | null {
   try {
-    if (final) {
-      for (const app of apps) dateFinalEntry(app)
-    } else {
-      const candidates = apps.filter((app) => isCandidate(packageVersion(app)))
-      if (candidates.length > 0) writeCandidateNotes(candidates)
-    }
+    writeNotes(app)
     return null
   } catch (error) {
     console.error(`WARNING: release notes were not written: ${error}`)
     return `${error}`
   }
+}
+
+/**
+ * Writes the candidate's What's New entry, dated today, as the stable
+ * version's. It comes from the candidate's own commit, since main can already
+ * hold a later candidate's entry for the same version. Only mobile's is
+ * required, because the store submission sends it.
+ */
+export function writeFinalNotes(app: AppName, candidateTag: string): void {
+  const version = packageVersion(app)
+  const file = `apps/${app}/release-notes/whats-new.json`
+  const json = execFileSync('git', ['show', `${candidateTag}:${file}`], { encoding: 'utf-8' })
+  const entry = parseWhatsNew(JSON.parse(json), app, file).find((e) => e.version === version)
+  if (!entry && app === 'mobile') {
+    throw new Error(`${candidateTag} has no What's New entry for ${version}`)
+  }
+  if (!entry) return
+  const released = new Date().toISOString().slice(0, 10)
+  writeJson(whatsNewFile(app), withEntry(readWhatsNew(app), { ...entry, released }))
 }

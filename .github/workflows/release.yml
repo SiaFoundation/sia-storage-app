@@ -36,8 +36,9 @@ concurrency:
 jobs:
   # Only prerelease `mobile/` releases (X.Y.Z-rc.N) build. Both variants build
   # from the same commit and upload to TestFlight and Play internal testing.
-  # The stable release builds nothing: release-stores.yml submits the prod
-  # build of the candidate it graduated, so the stores get the tested binary.
+  # The stable release builds nothing: Finalize Release sent the candidate's
+  # prod build to store review (release-stores.yml), so the stores get the
+  # tested binary.
   # The beta app is never submitted. Manual dispatch can target a single
   # variant via the `variant` input.
   release-android:

@@ -1,24 +1,39 @@
 #!/usr/bin/env bun
 
 /**
- * Submits a stable mobile release to App Store or Google Play review, using
- * the build of the release candidate it graduated rather than a new one. The
- * candidate is the `mobile/vX.Y.Z-rc.N` tag on the stable tag's commit, its
- * build number comes from appVersion.js, and the notes are that version's
- * entry in release-notes/whats-new.json.
+ * Sends a mobile release candidate's build to the stores, without building
+ * anything. Release already uploaded the candidate's prod build to TestFlight
+ * and Play internal testing, so the stores review the binary testers ran.
+ *
+ * - `submit` puts the candidate's build under its plain X.Y.Z version in App
+ *   Store or Google Play review, with the What's New entry the candidate
+ *   carries. Finalize Release runs it.
+ * - `release` releases the App Store version the stable tag `mobile/vX.Y.Z`
+ *   names, once Apple has approved it. The stable tag's publication runs it.
+ *   Google Play has no API to publish an update managed publishing holds, so
+ *   that is done in Play Console.
  *
  * Every run reads what the store already has first, so a re-run after a
- * failure, or of a run that finished, does only what is left.
+ * failure, or of a run that finished, does only what is left. Only states and
+ * versions are printed, never what a store's API returns.
  *
  * Usage:
- *   bun scripts/submitStores.ts <ios|android> <X.Y.Z> [--dry-run]
+ *   bun scripts/submitStores.ts submit <ios|android> <mobile/vX.Y.Z-rc.N> [--dry-run]
+ *   bun scripts/submitStores.ts release ios <X.Y.Z> [--dry-run]
  */
 
 import { execFileSync } from 'node:child_process'
+import { parseCandidateTag } from '../../../scripts/release-trains'
 import { deriveAppVersion } from '../appVersion'
 import { resolveVariant } from '../variants'
-import { type MobilePlatform, readWhatsNew, storeLimit, storeText } from './releaseNotes'
-import { submitToAppStore } from './stores/appStore'
+import {
+  type MobilePlatform,
+  marketingVersion,
+  parseWhatsNew,
+  storeLimit,
+  storeText,
+} from './releaseNotes'
+import { type AppStoreBuild, releaseOnAppStore, submitToAppStore } from './stores/appStore'
 import { submitToGooglePlay } from './stores/googlePlay'
 
 function git(...args: string[]): string {
@@ -38,9 +53,25 @@ export function shippedCandidate(version: string): string {
   return candidate
 }
 
-function notes(version: string, platform: MobilePlatform): string {
-  const entry = readWhatsNew('mobile').find((e) => e.version === version)
-  if (!entry) throw new Error(`release-notes/whats-new.json has no entry for ${version}`)
+/** The prod app's build of a candidate version. The beta app is never submitted. */
+export function buildOf(candidate: string): AppStoreBuild {
+  return {
+    bundleId: resolveVariant('prod').bundleId,
+    version: marketingVersion(candidate),
+    buildNumber: deriveAppVersion(candidate).buildNumber,
+  }
+}
+
+/**
+ * The store text from the What's New entry in the candidate's own commit. Main
+ * may already hold a later candidate's entry for the same version, with
+ * changes this build doesn't have.
+ */
+function notesAt(tag: string, version: string, platform: MobilePlatform): string {
+  const file = 'apps/mobile/release-notes/whats-new.json'
+  const entries = parseWhatsNew(JSON.parse(git('show', `${tag}:${file}`)), 'mobile', file)
+  const entry = entries.find((e) => e.version === version)
+  if (!entry) throw new Error(`${tag} has no What's New entry for ${version}`)
   const text = storeText(entry, platform)
   if (text.length > storeLimit(platform)) {
     throw new Error(
@@ -50,31 +81,80 @@ function notes(version: string, platform: MobilePlatform): string {
   return text
 }
 
-async function main(): Promise<void> {
-  const [platform, version] = Bun.argv.slice(2)
-  const dryRun = Bun.argv.includes('--dry-run')
-  if ((platform !== 'ios' && platform !== 'android') || !/^\d+\.\d+\.\d+$/.test(version ?? '')) {
-    throw new Error('usage: bun scripts/submitStores.ts <ios|android> <X.Y.Z> [--dry-run]')
-  }
-  const candidate = shippedCandidate(version)
-  const { buildNumber } = deriveAppVersion(candidate)
-  const whatsNew = notes(version, platform)
-  // The beta app is never submitted, so the identity is fixed to prod here.
-  const { bundleId } = resolveVariant('prod')
+async function submit(platform: MobilePlatform, tag: string, dryRun: boolean): Promise<void> {
+  const candidate = parseCandidateTag(tag)
+  if (candidate?.app !== 'mobile') throw new Error(`${tag} is not a mobile candidate tag`)
+  const build = buildOf(candidate.version)
+  const whatsNew = notesAt(tag, build.version, platform)
   console.log(
-    `${platform}: ${version} from ${candidate}, build ${buildNumber}${dryRun ? ' (dry run)' : ''}`,
+    `${platform}: submitting ${build.version} from ${candidate.version}, build ${build.buildNumber}${dryRun ? ' (dry run)' : ''}`,
   )
-
   if (platform === 'ios') {
-    await submitToAppStore({ bundleId, version, buildNumber, whatsNew, dryRun })
+    await submitToAppStore({ ...build, whatsNew, dryRun })
   } else {
     await submitToGooglePlay({
-      packageName: bundleId,
-      version,
-      versionCode: buildNumber,
+      packageName: build.bundleId,
+      version: build.version,
+      versionCode: build.buildNumber,
       whatsNew,
       dryRun,
     })
+  }
+}
+
+async function release(version: string, dryRun: boolean): Promise<void> {
+  const candidate = shippedCandidate(version)
+  const build = buildOf(candidate)
+  console.log(
+    `ios: releasing ${version} from ${candidate}, build ${build.buildNumber}${dryRun ? ' (dry run)' : ''}`,
+  )
+  await releaseOnAppStore({ ...build, dryRun })
+}
+
+const USAGE = `usage:
+  bun scripts/submitStores.ts submit <ios|android> <mobile/vX.Y.Z-rc.N> [--dry-run]
+  bun scripts/submitStores.ts release ios <X.Y.Z> [--dry-run]`
+
+export type Command =
+  | { kind: 'submit'; platform: MobilePlatform; tag: string }
+  | { kind: 'release'; platform: MobilePlatform; version: string }
+
+const STABLE = /^\d+\.\d+\.\d+$/
+
+/**
+ * The command in `args`.
+ *
+ * Transition: `<ios|android> <X.Y.Z>` is the form the Release Stores workflow
+ * of mobile 1.15.1-rc.3, the last candidate cut before Finalize Release
+ * submitted to the stores, runs when its stable tag is published, since a
+ * release event runs the workflow of the tagged commit. It means releasing
+ * the approved version. Remove it once 1.15.1 is released.
+ */
+export function parseCommand(args: string[]): Command {
+  const [command, platform, target] = args.filter((a) => a !== '--dry-run')
+  const mobile = (p: string | undefined): p is MobilePlatform => p === 'ios' || p === 'android'
+  if (command === 'submit' && mobile(platform) && target)
+    return { kind: 'submit', platform, tag: target }
+  if (command === 'release' && platform === 'ios' && STABLE.test(target ?? '')) {
+    return { kind: 'release', platform, version: target ?? '' }
+  }
+  if (mobile(command) && STABLE.test(platform ?? '')) {
+    return { kind: 'release', platform: command, version: platform ?? '' }
+  }
+  throw new Error(USAGE)
+}
+
+async function main(): Promise<void> {
+  const args = Bun.argv.slice(2)
+  const dryRun = args.includes('--dry-run')
+  const command = parseCommand(args)
+  if (command.kind === 'submit') {
+    await submit(command.platform, command.tag, dryRun)
+  } else if (command.platform === 'ios') {
+    await release(command.version, dryRun)
+  } else {
+    // Google Play's API can't publish an update managed publishing holds.
+    console.log(`android: publish ${command.version} in Play Console once Google approves it`)
   }
 }
 

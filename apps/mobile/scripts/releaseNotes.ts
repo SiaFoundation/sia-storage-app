@@ -6,10 +6,10 @@
  *   the app to bundle, because a release candidate's build is the one that
  *   later ships. The App Store and Google Play "What's new" text come from the
  *   mobile one. Nothing in either may mention candidates.
- * - `apps/mobile/release-notes/testing.json` holds what testers of each app's current candidate should
- *   try, every item marked with the platforms it applies to. The mobile items
- *   become TestFlight's "What to Test" and Play internal testing's notes, and
- *   the release PR shows every app's, one section per platform.
+ * - `<app>/release-notes/testing.json` holds what testers of the app's current
+ *   candidate should try, every item marked with the platforms it applies to.
+ *   Mobile's become TestFlight's "What to Test" and Play internal testing's
+ *   notes, and the release PR shows them one section per platform.
  *
  * An item's platforms come from the changesets it was written from: a
  * changeset's `platforms:` line, such as `platforms: macos`, limits it to
@@ -20,7 +20,7 @@
  * so the notes a build uses always come from the commit it was built from.
  */
 
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
 export type MobilePlatform = 'ios' | 'android'
@@ -33,12 +33,9 @@ export type AppTesting = {
   sinceRelease: { from: string | null; items: Item[] }
 }
 export type AppName = 'mobile' | 'desktop'
-export type TestingNotes = Partial<Record<AppName, AppTesting>>
 
 const REPO = path.resolve(import.meta.dir, '../../..')
-export const NOTES_DIR = path.join(REPO, 'apps/mobile/release-notes')
-export const TESTING_FILE = path.join(NOTES_DIR, 'testing.json')
-export const GUIDE_FILE = path.join(NOTES_DIR, 'GUIDE.md')
+export const GUIDE_FILE = path.join(REPO, 'apps/mobile/release-notes/GUIDE.md')
 export const CHANGESET_DIR = path.join(REPO, '.changeset')
 
 export const APP_NAMES: readonly AppName[] = ['mobile', 'desktop']
@@ -112,6 +109,10 @@ export function whatsNewFile(app: AppName): string {
   return path.join(APPS[app].dir, 'release-notes/whats-new.json')
 }
 
+export function testingFile(app: AppName): string {
+  return path.join(APPS[app].dir, 'release-notes/testing.json')
+}
+
 export function parseWhatsNew(
   json: unknown,
   app: AppName,
@@ -138,59 +139,34 @@ export function parseWhatsNew(
   })
 }
 
-function parseAppTesting(raw: unknown, app: AppName, file: string): AppTesting {
-  const { version, sinceCandidate, sinceRelease } = (raw ?? {}) as Record<string, unknown>
-  if (typeof version !== 'string' || !ANY_VERSION.test(version)) {
-    fail(file, `${app}.version is missing`)
-  }
+export function parseTesting(json: unknown, app: AppName, file = testingFile(app)): AppTesting {
+  const { version, sinceCandidate, sinceRelease, ...rest } = (json ?? {}) as Record<string, unknown>
+  if (Object.keys(rest).length > 0) fail(file, `unknown fields ${Object.keys(rest)}`)
+  if (typeof version !== 'string' || !ANY_VERSION.test(version)) fail(file, 'version is missing')
   const { platforms } = APPS[app]
   const release = (sinceRelease ?? {}) as Record<string, unknown>
   const from = release.from ?? null
-  if (from !== null && typeof from !== 'string')
-    fail(file, `${app}.sinceRelease.from is not a version`)
+  if (from !== null && typeof from !== 'string') fail(file, 'sinceRelease.from is not a version')
   let candidate: AppTesting['sinceCandidate'] = null
   if (sinceCandidate !== null && sinceCandidate !== undefined) {
     const c = sinceCandidate as Record<string, unknown>
-    if (typeof c.from !== 'string') fail(file, `${app}.sinceCandidate.from is not a version`)
-    candidate = {
-      from: c.from,
-      items: parseItems(c.items, platforms, file, `${app}.sinceCandidate`),
-    }
+    if (typeof c.from !== 'string') fail(file, 'sinceCandidate.from is not a version')
+    candidate = { from: c.from, items: parseItems(c.items, platforms, file, 'sinceCandidate') }
   }
   return {
     version,
     sinceCandidate: candidate,
-    sinceRelease: {
-      from,
-      items: parseItems(release.items, platforms, file, `${app}.sinceRelease`),
-    },
+    sinceRelease: { from, items: parseItems(release.items, platforms, file, 'sinceRelease') },
   }
 }
 
-export function parseTesting(json: unknown, file = TESTING_FILE): TestingNotes {
-  const raw = (json ?? {}) as Record<string, unknown>
-  const unknown = Object.keys(raw).filter((key) => !APP_NAMES.some((app) => app === key))
-  if (unknown.length > 0) fail(file, `unknown apps ${unknown.join(', ')}`)
-  const notes: TestingNotes = {}
-  for (const app of APP_NAMES) {
-    if (raw[app] !== undefined) notes[app] = parseAppTesting(raw[app], app, file)
-  }
-  return notes
-}
-
-/**
- * An app's What's New entries, with none for a tree older than its file, such
- * as a candidate cut before desktop had one that is now being finalized.
- */
 export function readWhatsNew(app: AppName, file = whatsNewFile(app)): WhatsNewEntry[] {
-  if (!existsSync(file)) return []
   return parseWhatsNew(JSON.parse(readFileSync(file, 'utf-8')), app, file)
 }
 
-/** The tester notes, with no apps before Prepare Release has written any. */
-export function readTesting(): TestingNotes {
-  if (!existsSync(TESTING_FILE)) return {}
-  return parseTesting(JSON.parse(readFileSync(TESTING_FILE, 'utf-8')))
+export function readTesting(app: AppName): AppTesting {
+  const file = testingFile(app)
+  return parseTesting(JSON.parse(readFileSync(file, 'utf-8')), app, file)
 }
 
 /**
@@ -198,9 +174,8 @@ export function readTesting(): TestingNotes {
  * Prepare Release leaves the previous candidate's notes in the file, and they
  * must not be shown or sent as the new candidate's.
  */
-export function notesFor(testing: TestingNotes, app: AppName, version: string): AppTesting | null {
-  const notes = testing[app]
-  return notes?.version === version ? notes : null
+export function notesFor(notes: AppTesting, version: string): AppTesting | null {
+  return notes.version === version ? notes : null
 }
 
 function bullets(lines: string[]): string {
@@ -295,7 +270,7 @@ export function testerNotesText(notes: AppTesting, platform: MobilePlatform): st
 export function testerText(version: string, platform: MobilePlatform): string {
   let notes: AppTesting | null = null
   try {
-    notes = notesFor(readTesting(), 'mobile', version)
+    notes = notesFor(readTesting('mobile'), version)
   } catch (error) {
     console.warn(`WARNING: ${error}`)
   }
@@ -340,7 +315,7 @@ export function changelogSections(markdown: string): ChangelogSection[] {
 
 export type Changeset = { packages: string[]; platforms: Platform[] | null; text: string }
 
-function collapse(text: string): string {
+export function collapse(text: string): string {
   return text.replace(/\s+/g, ' ').trim()
 }
 
