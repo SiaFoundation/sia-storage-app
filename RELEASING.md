@@ -30,11 +30,11 @@ library version records changes and nothing else. No app waits for one.
      New the candidate carries, then opens the final PR as a draft. The App Store version is set
      to manual release, and Google Play holds an approved update under managed publishing.
    - Desktop: opens the final PR, ready to merge.
-3. **Review**, mobile only. Every 15 minutes, Store Review reads the App Store version's state
-   and writes it into the final PR's header and its `store/app-store` status. The PR becomes
-   ready to merge when Apple approves. Google Play's API reports no review state, so the header
-   says to check Play Console. Only the state is written, such as "In review" or "Rejected",
-   never anything else the store returns, since the PR is public.
+3. **Review**, mobile only. Every 15 minutes, Store Review reads both stores' review state and
+   writes it into the final PR's header and its `store/app-store` and `store/google-play`
+   statuses. The PR becomes ready to merge when both stores approve, and goes back to draft if
+   either stops approving. Only the state is written, such as "In review" or "Rejected", never
+   anything else a store returns, since the PR is public.
 4. **Release.** Merging the final PR tags `<app>/vX.Y.Z` on the candidate's commit, next to its
    `-rc.N` tag, so the tag names the source users got.
    - Mobile: nothing is rebuilt. The tag releases the approved App Store version. Publish the
@@ -101,7 +101,7 @@ A mobile final, with the App Store line Store Review keeps up to date:
 Candidate › Testing › **Review** › Released
 
 App Store: In review (since 2026-11-21 14:30 UTC)
-Google Play: sent for review. Google reports no review state, so check Play Console.
+Google Play: In review (since 2026-11-21 09:10 UTC)
 Merge once both stores approve. Merging tags 1.15.1 and releases it on the App Store, then publish it in Play Console.
 ```
 

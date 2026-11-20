@@ -117,14 +117,14 @@ export function planGooglePlay(releases: PlayRelease[], versionCode: string): Pl
   return { kind: 'release' }
 }
 
-/** Where an App Store version is in review, for a final PR's header and status. */
-export type AppStoreReview = {
+/** Where a store has a version in review, for a final PR's header and status. */
+export type StoreReview = {
   label: string
   status: 'pending' | 'success' | 'failure'
   approved: boolean
 }
 
-const REVIEW_LABELS: Record<string, Omit<AppStoreReview, 'approved'>> = {
+const REVIEW_LABELS: Record<string, Omit<StoreReview, 'approved'>> = {
   PREPARE_FOR_SUBMISSION: { label: 'Not submitted yet', status: 'pending' },
   READY_FOR_REVIEW: { label: 'Not submitted yet', status: 'pending' },
   WAITING_FOR_EXPORT_COMPLIANCE: { label: 'Waiting for export compliance', status: 'pending' },
@@ -147,7 +147,7 @@ export function appStoreReview(
   versions: AppStoreVersion[],
   versionString: string,
   buildId: string,
-): AppStoreReview {
+): StoreReview {
   const target = versions.find((v) => v.versionString === versionString)
   if (!target) {
     return {
@@ -200,4 +200,51 @@ export function planAppStoreRelease(
     return { kind: 'done', reason: `${versionString} is already ${target.state}` }
   }
   return { kind: 'blocked', reason: `${versionString} is ${target.state}, not approved yet` }
+}
+
+/** A release on a Play track, as `tracks.releases.list` reports it. */
+export type PlayReleaseSummary = {
+  releaseName?: string
+  activeArtifacts?: { versionCode?: number }[]
+  releaseLifecycleState?: string
+}
+
+const PLAY_LABELS: Record<string, Omit<StoreReview, 'approved'>> = {
+  RELEASE_LIFECYCLE_STATE_DRAFT: { label: 'Draft, not sent for review', status: 'pending' },
+  RELEASE_LIFECYCLE_STATE_NOT_SENT_FOR_REVIEW: { label: 'Not sent for review', status: 'pending' },
+  RELEASE_LIFECYCLE_STATE_IN_REVIEW: { label: 'In review', status: 'pending' },
+  RELEASE_LIFECYCLE_STATE_NOT_APPROVED: { label: 'Rejected, see Play Console', status: 'failure' },
+}
+
+/**
+ * The review state of the production release holding `versionCode`. An
+ * approved release waits under managed publishing for someone to publish it
+ * in Play Console, since the API has no call that publishes it.
+ */
+export function playReview(releases: PlayReleaseSummary[], versionCode: string): StoreReview {
+  const release = releases.find((r) =>
+    (r.activeArtifacts ?? []).some((a) => String(a.versionCode) === versionCode),
+  )
+  if (!release) {
+    return {
+      label: 'Not on the production track. Run Finalize Release',
+      status: 'failure',
+      approved: false,
+    }
+  }
+  const state = release.releaseLifecycleState ?? 'RELEASE_LIFECYCLE_STATE_UNSPECIFIED'
+  if (state === 'RELEASE_LIFECYCLE_STATE_APPROVED_NOT_PUBLISHED') {
+    return { label: 'Approved, publish it in Play Console', status: 'success', approved: true }
+  }
+  if (state === 'RELEASE_LIFECYCLE_STATE_PUBLISHED') {
+    return { label: 'Published', status: 'success', approved: true }
+  }
+  const known = PLAY_LABELS[state]
+  return known
+    ? { ...known, approved: false }
+    : {
+        label: `In state ${state.replace('RELEASE_LIFECYCLE_STATE_', '')}`,
+        status: 'pending',
+        approved: false,
+      }
 }

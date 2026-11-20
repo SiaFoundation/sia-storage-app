@@ -1,12 +1,19 @@
 /**
  * Puts a build already uploaded to internal testing on the Play production
- * track as a full rollout and sends it for review, through the Play Developer
- * API. With managed publishing on, an approved release waits for someone to
- * publish it from Play Console.
+ * track as a full rollout and sends it for review, and reads where it is in
+ * review, through the Play Developer API. With managed publishing on, an
+ * approved release waits for someone to publish it from Play Console, which
+ * the API has no call for.
  */
 
 import { googleAccessToken } from './jwt'
-import { type PlayRelease, planGooglePlay } from './plan'
+import {
+  type PlayRelease,
+  type PlayReleaseSummary,
+  type StoreReview,
+  planGooglePlay,
+  playReview,
+} from './plan'
 
 export type GooglePlaySubmission = {
   packageName: string
@@ -20,6 +27,22 @@ function serviceAccount(): { client_email: string; private_key: string; token_ur
   const json = process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON
   if (!json) throw new Error('GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON is not set')
   return JSON.parse(json)
+}
+
+/** Where the production release holding `versionCode` is in review. */
+export async function playReviewOf(packageName: string, versionCode: string): Promise<StoreReview> {
+  const token = await googleAccessToken(serviceAccount())
+  const response = await fetch(
+    `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/tracks/production/releases`,
+    { headers: { authorization: `Bearer ${token}` } },
+  )
+  if (!response.ok) {
+    throw new Error(
+      `Google Play GET tracks/production/releases failed with HTTP ${response.status}`,
+    )
+  }
+  const { releases = [] } = (await response.json()) as { releases?: PlayReleaseSummary[] }
+  return playReview(releases, versionCode)
 }
 
 export async function submitToGooglePlay(s: GooglePlaySubmission): Promise<void> {

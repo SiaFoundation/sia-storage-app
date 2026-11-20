@@ -8,7 +8,7 @@
 import { readFileSync } from 'node:fs'
 import { appStoreConnectToken } from './jwt'
 import {
-  type AppStoreReview,
+  type StoreReview,
   type AppStoreVersion,
   appStoreReview,
   planAppStore,
@@ -120,7 +120,7 @@ async function versionsOf(call: Call, appId: string): Promise<AppStoreVersion[]>
 }
 
 /** Where the build's version is in App Store review. */
-export async function appStoreReviewOf(b: AppStoreBuild): Promise<AppStoreReview> {
+export async function appStoreReviewOf(b: AppStoreBuild): Promise<StoreReview> {
   const { build, versions } = await lookUp(b)
   return appStoreReview(versions, b.version, build.id)
 }

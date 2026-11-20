@@ -164,6 +164,7 @@ export type ReleasePr =
       candidate: string
       buildNumber: string
       appStore: string
+      googlePlay: string
       deferred: string[]
     }
   | { kind: 'packages'; train: Train }
@@ -181,6 +182,7 @@ function headerOf(pr: ReleasePr, versions: string[]): Header {
         candidate: pr.candidate,
         buildNumber: pr.buildNumber,
         appStore: pr.appStore,
+        googlePlay: pr.googlePlay,
       })
     : desktopFinalHeader(pr.version, pr.candidate)
 }

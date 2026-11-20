@@ -206,7 +206,7 @@ jobs:
   # Each platform the apps run on has a sim/<platform> status: ios, android
   # and macos. On a candidate PR this job leaves its app's pending, ios and
   # android on release/mobile and macos on release/desktop, until sim.yml on a
-  # PR labelled sim, or `bun sim attest <platform>`, posts a result for that
+  # PR labelled sim, sim-mobile or sim-desktop, or `bun sim attest <platform>`, posts a result for that
   # commit. On any other PR it posts them as passed, so a rule requiring them
   # holds back only the candidate PRs. A final PR releases a candidate already
   # tested, so it needs none.
@@ -239,7 +239,8 @@ jobs:
           for platform in ios android macos; do
             if [[ " $required " == *" $platform "* ]]; then
               grep -qx "sim/$platform" <<< "$posted" && continue
-              state=pending description="Waiting for a sim run: add the sim label or run bun sim attest $platform"
+              label=$([ "$platform" = macos ] && echo sim-desktop || echo sim-mobile)
+              state=pending description="Waiting for a sim run: add the $label label or run bun sim attest $platform"
             else
               state=success description='Not required for this PR'
             fi

@@ -5,6 +5,7 @@ import {
   planAppStore,
   planAppStoreRelease,
   planGooglePlay,
+  playReview,
 } from './plan'
 import { requestShape } from './appStore'
 
@@ -176,5 +177,37 @@ describe('an App Store request named in an error', () => {
     expect(requestShape('GET', '/v1/apps/1234567890/appStoreVersions?limit=50')).toBe(
       'GET /v1/apps/{id}/appStoreVersions',
     )
+  })
+})
+
+describe('a Google Play review state', () => {
+  const release = (state: string, versionCode = 1150103) => ({
+    releaseName: '1.15.1',
+    activeArtifacts: [{ versionCode }],
+    releaseLifecycleState: `RELEASE_LIFECYCLE_STATE_${state}`,
+  })
+
+  test('is pending while the release is in review', () => {
+    expect(playReview([release('IN_REVIEW')], '1150103')).toEqual({
+      label: 'In review',
+      status: 'pending',
+      approved: false,
+    })
+  })
+
+  test('is approved once Google accepts the release, which still waits to be published', () => {
+    expect(playReview([release('APPROVED_NOT_PUBLISHED')], '1150103')).toEqual({
+      label: 'Approved, publish it in Play Console',
+      status: 'success',
+      approved: true,
+    })
+  })
+
+  test('fails when review rejects the release', () => {
+    expect(playReview([release('NOT_APPROVED')], '1150103').status).toBe('failure')
+  })
+
+  test("fails when production has no release with the candidate's build", () => {
+    expect(playReview([release('IN_REVIEW', 1150104)], '1150103').status).toBe('failure')
   })
 })

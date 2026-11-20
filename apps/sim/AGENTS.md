@@ -365,8 +365,9 @@ machine. A PR description is different, as described below.
 ## CI and attestation
 
 Every PR runs the CLI-device scenarios in CI. The platform suites, iOS,
-Android and macOS, run in CI only when the `sim` label is added to a PR or
-on demand, each in its own workflow (`sim-ios.yml`,
+Android and macOS, run in CI only when a sim label is added to a PR or on
+demand: `sim` for every platform, `sim-mobile` for iOS and Android, and
+`sim-desktop` for macOS, each in its own workflow (`sim-ios.yml`,
 `sim-android.yml`, `sim-macos.yml`) that `sim.yml` starts. A push while they
 run cancels them. A labelled run posts each platform's result on the commit
 it tested as its `sim/<platform>` commit status, and the label comes off when

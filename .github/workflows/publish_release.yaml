@@ -38,10 +38,12 @@ on:
         type: boolean
         default: false
 
-# Shared with the other release workflows so a publish can never interleave with
-# a prepare that would recompute versions from a half-published state.
+# One group per merged PR. A shared group keeps only one waiting run and
+# cancels it for a newer one, which dropped a publish when two release PRs
+# merged together. Publishes of different PRs tag different packages, so they
+# can run at once.
 concurrency:
-  group: release-train
+  group: publish-${{ github.event.pull_request.number || inputs.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -83,7 +85,7 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
           MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
 
-      # Waits behind this run in the release-train group.
+      # Runs after the tags exist, so it sees this release.
       - name: Rebuild the other release PRs
         if: ${{ inputs.dry_run != true }}
         env:
