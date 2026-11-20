@@ -117,6 +117,14 @@ export const UPLOAD_RETRY_MAX_DELAY = SIM_FAST_TIMERS ? secondsInMs(10) : minute
 // network and usually pass on a later try, so the wait stays short.
 export const UPLOAD_NETWORK_RETRY_BASE_DELAY = SIM_FAST_TIMERS ? secondsInMs(1) : secondsInMs(5)
 export const UPLOAD_NETWORK_RETRY_MAX_DELAY = SIM_FAST_TIMERS ? secondsInMs(5) : minutesInMs(2)
+// A Finder save made within REPEAT_SAVE_QUIET of the previous save of the
+// same file waits to upload until that long passes with no newer save, or
+// until REPEAT_SAVE_MAX_HOLD after the first save held in the run. A newer
+// save replaces a held one, and the save handler deletes the held version
+// since it never left the Mac. A save after a longer gap uploads without
+// waiting.
+export const REPEAT_SAVE_QUIET = SIM_FAST_TIMERS ? secondsInMs(3) : secondsInMs(30)
+export const REPEAT_SAVE_MAX_HOLD = SIM_FAST_TIMERS ? secondsInMs(12) : minutesInMs(2)
 // Sync events interval.
 export const SYNC_EVENTS_INTERVAL = SIM_FAST_TIMERS ? secondsInMs(1) : secondsInMs(10)
 // Sync new photos interval.

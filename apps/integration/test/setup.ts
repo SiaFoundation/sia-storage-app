@@ -13,6 +13,8 @@ jest.mock('@siastorage/core/config', () => ({
   UPLOAD_RETRY_MAX_DELAY: 6000,
   UPLOAD_NETWORK_RETRY_BASE_DELAY: 1000,
   UPLOAD_NETWORK_RETRY_MAX_DELAY: 8000,
+  REPEAT_SAVE_QUIET: 3000,
+  REPEAT_SAVE_MAX_HOLD: 9000,
 }))
 
 jest.mock('@siastorage/logger', () => ({

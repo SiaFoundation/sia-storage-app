@@ -1506,10 +1506,17 @@ export interface AppService {
       }>,
     ): Promise<void>
     /**
+     * Queues the version a Finder save of `stackId` made, unless the file was
+     * saved moments before, in which case the upload waits for the saves to
+     * stop, or for the cap, and a newer save replaces it.
+     */
+    enqueueSave(stackId: string, versionId: string): Promise<void>
+    /**
      * Takes a file off the upload queue unless a batch already holds it.
      * Returns `held` when a batch holds it, `withdrawn` when it was queued or
-     * waiting to retry and is now off the queue, and `absent` when the
-     * uploader had no entry for it. A withdrawn file stays off the queue
+     * waiting to retry and is now off the queue, or was a Finder save held
+     * back for a repeat save, and `absent` when the uploader had no entry
+     * for it. A withdrawn file stays off the queue
      * until it is enqueued again, since the poll takes it again only while
      * auto-scan uploads are on.
      */
