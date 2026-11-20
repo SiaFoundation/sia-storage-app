@@ -8,6 +8,7 @@ import { FILE_ROW_COLUMNS_F, recalculateCurrentForGroup, transformRow } from './
 import { buildRecordFilter } from './library'
 import { flagObjectsForFiles, queryObjectRefsForFile } from './localObjects'
 import { trashFilesAndThumbnails } from './trash'
+import { stampEditedRows } from './versionStamps'
 
 export type Directory = {
   id: string
@@ -947,8 +948,6 @@ async function rebaseDirectoryTree(
   newParentId: string | null,
 ): Promise<void> {
   const escaped = escapeLikePattern(oldPath)
-
-  const now = Date.now()
   const newEscaped = escapeLikePattern(newPath)
 
   const descendants = await tx.getAllAsync<{ id: string; path: string }>(
@@ -984,23 +983,9 @@ async function rebaseDirectoryTree(
     )
   }
 
-  // max() per row: a plain stamp would move a future-clocked row (a remote
-  // wall clock via sync-down) backwards and lose its move to sync.
-  await tx.runAsync(
-    `UPDATE files SET updatedAt = max(?, updatedAt + 1) WHERE directoryId IN (
-      SELECT id FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'
-    )`,
-    now,
-    newPath,
-    newEscaped,
-  )
-  await tx.runAsync(
-    `UPDATE objects SET needsSyncUp = 1 WHERE fileId IN (
-      SELECT id FROM files WHERE directoryId IN (
-        SELECT id FROM directories WHERE path = ? OR path LIKE ? || '/%' ESCAPE '\\'
-      )
-    )`,
-    newPath,
-    newEscaped,
-  )
+  await stampEditedRows(tx, {
+    from: `FROM directories d CROSS JOIN files f ON f.directoryId = d.id
+           WHERE d.path = ? OR d.path LIKE ? || '/%' ESCAPE '\\'`,
+    params: [newPath, newEscaped],
+  })
 }

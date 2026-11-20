@@ -1,4 +1,4 @@
-import { insertFile } from './files'
+import { insertFile, trashAllFileVersions } from './files'
 import { insertObject } from './localObjects'
 import {
   addTagToFile,
@@ -77,6 +77,58 @@ async function syncUpFlag(fileId: string): Promise<number> {
 beforeEach(setupTestDb)
 afterEach(teardownTestDb)
 
+// A version of `name` at the top of the library, with a clean object.
+async function createVersion(id: string, name: string, updatedAt: number) {
+  await insertFile(db(), {
+    id,
+    name,
+    type: 'image/jpeg',
+    kind: 'file',
+    size: 100,
+    hash: `sha256:hash-${id}`,
+    createdAt: updatedAt,
+    updatedAt,
+    mediaAssetId: null,
+    addedAt: updatedAt,
+    trashedAt: null,
+    deletedAt: null,
+  })
+  await insertObject(db(), {
+    fileId: id,
+    indexerURL: 'https://idx.example.com',
+    id: `obj-${id}`,
+    slabs: [],
+    encryptedDataKey: new ArrayBuffer(1),
+    encryptedMetadataKey: new ArrayBuffer(1),
+    encryptedMetadata: new ArrayBuffer(1),
+    dataSignature: new ArrayBuffer(1),
+    metadataSignature: new ArrayBuffer(1),
+    createdAt: new Date(updatedAt),
+    updatedAt: new Date(updatedAt),
+  })
+}
+
+async function stamps(): Promise<Record<string, { updatedAt: number; current: number }>> {
+  const rows = await db().getAllAsync<{ id: string; updatedAt: number; current: number }>(
+    'SELECT id, updatedAt, current FROM files',
+  )
+  return Object.fromEntries(rows.map((r) => [r.id, { updatedAt: r.updatedAt, current: r.current }]))
+}
+
+/** Ids of `name`'s live versions, newest first, the way the library orders them. */
+async function versionOrder(name: string): Promise<string[]> {
+  const rows = await db().getAllAsync<{ id: string }>(
+    `SELECT id FROM files WHERE name = ? AND trashedAt IS NULL AND deletedAt IS NULL
+     ORDER BY updatedAt DESC, id DESC`,
+    name,
+  )
+  return rows.map((r) => r.id)
+}
+
+async function clearAllSyncUpFlags(): Promise<void> {
+  await db().runAsync('UPDATE objects SET needsSyncUp = 0')
+}
+
 describe('needsSyncUp flagging', () => {
   it('addTagToFile, toggleFavorite, and removeTagFromFile each flag the file object', async () => {
     await createTestFileWithObject('f1')
@@ -130,6 +182,179 @@ describe('needsSyncUp flagging', () => {
 
     await deleteTag(db(), tag.id)
     expect(await syncUpFlag('f1')).toBe(1)
+  })
+})
+
+describe("tag changes keep each file's versions in order", () => {
+  // Ids sort against the save order, so a tie on updatedAt would put the
+  // older version first and a test would see it.
+  beforeEach(async () => {
+    await ensureSystemTags(db())
+    await createVersion('c-v1', 'photo.jpg', 1000)
+    await createVersion('b-v2', 'photo.jpg', 2000)
+    await createVersion('a-v3', 'photo.jpg', 3000)
+    await clearAllSyncUpFlags()
+  })
+
+  it('renaming a tag only an older version carries stamps it below the newer version and leaves that one alone', async () => {
+    const tag = await insertTag(db(), 'trip')
+    await addTagToFile(db(), 'b-v2', 'trip')
+    await clearAllSyncUpFlags()
+    const before = await stamps()
+
+    await renameTag(db(), tag.id, 'holiday')
+
+    const after = await stamps()
+    expect(await versionOrder('photo.jpg')).toEqual(['a-v3', 'b-v2', 'c-v1'])
+    expect(after['a-v3'].current).toBe(1)
+    expect(after['b-v2'].updatedAt).toBeGreaterThan(before['b-v2'].updatedAt)
+    expect(after['b-v2'].updatedAt).toBeLessThan(before['a-v3'].updatedAt)
+    expect(after['a-v3'].updatedAt).toBe(before['a-v3'].updatedAt)
+    expect(after['c-v1'].updatedAt).toBe(before['c-v1'].updatedAt)
+    expect(await syncUpFlag('a-v3')).toBe(0)
+    expect(await syncUpFlag('b-v2')).toBe(1)
+    expect(await syncUpFlag('c-v1')).toBe(0)
+  })
+
+  it('favoriting an older version again and again keeps finding room below the newer version', async () => {
+    const before = await stamps()
+    let last = before['b-v2'].updatedAt
+
+    for (let n = 0; n < 5; n++) {
+      await toggleFavorite(db(), 'b-v2')
+      const after = await stamps()
+      expect(after['b-v2'].updatedAt).toBeGreaterThan(last)
+      expect(after['a-v3'].updatedAt).toBe(before['a-v3'].updatedAt)
+      last = after['b-v2'].updatedAt
+    }
+    expect(await syncUpFlag('a-v3')).toBe(0)
+  })
+
+  it('an older version with no room below the newer one lifts the newer one just above it', async () => {
+    await db().runAsync('UPDATE files SET updatedAt = 2001 WHERE id = ?', 'a-v3')
+
+    await toggleFavorite(db(), 'b-v2')
+
+    const after = await stamps()
+    expect(await versionOrder('photo.jpg')).toEqual(['a-v3', 'b-v2', 'c-v1'])
+    expect(after['b-v2'].updatedAt).toBeGreaterThan(2000)
+    expect(after['a-v3'].updatedAt).toBeGreaterThan(after['b-v2'].updatedAt)
+    expect(after['c-v1'].updatedAt).toBe(1000)
+    expect(await syncUpFlag('a-v3')).toBe(1)
+    expect(await syncUpFlag('c-v1')).toBe(0)
+  })
+
+  it('an older version tied on updatedAt with the newer one moves both apart in their order', async () => {
+    // Equal stamps order by id, and a-v3 sorts below b-v2, so tie b-v2 with c-v1 instead.
+    await db().runAsync('UPDATE files SET updatedAt = 1000 WHERE id = ?', 'b-v2')
+    expect(await versionOrder('photo.jpg')).toEqual(['a-v3', 'c-v1', 'b-v2'])
+
+    await toggleFavorite(db(), 'b-v2')
+
+    const after = await stamps()
+    expect(await versionOrder('photo.jpg')).toEqual(['a-v3', 'c-v1', 'b-v2'])
+    expect(after['c-v1'].updatedAt).toBeGreaterThan(after['b-v2'].updatedAt)
+    expect(after['b-v2'].updatedAt).toBeGreaterThan(1000)
+    expect(after['a-v3'].updatedAt).toBe(3000)
+  })
+
+  it('deleting a tag every version carries keeps the newest version current', async () => {
+    const tag = await insertTag(db(), 'trip')
+    await addTagToFiles(db(), ['a-v3', 'b-v2', 'c-v1'], 'trip')
+    await clearAllSyncUpFlags()
+    const before = await stamps()
+
+    await deleteTag(db(), tag.id)
+
+    const after = await stamps()
+    expect(await versionOrder('photo.jpg')).toEqual(['a-v3', 'b-v2', 'c-v1'])
+    expect(after['a-v3'].current).toBe(1)
+    for (const id of ['a-v3', 'b-v2', 'c-v1']) {
+      expect(after[id].updatedAt).toBeGreaterThan(before[id].updatedAt)
+      expect(await syncUpFlag(id)).toBe(1)
+    }
+  })
+
+  it('tagging, untagging and favoriting an older version keeps the newest version current', async () => {
+    await addTagToFile(db(), 'c-v1', 'trip')
+    expect(await versionOrder('photo.jpg')).toEqual(['a-v3', 'b-v2', 'c-v1'])
+
+    const tagId = (await queryTagsForFile(db(), 'c-v1'))[0].id
+    await removeTagFromFile(db(), 'c-v1', tagId)
+    expect(await versionOrder('photo.jpg')).toEqual(['a-v3', 'b-v2', 'c-v1'])
+
+    await addTagToFiles(db(), ['b-v2'], 'trip')
+    await removeTagFromFiles(db(), ['b-v2'], tagId)
+    await toggleFavorite(db(), 'c-v1')
+    expect(await versionOrder('photo.jpg')).toEqual(['a-v3', 'b-v2', 'c-v1'])
+    expect((await stamps())['a-v3'].current).toBe(1)
+  })
+
+  it('favoriting the newest version leaves the older versions unstamped and unflagged', async () => {
+    const before = await stamps()
+
+    await toggleFavorite(db(), 'a-v3')
+
+    const after = await stamps()
+    expect(after['a-v3'].updatedAt).toBeGreaterThan(before['a-v3'].updatedAt)
+    expect(after['b-v2'].updatedAt).toBe(before['b-v2'].updatedAt)
+    expect(after['c-v1'].updatedAt).toBe(before['c-v1'].updatedAt)
+    expect(await syncUpFlag('a-v3')).toBe(1)
+    expect(await syncUpFlag('b-v2')).toBe(0)
+  })
+
+  it('a newest version stamped in the future keeps its stamp above the stamped older one', async () => {
+    const future = Date.now() + 60_000
+    await db().runAsync('UPDATE files SET updatedAt = ? WHERE id = ?', future, 'a-v3')
+
+    await toggleFavorite(db(), 'b-v2')
+
+    const after = await stamps()
+    expect(after['a-v3'].updatedAt).toBe(future)
+    expect(after['b-v2'].updatedAt).toBeGreaterThan(2000)
+    expect(await versionOrder('photo.jpg')).toEqual(['a-v3', 'b-v2', 'c-v1'])
+  })
+
+  it('favoriting the newest version when its stamp is ahead of the clock moves it one past that stamp', async () => {
+    const future = Date.now() + 60_000
+    await db().runAsync('UPDATE files SET updatedAt = ? WHERE id = ?', future, 'a-v3')
+
+    await toggleFavorite(db(), 'a-v3')
+
+    expect((await stamps())['a-v3'].updatedAt).toBe(future + 1)
+  })
+
+  it('a tag change on another file leaves the versions of this one alone', async () => {
+    await createVersion('other', 'other.jpg', 5000)
+    await clearAllSyncUpFlags()
+    const before = await stamps()
+
+    await addTagToFile(db(), 'other', 'trip')
+
+    const after = await stamps()
+    for (const id of ['a-v3', 'b-v2', 'c-v1']) {
+      expect(after[id].updatedAt).toBe(before[id].updatedAt)
+      expect(await syncUpFlag(id)).toBe(0)
+    }
+  })
+
+  it('renaming a tag an older trashed version carries keeps the versions in order for restore', async () => {
+    const tag = await insertTag(db(), 'trip')
+    await addTagToFile(db(), 'c-v1', 'trip')
+    await trashAllFileVersions(db(), 'photo.jpg', null)
+    const trashedOrder = async () =>
+      (
+        await db().getAllAsync<{ id: string }>(
+          'SELECT id FROM files WHERE trashedAt IS NOT NULL ORDER BY updatedAt DESC, id DESC',
+        )
+      ).map((r) => r.id)
+    expect(await trashedOrder()).toEqual(['a-v3', 'b-v2', 'c-v1'])
+    await clearAllSyncUpFlags()
+
+    await renameTag(db(), tag.id, 'holiday')
+
+    expect(await trashedOrder()).toEqual(['a-v3', 'b-v2', 'c-v1'])
+    expect(await syncUpFlag('c-v1')).toBe(1)
   })
 })
 

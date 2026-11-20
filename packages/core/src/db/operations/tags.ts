@@ -3,7 +3,7 @@ import { normalizeName } from '../../lib/names'
 import { uniqueId } from '../../lib/uniqueId'
 import * as sql from '../sql'
 import { buildRecordFilter } from './library'
-import { flagObjectsForFiles } from './localObjects'
+import { editedByTag, editedIds, stampEditedRows } from './versionStamps'
 
 export const SYSTEM_TAGS = {
   favorites: { id: 'sys:favorites', name: 'Favorites' },
@@ -283,8 +283,7 @@ export async function toggleFavorite(db: DatabaseAdapter, fileId: string): Promi
     } else {
       await sql.insert(tx, 'file_tags', { fileId, tagId }, { conflictClause: 'OR IGNORE' })
     }
-    await sql.update(tx, 'files', { updatedAt: Date.now() }, { id: fileId })
-    await flagObjectsForFiles(tx, [fileId])
+    await stampEditedRows(tx, editedIds([fileId]))
   })
 }
 
@@ -295,24 +294,6 @@ export async function queryIsFavorite(db: DatabaseAdapter, fileId: string): Prom
     SYSTEM_TAGS.favorites.id,
   )
   return !!row
-}
-
-// Bump updatedAt and flag the objects of every file carrying this tag, so a tag
-// rename/delete re-pushes those files' metadata.
-async function flagFilesCarryingTag(
-  db: DatabaseAdapter,
-  tagId: string,
-  now: number,
-): Promise<void> {
-  await db.runAsync(
-    'UPDATE files SET updatedAt = ? WHERE id IN (SELECT fileId FROM file_tags WHERE tagId = ?)',
-    now,
-    tagId,
-  )
-  await db.runAsync(
-    'UPDATE objects SET needsSyncUp = 1 WHERE fileId IN (SELECT fileId FROM file_tags WHERE tagId = ?)',
-    tagId,
-  )
 }
 
 export async function renameTag(db: DatabaseAdapter, tagId: string, name: string): Promise<void> {
@@ -339,10 +320,9 @@ export async function renameTag(db: DatabaseAdapter, tagId: string, name: string
     throw new Error(`Tag "${trimmed}" already exists`)
   }
 
-  const now = Date.now()
   await db.withTransactionAsync(async (tx) => {
     await sql.update(tx, 'tags', { name: trimmed }, { id: tagId })
-    await flagFilesCarryingTag(tx, tagId, now)
+    await stampEditedRows(tx, editedByTag(tagId))
   })
 }
 
@@ -356,8 +336,8 @@ export async function deleteTag(db: DatabaseAdapter, tagId: string): Promise<voi
     throw new Error('System tags cannot be deleted')
   }
   await db.withTransactionAsync(async (tx) => {
-    // Flag before deleting the file_tags links — flagFilesCarryingTag reads them.
-    await flagFilesCarryingTag(tx, tagId, Date.now())
+    // Stamped before the file_tags links go, since they are how it finds the files.
+    await stampEditedRows(tx, editedByTag(tagId))
     await sql.del(tx, 'file_tags', { tagId })
     await sql.del(tx, 'tags', { id: tagId })
   })
@@ -371,8 +351,7 @@ export async function addTagToFile(
   await db.withTransactionAsync(async (tx) => {
     const tag = await getOrCreateTag(tx, tagName)
     await sql.insert(tx, 'file_tags', { fileId, tagId: tag.id }, { conflictClause: 'OR IGNORE' })
-    await sql.update(tx, 'files', { updatedAt: Date.now() }, { id: fileId })
-    await flagObjectsForFiles(tx, [fileId])
+    await stampEditedRows(tx, editedIds([fileId]))
   })
 }
 
@@ -387,10 +366,7 @@ export async function addTagToFiles(
     for (const fileId of fileIds) {
       await sql.insert(tx, 'file_tags', { fileId, tagId: tag.id }, { conflictClause: 'OR IGNORE' })
     }
-    const now = Date.now()
-    const ph = fileIds.map(() => '?').join(',')
-    await tx.runAsync(`UPDATE files SET updatedAt = ? WHERE id IN (${ph})`, now, ...fileIds)
-    await flagObjectsForFiles(tx, fileIds)
+    await stampEditedRows(tx, editedIds(fileIds))
   })
 }
 
@@ -401,8 +377,7 @@ export async function removeTagFromFile(
 ): Promise<void> {
   await db.withTransactionAsync(async (tx) => {
     await sql.del(tx, 'file_tags', { fileId, tagId })
-    await sql.update(tx, 'files', { updatedAt: Date.now() }, { id: fileId })
-    await flagObjectsForFiles(tx, [fileId])
+    await stampEditedRows(tx, editedIds([fileId]))
   })
 }
 
@@ -413,14 +388,12 @@ export async function removeTagFromFiles(
 ): Promise<void> {
   if (fileIds.length === 0) return
   await db.withTransactionAsync(async (tx) => {
-    const now = Date.now()
     const ph = fileIds.map(() => '?').join(',')
     await tx.runAsync(
       `DELETE FROM file_tags WHERE tagId = ? AND fileId IN (${ph})`,
       tagId,
       ...fileIds,
     )
-    await tx.runAsync(`UPDATE files SET updatedAt = ? WHERE id IN (${ph})`, now, ...fileIds)
-    await flagObjectsForFiles(tx, fileIds)
+    await stampEditedRows(tx, editedIds(fileIds))
   })
 }

@@ -739,7 +739,9 @@ export function buildDbNamespaces(
         const renamed = await forStack(id, (tx, stack) =>
           ops.renameAllFileVersions(tx, stack.name, stack.directoryId, normalizeName(newName)),
         )
-        if (renamed.length > 0) invalidateLibrary()
+        if (renamed.length === 0) return
+        for (const renamedId of renamed) caches.fileById.invalidate(renamedId)
+        invalidateLibrary()
       },
       moveFile: async (id, dirId) => {
         const moved = await forStack(id, (tx, stack) =>
