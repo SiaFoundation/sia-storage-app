@@ -26,6 +26,11 @@ describe('isProviderChannel', () => {
     expect(isProviderChannel('ds:shares:revokeLink')).toBe(false)
   })
 
+  it('allows the two calls of the mount link, for a provider that stays connected', () => {
+    expect(isProviderChannel('mount')).toBe(true)
+    expect(isProviderChannel('mountAnswer')).toBe(true)
+  })
+
   it('refuses every other namespace', () => {
     expect(isProviderChannel('ping')).toBe(false)
     expect(isProviderChannel('ds:secrets:getItem')).toBe(false)
