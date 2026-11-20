@@ -21,6 +21,8 @@ import {
   queryFileStats,
   queryLostFiles,
   queryRecentFiles,
+  queryUnsentOlderVersion,
+  tombstoneUnsentOlderVersion,
   queryUnuploadedFileBytes,
   queryUnuploadedFileCount,
   readFile,
@@ -31,6 +33,8 @@ import {
   upsertManyFiles,
 } from './files'
 import { insertDirectory } from './directories'
+import { insertShareLink, insertShareLinkFile } from './shareLinks'
+import { trashFilesAndThumbnails } from './trash'
 import { upsertFsMeta } from './fs'
 import {
   clearObjectIfUnchanged,
@@ -879,6 +883,104 @@ describe('queryUnuploadedFileBytes', () => {
 
     expect(await queryUnuploadedFileBytes(db())).toBe(200)
     expect(await queryUnuploadedFileCount(db())).toBe(1)
+  })
+})
+
+describe('queryUnsentOlderVersion', () => {
+  /** notes.txt saved here twice: v1 replaced by v2, neither uploaded. */
+  async function savedTwice() {
+    for (const [id, updatedAt] of [
+      ['v1', 1000],
+      ['v2', 2000],
+    ] as const) {
+      await insertFile(db(), makeFileRecord(id, { name: 'notes.txt', updatedAt }))
+      await upsertFsMeta(db(), { fileId: id, size: 100, addedAt: updatedAt, usedAt: updatedAt })
+    }
+  }
+
+  it('is true for an older version made here that has not uploaded', async () => {
+    await savedTwice()
+    expect(await queryUnsentOlderVersion(db(), 'v1')).toBe(true)
+  })
+
+  it('is false for the current version', async () => {
+    await savedTwice()
+    expect(await queryUnsentOlderVersion(db(), 'v2')).toBe(false)
+  })
+
+  it('is false once the older version has an object on any indexer', async () => {
+    await savedTwice()
+    await insertObject(db(), makeLocalObject('v1', { indexerURL: 'https://old.example.com' }))
+    expect(await queryUnsentOlderVersion(db(), 'v1')).toBe(false)
+  })
+
+  it('is false once a thumbnail of the older version has an object', async () => {
+    await savedTwice()
+    await insertFile(
+      db(),
+      makeFileRecord('v1-thumb', { kind: 'thumb', thumbForId: 'v1', thumbSize: 512 }),
+    )
+    await insertObject(db(), makeLocalObject('v1-thumb'))
+    expect(await queryUnsentOlderVersion(db(), 'v1')).toBe(false)
+  })
+
+  it('is false when a share link names the older version', async () => {
+    await savedTwice()
+    await insertShareLink(db(), {
+      publicKey: 'pk',
+      seed: '00',
+      indexerURL: INDEXER_URL,
+      createdAt: 3000,
+      expiresAt: null,
+      mode: 'snapshot',
+    })
+    await insertShareLinkFile(db(), 'pk', 'v1', 'pending')
+    expect(await queryUnsentOlderVersion(db(), 'v1')).toBe(false)
+  })
+
+  it('is false for an older version with no local copy', async () => {
+    await savedTwice()
+    await db().runAsync('DELETE FROM fs WHERE fileId = ?', 'v1')
+    expect(await queryUnsentOlderVersion(db(), 'v1')).toBe(false)
+  })
+
+  it('is false for a trashed older version', async () => {
+    await savedTwice()
+    await trashFilesAndThumbnails(db(), ['v1'])
+    expect(await queryUnsentOlderVersion(db(), 'v1')).toBe(false)
+  })
+})
+
+describe('tombstoneUnsentOlderVersion', () => {
+  async function savedTwice() {
+    for (const [id, updatedAt] of [
+      ['v1', 1000],
+      ['v2', 2000],
+    ] as const) {
+      await insertFile(db(), makeFileRecord(id, { name: 'notes.txt', updatedAt }))
+      await upsertFsMeta(db(), { fileId: id, size: 100, addedAt: updatedAt, usedAt: updatedAt })
+    }
+  }
+
+  it('deletes an older version that has not uploaded, and says it did', async () => {
+    await savedTwice()
+    expect(await tombstoneUnsentOlderVersion(db(), 'v1')).toBe(true)
+    expect((await readFile(db(), 'v1'))?.deletedAt).not.toBeNull()
+  })
+
+  it('leaves an older version a share link names', async () => {
+    await savedTwice()
+    await insertShareLink(db(), {
+      publicKey: 'pk',
+      seed: '00',
+      indexerURL: INDEXER_URL,
+      createdAt: 3000,
+      expiresAt: null,
+      mode: 'snapshot',
+    })
+    await insertShareLinkFile(db(), 'pk', 'v1', 'pending')
+    expect(await tombstoneUnsentOlderVersion(db(), 'v1')).toBe(false)
+    expect((await readFile(db(), 'v1'))?.deletedAt).toBeNull()
   })
 })
 

@@ -331,6 +331,15 @@ export interface AppService {
     trash(ids: string[]): Promise<void>
     /** Restores files and their thumbnails from trash. */
     restore(ids: string[]): Promise<void>
+    /**
+     * Deletes `file` with its thumbnails and local copies, as
+     * `tombstoneWithThumbnailsAndCleanup` does, only when it is an older
+     * version made on this device that has no object on any indexer, a local
+     * copy, and no share link naming it. The check and the delete run in one
+     * transaction. Returns whether it deleted the file. The caller withdraws
+     * the file from the uploader first.
+     */
+    deleteIfUnsentOlderVersion(file: { id: string; type: string }): Promise<boolean>
     /** Returns the count of unuploaded files. */
     getUnuploadedCount(): Promise<number>
     /** Returns the total unuploaded bytes (the pending-local bytes the paced-throttle backlog gate reads). */
@@ -506,6 +515,14 @@ export interface AppService {
     getSizesForFile(fileId: string): Promise<ThumbSize[]>
     /** Returns a map of fileId → available thumbnail sizes for a batch of files. */
     getSizesForFiles(fileIds: string[]): Promise<Map<string, ThumbSize[]>>
+    /**
+     * Records a thumbnail for the file its `thumbForId` names, only while
+     * that file is neither trashed nor deleted. Returns whether it recorded
+     * one. Its bytes are the caller's to remove when it did not.
+     */
+    createForLiveFile(
+      record: Omit<FileRecord, 'objects'> & { thumbForId: string },
+    ): Promise<boolean>
     /** Returns whether a thumbnail exists for a given file and size. */
     existsForFileAndSize(fileId: string, size: ThumbSize): Promise<boolean>
     /**
@@ -1488,6 +1505,15 @@ export interface AppService {
         size: number
       }>,
     ): Promise<void>
+    /**
+     * Takes a file off the upload queue unless a batch already holds it.
+     * Returns `held` when a batch holds it, `withdrawn` when it was queued or
+     * waiting to retry and is now off the queue, and `absent` when the
+     * uploader had no entry for it. A withdrawn file stays off the queue
+     * until it is enqueued again, since the poll takes it again only while
+     * auto-scan uploads are on.
+     */
+    withdraw(fileId: string): 'held' | 'withdrawn' | 'absent'
     /** Shuts down the upload manager, waiting for in-flight uploads to finish. */
     shutdown(): Promise<void>
     /** Returns whether the upload manager is actively processing. */

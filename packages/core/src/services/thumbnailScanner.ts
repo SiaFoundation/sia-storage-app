@@ -22,6 +22,44 @@ async function writeThumbnailToStorage(
 }
 
 /**
+ * Records a thumbnail whose bytes are already written, unless the file it is
+ * for was trashed or deleted while it was being made, in which case the bytes
+ * are removed and the result is false. Generating takes long enough for a
+ * Finder save to delete the version it replaced, and a thumbnail row recorded
+ * after that would upload for a file no device keeps.
+ */
+async function recordThumbnail(
+  app: AppService,
+  fileId: string,
+  size: ThumbSize,
+  thumbId: string,
+  mimeType: string,
+  copied: { size: number; hash: ContentHash | '' },
+): Promise<boolean> {
+  const now = Date.now()
+  const created = await app.thumbnails.createForLiveFile({
+    id: thumbId,
+    name: `thumbnail${extFromMime(mimeType)}`,
+    type: mimeType,
+    kind: 'thumb',
+    size: copied.size,
+    hash: copied.hash,
+    createdAt: now,
+    updatedAt: now,
+    addedAt: now,
+    mediaAssetId: null,
+    thumbForId: fileId,
+    thumbSize: size,
+    trashedAt: null,
+    deletedAt: null,
+  })
+  if (created) return true
+  logger.debug('thumbnailer', 'parent_gone', { fileId, thumbId, size })
+  await app.fs.removeFile({ id: thumbId, type: mimeType })
+  return false
+}
+
+/**
  * True when a magic-byte sniff should overwrite the stored `type`.
  * Blocks rewrites between MIMEs that share an extension to avoid
  * sniffer-drift flapping (e.g. image/dng vs image/x-adobe-dng).
@@ -117,6 +155,8 @@ export type EnsureResult =
       height: number | null
     }
   | { status: 'error'; error: unknown }
+  /** The file was trashed or deleted while its thumbnail was made, so none was recorded. */
+  | { status: 'gone' }
 
 const MAX_THUMBS_PER_TICK = 20
 const ERROR_COOLDOWN_MS = 60 * 60 * 1000 // 1 hour
@@ -321,23 +361,9 @@ export class ThumbnailScanner {
       }
       const copied = await writeThumbnailToStorage(app, thumbFileInfo, result)
 
-      const now = Date.now()
-      await app.files.create({
-        id: thumbId,
-        name: `thumbnail${extFromMime(result.mimeType)}`,
-        type: result.mimeType,
-        kind: 'thumb',
-        size: copied.size,
-        hash: copied.hash,
-        createdAt: now,
-        updatedAt: now,
-        addedAt: now,
-        mediaAssetId: null,
-        thumbForId: fileId,
-        thumbSize: size,
-        trashedAt: null,
-        deletedAt: null,
-      })
+      if (!(await recordThumbnail(app, fileId, size, thumbId, result.mimeType, copied))) {
+        return { status: 'gone' }
+      }
       logger.debug('thumbnailer', 'record_created', {
         thumbId,
         hash: fileHash,
@@ -409,23 +435,7 @@ export class ThumbnailScanner {
           { id: thumbId, type: result.mimeType },
           result,
         )
-        const now = Date.now()
-        await app.files.create({
-          id: thumbId,
-          name: `thumbnail${extFromMime(result.mimeType)}`,
-          type: result.mimeType,
-          kind: 'thumb',
-          size: copied.size,
-          hash: copied.hash,
-          createdAt: now,
-          updatedAt: now,
-          addedAt: now,
-          mediaAssetId: null,
-          thumbForId: fileId,
-          thumbSize: size,
-          trashedAt: null,
-          deletedAt: null,
-        })
+        if (!(await recordThumbnail(app, fileId, size, thumbId, result.mimeType, copied))) return
         logger.debug('thumbnailer', 'record_created', {
           thumbId,
           hash: fileHash,

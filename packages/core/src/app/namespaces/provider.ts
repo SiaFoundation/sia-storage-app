@@ -903,6 +903,53 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     return true
   }
 
+  /**
+   * Deletes a version a Finder save just replaced when it never left this
+   * device, so a file saved again and again while uploads are backed up or
+   * the Mac is offline uploads its newest bytes once, not every save. Only
+   * this path calls it: a phone or CLI import of a same-name file never
+   * deletes the version it stacks on.
+   *
+   * The version stays when it or one of its thumbnails has an object on any
+   * indexer, since another device may have it, when a share link names it,
+   * or when a batch already holds it, since its bytes are already in a slab.
+   * The uploader lets go of it before the database check, so an upload that
+   * finished before the check shows there as an object. The check and the
+   * delete run in one transaction, so a share link made in between cannot
+   * lose the version. Deleting removes its local copy and thumbnails too, as
+   * deleting from the trash does.
+   *
+   * A version the check keeps, or one the check failed on, goes back on the
+   * upload queue. The poll would take it again only with auto-scan uploads
+   * on, and with them off nothing else would.
+   */
+  async function dropUnsentSave(replaced: { id: string; type: string }): Promise<void> {
+    const service = getService()
+    let withdrawn = false
+    try {
+      const taken = service.uploader.withdraw(replaced.id)
+      if (taken === 'held') return
+      withdrawn = taken === 'withdrawn'
+      if (await service.files.deleteIfUnsentOlderVersion(replaced)) {
+        logger.debug('provider', 'replaced_save_dropped', { fileId: replaced.id })
+        return
+      }
+    } catch (e) {
+      // The save itself succeeded, and a version left in place uploads as usual.
+      logger.warn('provider', 'replaced_save_drop_failed', {
+        fileId: replaced.id,
+        error: getErrorMessage(e),
+      })
+    }
+    if (!withdrawn) return
+    await service.uploader.enqueueByIds([replaced.id]).catch((e) => {
+      logger.warn('provider', 'replaced_save_requeue_failed', {
+        fileId: replaced.id,
+        error: getErrorMessage(e),
+      })
+    })
+  }
+
   /** Reads one item. Hoisted because other verbs read back through it. */
   async function item(id: string): Promise<ProviderItem | null> {
     const service = getService()
@@ -1356,16 +1403,16 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
       await service.uploader.enqueueByIds([versionId])
 
       // Freed now rather than by the eviction pass, which leaves a superseded version's copy for an
-      // hour. One never uploaded keeps it, since that copy is the only one, and the uploader still
-      // sends it. An object on any indexer is enough: an older version left on an earlier indexer is
+      // hour. An object on any indexer is enough: an older version left on an earlier indexer is
       // not worth keeping this copy to send to the current one.
-      if ((await service.localObjects.countForFile(replaced.id)) > 0) {
-        await service.fs.removeFile({ id: replaced.id, type: replaced.type })
-      }
+      const uploaded = (await service.localObjects.countForFile(replaced.id)) > 0
+      if (uploaded) await service.fs.removeFile({ id: replaced.id, type: replaced.type })
 
       const updated = await versionItem(versionId)
       if (!updated) throw new Error(`No file with id ${id}`)
       await recordInMount(updated.id, versionId, adopted.size)
+      // After the mount record moves to the new version, so it never names a deleted one.
+      if (!uploaded) await dropUnsentSave(replaced)
       return updated
     },
 
