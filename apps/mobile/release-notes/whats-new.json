@@ -1,5 +1,27 @@
 [
   {
+    "version": "1.15.1",
+    "released": null,
+    "items": [
+      {
+        "text": "Browsing large libraries feels faster, and photo swiping and loading states recover correctly while you scroll.",
+        "platforms": ["ios", "android"]
+      },
+      {
+        "text": "Photo and file imports now clear used phone storage sooner, so long imports keep going more smoothly.",
+        "platforms": ["ios", "android"]
+      },
+      {
+        "text": "Clearing local data now removes leftover device files more completely, and Clear local files finishes faster with accurate freed-space totals.",
+        "platforms": ["ios", "android"]
+      },
+      {
+        "text": "Uploads are more reliable with clearer status for waiting files, full storage, retries, and files moved to trash.",
+        "platforms": ["ios", "android"]
+      }
+    ]
+  },
+  {
     "version": "1.15.0",
     "released": "2026-10-30",
     "items": [
