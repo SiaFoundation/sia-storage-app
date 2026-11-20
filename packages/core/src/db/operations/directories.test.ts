@@ -1132,3 +1132,77 @@ describe('syncManyDirectoriesFromMetadata', () => {
     expect(oldGroups).toEqual([])
   })
 })
+
+describe("renaming or moving a folder keeps each file's versions in order", () => {
+  // Ids sort against the save order, so if the versions tied on updatedAt
+  // the oldest would sort first and the test would see it.
+  async function threeVersionsIn(directoryId: string): Promise<void> {
+    for (const [id, updatedAt] of [
+      ['c-v1', 1000],
+      ['b-v2', 2000],
+      ['a-v3', 3000],
+    ] as const) {
+      await insertFile(
+        db(),
+        {
+          id,
+          name: 'photo.jpg',
+          type: 'image/jpeg',
+          kind: 'file',
+          size: 100,
+          hash: `sha256:hash-${id}`,
+          createdAt: updatedAt,
+          updatedAt,
+          mediaAssetId: null,
+          addedAt: updatedAt,
+          trashedAt: null,
+          deletedAt: null,
+        },
+        { directoryId },
+      )
+    }
+  }
+
+  async function versions(): Promise<{ id: string; updatedAt: number }[]> {
+    return db().getAllAsync<{ id: string; updatedAt: number }>(
+      `SELECT id, updatedAt FROM files WHERE name = 'photo.jpg' ORDER BY updatedAt DESC, id DESC`,
+    )
+  }
+
+  async function expectRestampedInOrder(): Promise<void> {
+    const rows = await versions()
+    expect(rows.map((r) => r.id)).toEqual(['a-v3', 'b-v2', 'c-v1'])
+    expect(new Set(rows.map((r) => r.updatedAt)).size).toBe(3)
+    expect(rows[2].updatedAt).toBeGreaterThan(1000)
+    expect(rows[0].updatedAt).toBeGreaterThanOrEqual(Date.now() - 60_000)
+  }
+
+  it('renaming the folder gives every version its own newer stamp, newest first', async () => {
+    const dir = await insertDirectory(db(), 'Trips')
+    await threeVersionsIn(dir.id)
+
+    await renameDirectory(db(), dir.id, 'Holidays')
+
+    await expectRestampedInOrder()
+  })
+
+  it('moving the folder gives every version its own newer stamp, newest first', async () => {
+    await insertDirectory(db(), 'Archive')
+    const dir = await insertDirectory(db(), 'Trips')
+    await threeVersionsIn(dir.id)
+
+    await moveDirectory(db(), dir.id, 'Archive')
+
+    await expectRestampedInOrder()
+  })
+
+  it('renaming a parent folder keeps the order of versions in a folder below it', async () => {
+    const parent = await insertDirectory(db(), 'Photos')
+    const child = await insertDirectory(db(), 'Trips', 'Photos')
+    await threeVersionsIn(child.id)
+
+    await renameDirectory(db(), parent.id, 'Pictures')
+
+    await expectRestampedInOrder()
+  })
+})

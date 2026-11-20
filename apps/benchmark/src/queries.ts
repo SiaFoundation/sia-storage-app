@@ -258,6 +258,39 @@ export function buildWriteQuerySpecs(db: DatabaseAdapter, sampleDirId: string): 
         await ops.moveFilesAllVersions(db, ids, sampleDirId)
       },
     },
+    // Tag edits stamp the files they touch and the versions of each file
+    // that have to move with them, reading each file's versions by index.
+    {
+      name: 'toggleFavorite:single',
+      category: 'write',
+      run: withRollback((tx) => ops.toggleFavorite(tx, 'f-100')),
+    },
+    {
+      name: 'addTagToFiles:500',
+      category: 'write',
+      run: withRollback(async (tx) => {
+        const ids = Array.from({ length: 500 }, (_, i) => `f-${i * 100}`)
+        await ops.addTagToFiles(tx, ids, 'bench-tag')
+      }),
+    },
+    {
+      name: 'renameTag:manyFiles',
+      category: 'write',
+      run: withRollback((tx) => ops.renameTag(tx, LIBRARY_SAMPLES.sampleTagId, 'bench-renamed')),
+    },
+    // Files trashed together share one trashedAt, so this reads each file's
+    // trashed versions by name within that batch.
+    {
+      name: 'renameTag:trashedTogether:2000',
+      category: 'write',
+      run: withRollback(async (tx) => {
+        const ids = Array.from({ length: 2000 }, (_, i) => `f-${i * 50}`)
+        await ops.addTagToFiles(tx, ids, 'bench-trashed')
+        await ops.trashFilesAndThumbnails(tx, ids, { trashedAt: 1 })
+        const tag = await ops.getOrCreateTag(tx, 'bench-trashed')
+        await ops.renameTag(tx, tag.id, 'bench-trashed-renamed')
+      }),
+    },
     {
       name: 'recalculateCurrentForGroups:10k(loop)',
       category: 'write',

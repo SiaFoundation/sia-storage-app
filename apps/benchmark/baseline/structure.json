@@ -542,7 +542,7 @@
           {
             "sql": "SELECT id, name, coalesce(trashedFrom, '') AS fromPath, trashedAt, updatedAt, stackId FROM files WHERE id IN (?, …) AND kind = 'file' AND trashedAt IS NOT NULL AND deletedAt IS NULL",
             "plan": [
-              "SEARCH files USING INDEX idx_files_trashedAt (trashedAt>?)"
+              "SEARCH files USING INDEX idx_files_trashed_versions (trashedAt>?)"
             ]
           },
           {
@@ -639,6 +639,197 @@
             "sql": "SELECT id, name, directoryId, stackId, updatedAt, current FROM files INDEXED BY idx_files_stackId WHERE stackId IN (?, …) AND kind = 'file' AND trashedAt IS NULL AND deletedAt IS NULL",
             "plan": [
               "SEARCH files USING INDEX idx_files_stackId (stackId=?)"
+            ]
+          }
+        ]
+      },
+      "toggleFavorite:single": {
+        "reads": 3,
+        "writes": 3,
+        "execs": 0,
+        "result": "undefined",
+        "plans": [
+          {
+            "sql": "SELECT tagId FROM file_tags WHERE fileId = ? AND tagId = ?",
+            "plan": [
+              "SEARCH file_tags USING COVERING INDEX sqlite_autoindex_file_tags_1 (fileId=? AND tagId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT f.id, f.updatedAt, f.kind, f.name, f.directoryId, f.trashedAt, f.deletedAt, coalesce(f.trashedFrom, '') AS trashedFrom FROM json_each(?) j CROSS JOIN files f ON f.id = j.value",
+            "plan": [
+              "SCAN j VIRTUAL TABLE INDEX 1:",
+              "SEARCH f USING INDEX sqlite_autoindex_files_1 (id=?)"
+            ]
+          },
+          {
+            "sql": "SELECT g.key AS k, f.id, f.updatedAt FROM json_each(?) g CROSS JOIN files f ON f.name = json_extract(g.value, '$[0]') AND f.directoryId IS json_extract(g.value, '$[1]') WHERE f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL ORDER BY g.key, f.updatedAt DESC, f.id DESC",
+            "plan": [
+              "SCAN g VIRTUAL TABLE INDEX 1:",
+              "SEARCH f USING INDEX idx_files_version_group (name=? AND directoryId=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          }
+        ]
+      },
+      "addTagToFiles:500": {
+        "reads": 3,
+        "writes": 504,
+        "execs": 0,
+        "result": "undefined",
+        "plans": [
+          {
+            "sql": "SELECT id, name, createdAt, usedAt, system FROM tags WHERE name = ?",
+            "plan": [
+              "SEARCH tags USING INDEX sqlite_autoindex_tags_2 (name=?)"
+            ]
+          },
+          {
+            "sql": "SELECT f.id, f.updatedAt, f.kind, f.name, f.directoryId, f.trashedAt, f.deletedAt, coalesce(f.trashedFrom, '') AS trashedFrom FROM json_each(?) j CROSS JOIN files f ON f.id = j.value",
+            "plan": [
+              "SCAN j VIRTUAL TABLE INDEX 1:",
+              "SEARCH f USING INDEX sqlite_autoindex_files_1 (id=?)"
+            ]
+          },
+          {
+            "sql": "SELECT g.key AS k, f.id, f.updatedAt FROM json_each(?) g CROSS JOIN files f ON f.name = json_extract(g.value, '$[0]') AND f.directoryId IS json_extract(g.value, '$[1]') WHERE f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL ORDER BY g.key, f.updatedAt DESC, f.id DESC",
+            "plan": [
+              "SCAN g VIRTUAL TABLE INDEX 1:",
+              "SEARCH f USING INDEX idx_files_version_group (name=? AND directoryId=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          }
+        ]
+      },
+      "renameTag:manyFiles": {
+        "reads": 4,
+        "writes": 3,
+        "execs": 0,
+        "result": "undefined",
+        "plans": [
+          {
+            "sql": "SELECT id, name, createdAt, usedAt, system FROM tags WHERE id = ?",
+            "plan": [
+              "SEARCH tags USING INDEX sqlite_autoindex_tags_1 (id=?)"
+            ]
+          },
+          {
+            "sql": "SELECT id FROM tags WHERE name = ? AND id != ?",
+            "plan": [
+              "SEARCH tags USING INDEX sqlite_autoindex_tags_2 (name=?)"
+            ]
+          },
+          {
+            "sql": "SELECT f.id, f.updatedAt, f.kind, f.name, f.directoryId, f.trashedAt, f.deletedAt, coalesce(f.trashedFrom, '') AS trashedFrom FROM file_tags t CROSS JOIN files f ON f.id = t.fileId WHERE t.tagId = ?",
+            "plan": [
+              "SEARCH t USING INDEX idx_file_tags_tagId (tagId=?)",
+              "SEARCH f USING INDEX sqlite_autoindex_files_1 (id=?)"
+            ]
+          },
+          {
+            "sql": "SELECT g.key AS k, f.id, f.updatedAt FROM json_each(?) g CROSS JOIN files f ON f.name = json_extract(g.value, '$[0]') AND f.directoryId IS json_extract(g.value, '$[1]') WHERE f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL ORDER BY g.key, f.updatedAt DESC, f.id DESC",
+            "plan": [
+              "SCAN g VIRTUAL TABLE INDEX 1:",
+              "SEARCH f USING INDEX idx_files_version_group (name=? AND directoryId=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          }
+        ]
+      },
+      "renameTag:trashedTogether:2000": {
+        "reads": 16,
+        "writes": 2018,
+        "execs": 0,
+        "result": "undefined",
+        "plans": [
+          {
+            "sql": "SELECT id, name, createdAt, usedAt, system FROM tags WHERE name = ?",
+            "plan": [
+              "SEARCH tags USING INDEX sqlite_autoindex_tags_2 (name=?)"
+            ]
+          },
+          {
+            "sql": "SELECT f.id, f.updatedAt, f.kind, f.name, f.directoryId, f.trashedAt, f.deletedAt, coalesce(f.trashedFrom, '') AS trashedFrom FROM json_each(?) j CROSS JOIN files f ON f.id = j.value",
+            "plan": [
+              "SCAN j VIRTUAL TABLE INDEX 1:",
+              "SEARCH f USING INDEX sqlite_autoindex_files_1 (id=?)"
+            ]
+          },
+          {
+            "sql": "SELECT g.key AS k, f.id, f.updatedAt FROM json_each(?) g CROSS JOIN files f ON f.name = json_extract(g.value, '$[0]') AND f.directoryId IS json_extract(g.value, '$[1]') WHERE f.kind = 'file' AND f.trashedAt IS NULL AND f.deletedAt IS NULL ORDER BY g.key, f.updatedAt DESC, f.id DESC",
+            "plan": [
+              "SCAN g VIRTUAL TABLE INDEX 1:",
+              "SEARCH f USING INDEX idx_files_version_group (name=? AND directoryId=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          },
+          {
+            "sql": "SELECT DISTINCT name, directoryId FROM files WHERE id IN (?, …) AND kind = 'file'",
+            "plan": [
+              "SEARCH files USING INDEX sqlite_autoindex_files_1 (id=?)",
+              "USE TEMP B-TREE FOR DISTINCT"
+            ]
+          },
+          {
+            "sql": "SELECT DISTINCT directoryId FROM files WHERE id IN (?, …) AND directoryId IS NOT NULL",
+            "plan": [
+              "SEARCH files USING INDEX sqlite_autoindex_files_1 (id=?)",
+              "USE TEMP B-TREE FOR DISTINCT"
+            ]
+          },
+          {
+            "sql": "SELECT id, updatedAt FROM files WHERE id IN (?, …) ORDER BY updatedAt DESC, id DESC",
+            "plan": [
+              "SEARCH files USING INDEX sqlite_autoindex_files_1 (id=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          },
+          {
+            "sql": "SELECT f2.id, f2.name, f2.directoryId, f2.stackId, f2.updatedAt, f2.current FROM (SELECT json_extract(value, '$.name') AS name, json_extract(value, '$.directoryId') AS directoryId FROM json_each(?)) g CROSS JOIN files f2 ON f2.name = g.name AND f2.directoryId IS g.directoryId WHERE f2.kind = 'file' AND f2.trashedAt IS NULL AND f2.deletedAt IS NULL",
+            "plan": [
+              "SCAN json_each VIRTUAL TABLE INDEX 1:",
+              "SEARCH f2 USING INDEX idx_files_version_group (name=? AND directoryId=?)"
+            ]
+          },
+          {
+            "sql": "SELECT d.id, d.path FROM directories d WHERE d.id IN (?, …) AND NOT EXISTS ( SELECT 1 FROM files f WHERE f.directoryId = d.id AND f.kind = 'file' AND f.current = 1 AND f.trashedAt IS NULL AND f.deletedAt IS NULL ) -- Any folder under d, as a path between '<path>/' and '<path>0', -- '0' being the byte after '/', which SQLite answers from the -- unique index on path. A LIKE on an expression reads every folder. AND NOT EXISTS ( SELECT 1 FROM directories c WHERE c.path > d.path || '/' AND c.path < d.path || '0' ) AND NOT EXISTS ( SELECT 1 FROM import_files i WHERE i.directoryId = d.id AND i.state IN ('pending', 'active') ) AND NOT EXISTS (SELECT 1 FROM imports im WHERE im.directoryId = d.id AND im.sealed = 0)",
+            "plan": [
+              "SEARCH d USING INDEX sqlite_autoindex_directories_1 (id=?)",
+              "CORRELATED SCALAR SUBQUERY 1",
+              "SEARCH f USING INDEX idx_files_current_directoryId (directoryId=?)",
+              "CORRELATED SCALAR SUBQUERY 2",
+              "SEARCH c USING COVERING INDEX sqlite_autoindex_directories_2 (path>? AND path<?)",
+              "CORRELATED SCALAR SUBQUERY 3",
+              "SEARCH i USING COVERING INDEX idx_import_files_state_directory (state=? AND directoryId=?)",
+              "CORRELATED SCALAR SUBQUERY 4",
+              "SCAN im"
+            ]
+          },
+          {
+            "sql": "SELECT id, name, createdAt, usedAt, system FROM tags WHERE id = ?",
+            "plan": [
+              "SEARCH tags USING INDEX sqlite_autoindex_tags_1 (id=?)"
+            ]
+          },
+          {
+            "sql": "SELECT id FROM tags WHERE name = ? AND id != ?",
+            "plan": [
+              "SEARCH tags USING INDEX sqlite_autoindex_tags_2 (name=?)"
+            ]
+          },
+          {
+            "sql": "SELECT f.id, f.updatedAt, f.kind, f.name, f.directoryId, f.trashedAt, f.deletedAt, coalesce(f.trashedFrom, '') AS trashedFrom FROM file_tags t CROSS JOIN files f ON f.id = t.fileId WHERE t.tagId = ?",
+            "plan": [
+              "SEARCH t USING INDEX idx_file_tags_tagId (tagId=?)",
+              "SEARCH f USING INDEX sqlite_autoindex_files_1 (id=?)"
+            ]
+          },
+          {
+            "sql": "SELECT g.key AS k, f.id, f.updatedAt FROM json_each(?) g CROSS JOIN files f ON f.trashedAt = json_extract(g.value, '$[2]') AND f.name = json_extract(g.value, '$[0]') AND coalesce(f.trashedFrom, '') = json_extract(g.value, '$[1]') WHERE f.kind = 'file' AND f.trashedAt IS NOT NULL AND f.deletedAt IS NULL ORDER BY g.key, f.updatedAt DESC, f.id DESC",
+            "plan": [
+              "SCAN g VIRTUAL TABLE INDEX 1:",
+              "SEARCH f USING INDEX idx_files_trashed_versions (trashedAt=? AND name=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
             ]
           }
         ]
