@@ -25,7 +25,7 @@
     },
     "apps/cli": {
       "name": "@siastorage/cli",
-      "version": "0.0.8-rc.3",
+      "version": "0.0.8",
       "bin": {
         "sia": "src/index.ts",
       },
@@ -212,7 +212,7 @@
     },
     "packages/core": {
       "name": "@siastorage/core",
-      "version": "0.0.22-rc.3",
+      "version": "0.0.22",
       "dependencies": {
         "@siastorage/logger": "workspace:*",
         "zod": "4.6.7",
