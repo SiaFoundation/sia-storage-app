@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  desktopFinalHeader,
   headerLine,
   mobileCandidateHeader,
   mobileFinalHeader,
@@ -109,5 +110,24 @@ describe('release PR headers', () => {
 
   test('a body without a header gets one on top', () => {
     expect(withHeader('notes', 'HEADER')).toBe('HEADER\n\nnotes')
+  })
+})
+
+describe('the final PR headers', () => {
+  test('a mobile final says it merges itself once both stores release it', () => {
+    const line = mobileFinalHeader({
+      version: '1.15.1',
+      candidate: '1.15.1-rc.3',
+      buildNumber: '1150103',
+      appStore: 'App Store: In review',
+      googlePlay: 'Google Play: In review',
+    }).lines.at(-1)
+    expect(line).toContain('this merges itself once both have')
+  })
+
+  test('a desktop final says Finalize Release merges it', () => {
+    expect(desktopFinalHeader('0.0.2', '0.0.2-rc.3').lines[0]).toBe(
+      'Finalize Release merges this, which tags 0.0.2 and builds the shipping app.',
+    )
   })
 })

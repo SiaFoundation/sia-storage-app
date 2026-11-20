@@ -28,6 +28,7 @@ import { deriveAppVersion } from '../appVersion'
 import { resolveVariant } from '../variants'
 import {
   type MobilePlatform,
+  NOTHING_NEW,
   marketingVersion,
   parseWhatsNew,
   storeLimit,
@@ -97,6 +98,7 @@ async function submit(platform: MobilePlatform, tag: string, dryRun: boolean): P
       version: build.version,
       versionCode: build.buildNumber,
       whatsNew,
+      updateNotes: `- ${NOTHING_NEW}`,
       dryRun,
     })
   }

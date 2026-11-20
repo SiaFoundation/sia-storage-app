@@ -3,7 +3,8 @@ name: Store Review
 # While a mobile final PR is open, writes where its version is in App Store
 # and Google Play review into the PR: the header's store lines and the
 # store/app-store and store/google-play statuses. Marks the PR ready to merge
-# once both stores approve, and it stays a draft until then.
+# once both stores approve, and it stays a draft until then. Once both have
+# the build live, it merges the PR as the release bot.
 #
 # A scheduled run uses main's code, and the job installs no dependencies, so
 # nothing from a pull request or a package's install script runs next to the
@@ -33,10 +34,21 @@ jobs:
           ref: main
           fetch-depth: 0
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      # The bot's merge starts Publish Release, where one by GITHUB_TOKEN
+      # would start nothing.
+      - name: Mint bot token
+        id: bot-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.SIA_CI_BOT_APP_ID }}
+          private-key: ${{ secrets.SIA_CI_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
       - name: Read App Store and Google Play review
         working-directory: apps/mobile
         env:
           GH_TOKEN: ${{ github.token }}
+          BOT_TOKEN: ${{ steps.bot-token.outputs.token }}
           APP_STORE_CONNECT_API_KEY_JSON: ${{ secrets.APP_STORE_CONNECT_API_KEY_JSON }}
           GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON }}
         run: bun scripts/storeReview.ts

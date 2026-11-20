@@ -20,6 +20,9 @@ library version records changes and nothing else. No app waits for one.
 
 ## A gated train, mobile or desktop
 
+Running Finalize Release is the one step a release needs. Everything after it happens on its own,
+unless a store is set to hold it (see "Holding a release" below).
+
 1. **Candidate.** Every push to main rebuilds `release/<app>` when the train has changes its
    newest candidate does not. The PR bumps the app to `X.Y.Z-rc.N` and carries Copilot's
    What's New and tester notes. Merging it tags the candidate and sends it to testers: TestFlight
@@ -27,24 +30,34 @@ library version records changes and nothing else. No app waits for one.
 2. **Finalize.** Run the Finalize Release workflow with the app, once a candidate has been
    tested. It names the newest candidate unless told another.
    - Mobile: submits the candidate's build to App Store and Google Play review, with the What's
-     New the candidate carries, then opens the final PR as a draft. The App Store version is set
-     to manual release, and Google Play holds an approved update under managed publishing.
-   - Desktop: opens the final PR, ready to merge.
-3. **Review**, mobile only. Every 15 minutes, Store Review reads both stores' review state and
-   writes it into the final PR's header and its `store/app-store` and `store/google-play`
-   statuses. The PR becomes ready to merge when both stores approve, and goes back to draft if
-   either stops approving. Only the state is written, such as "In review" or "Rejected", never
-   anything else a store returns, since the PR is public.
-4. **Release.** Merging the final PR tags `<app>/vX.Y.Z` on the candidate's commit, next to its
-   `-rc.N` tag, so the tag names the source users got.
-   - Mobile: nothing is rebuilt. The tag releases the approved App Store version. Publish the
-     Google Play update in Play Console, unless managed publishing is off, in which case it went
-     live when Google approved it.
-   - Desktop: the tag builds the shipping app from that commit.
+     New the candidate carries, then opens the final PR as a draft.
+   - Desktop: opens the final PR and merges it.
+3. **Review**, mobile only. Each store releases the version to its users as soon as it approves
+   it. Every 15 minutes, Store Review reads both stores' review state and writes it into the
+   final PR's header and its `store/app-store` and `store/google-play` statuses. Once both
+   stores have approved, it marks the PR ready, and once both have the build live, it merges it. Only the state is written, such as
+   "In review" or "Rejected", never anything else a store returns, since the PR is public.
+4. **Tag.** Merging the final PR tags `<app>/vX.Y.Z` on the candidate's commit, next to its
+   `-rc.N` tag, so the tag names the source users got. Mobile rebuilds nothing. Desktop builds
+   the shipping app from that commit.
 
 Main keeps taking merges through all of this. While a final PR is open, new candidates of that
 app keep its version number, so a fix during review is `1.15.1-rc.4`, not `1.16.0-rc.0`, and goes
-to the same App Store version.
+to the same store version.
+
+## Holding a release
+
+Nothing needs switching for a release to go out on its own. To hold one, set it in the store:
+
+- **App Store:** switch the version to manual release in App Store Connect. Once Apple approves
+  it, its line says it is approved and held. Release it there, or merge the final PR, which
+  releases it.
+- **Google Play:** turn on managed publishing in Play Console. Once Google approves the update,
+  its line says so. Publish it there.
+
+Store Review reads each store, so the final PR stays open while either one holds the build, and
+merges itself once both have it live. The release bot merges final PRs past main's review rule,
+so it is on the repository ruleset's bypass list.
 
 ## The packages train
 
@@ -55,18 +68,22 @@ its binaries.
 ## When review rejects a version
 
 - **A problem in the build.** Merge the fix. The candidate PR cuts `1.15.1-rc.4`. Merge it, test
-  it, and run Finalize again. The final PR is rebuilt for rc.4 and goes back to draft, and the new
-  build replaces the old one in both stores:
+  it, and run Finalize again. The final PR is rebuilt for rc.4 and goes back to draft, and rc.4
+  goes to each store that doesn't already have 1.15.1 live:
   - App Store: a rejected version takes the new build and is resubmitted. A version still waiting
-    for review or in review is removed from review first. A version Apple already approved can't
-    change its build from the API, so Finalize stops and says so: reject that build in App Store
-    Connect, then run it again.
-  - Google Play: the new release replaces the one in review.
+    for review or in review is removed from review first. A version already released keeps its
+    build, since Apple takes no other build for a released version. A version Apple approved and
+    holds for a manual release can't change its build from the API, so Finalize stops and says
+    so: reject that build in App Store Connect, then run it again.
+  - Google Play: the new release replaces the one in review. When 1.15.1 is already live there,
+    rc.4 goes out as an update of it, with "Bug fixes and performance improvements." as its notes.
 - **A problem in the listing**, such as screenshots or review notes: fix it in the store and
   resubmit there. No new build.
 
-1.15.1 isn't tagged until its final PR merges after both stores approve, so no version is
-skipped, and its What's New, rewritten at each candidate, still covers everything since 1.15.0.
+1.15.1 isn't tagged until both stores approve a build of it, so no version is skipped, and its
+What's New, rewritten at each candidate, still covers everything since 1.15.0. When one store
+released rc.3 before the other rejected it, the tag goes on rc.4, the candidate
+the final PR releases, and that store's users keep rc.3 until their next update.
 
 ## The final commit
 
@@ -94,7 +111,7 @@ Merging sends rc.4 to TestFlight and Google Play internal testing.
 Mobile 1.15.1 from 1.15.1-rc.3 is in #1110, so this candidate stays 1.15.1.
 ```
 
-A mobile final, with the App Store line Store Review keeps up to date:
+A mobile final, with the store lines Store Review keeps up to date:
 
 ```
 **Mobile 1.15.1 from 1.15.1-rc.3, build 1150103**
@@ -102,7 +119,7 @@ Candidate › Testing › **Review** › Released
 
 App Store: In review (since 2026-11-21 14:30 UTC)
 Google Play: In review (since 2026-11-21 09:10 UTC)
-Merge once both stores approve. Merging tags 1.15.1 and releases it on the App Store, then publish it in Play Console.
+Each store releases 1.15.1 once it approves it, and this merges itself once both have, which tags 1.15.1.
 ```
 
 A desktop final:
@@ -111,18 +128,18 @@ A desktop final:
 **Desktop 0.0.2 from 0.0.2-rc.3**
 Candidate › Beta › **Release**
 
-Merging tags 0.0.2 and builds the shipping app.
+Finalize Release merges this, which tags 0.0.2 and builds the shipping app.
 ```
 
 ## Re-running
 
 Every step reads what already exists before changing anything, so re-running any of them is safe.
 
-| To                                          | Run                                                  |
-| ------------------------------------------- | ---------------------------------------------------- |
-| rebuild the release PRs                     | Prepare Release                                      |
-| resubmit a candidate                        | Finalize Release, or Release Stores with `submit`    |
-| release an approved App Store version       | Release Stores with `release`                        |
-| refresh a final PR's review state           | Store Review                                         |
-| tag a merged candidate or packages PR again | Publish Release with its merge commit and `publish`  |
-| tag a merged final PR again                 | Publish Release with its candidate tag and `promote` |
+| To                                            | Run                                                  |
+| --------------------------------------------- | ---------------------------------------------------- |
+| rebuild the release PRs                       | Prepare Release                                      |
+| resubmit a candidate                          | Finalize Release, or Release Stores with `submit`    |
+| release an App Store version held for release | Release Stores with `release`                        |
+| refresh a final PR's review state             | Store Review                                         |
+| tag a merged candidate or packages PR again   | Publish Release with its merge commit and `publish`  |
+| tag a merged final PR again                   | Publish Release with its candidate tag and `promote` |
