@@ -74,6 +74,7 @@ type ShareLinkMethods = Pick<
   | 'removeLinkFiles'
   | 'revokeLink'
   | 'syncLinks'
+  | 'syncLinksAndTrashOlderVersions'
 >
 
 type Deps = {
@@ -82,6 +83,8 @@ type Deps = {
   getIndexerURL: () => Promise<string>
   /** Called after any change a list of links would show. */
   invalidate: () => void
+  /** Moves older versions uploaded to the indexer to the trash, returning how many. */
+  trashOlderVersions: (indexerURL: string) => Promise<number>
 }
 
 function keyOf(link: ops.ShareLinkRow): SharingKeyRef {
@@ -742,5 +745,11 @@ export function buildShareLinks(deps: Deps): ShareLinkMethods {
       waitingPass = pass
       return pass.done
     },
+
+    syncLinksAndTrashOlderVersions: () =>
+      exclusive(async () => {
+        await runSyncPass({ refresh: true })
+        return deps.trashOlderVersions(await deps.getIndexerURL())
+      }),
   }
 }

@@ -39,6 +39,7 @@ describe('share links after a restart', () => {
         requireSdk,
         getIndexerURL: async () => INDEXER,
         invalidate: () => {},
+        trashOlderVersions: async () => 0,
       })
     await build(() => online).syncLinks({ refresh: true })
 
@@ -154,6 +155,7 @@ describe('a shared file in the trash', () => {
       requireSdk: () => sdk,
       getIndexerURL: async () => INDEXER,
       invalidate: () => {},
+      trashOlderVersions: async () => 0,
     })
     return { links, shared, unshared }
   }
@@ -377,6 +379,7 @@ describe('a file put in the trash', () => {
       requireSdk: () => sdk,
       getIndexerURL: async () => INDEXER,
       invalidate: () => {},
+      trashOlderVersions: async () => 0,
     })
     return { links, shared, unshared }
   }
@@ -454,6 +457,7 @@ describe('a file another device put on a link', () => {
       requireSdk: () => sdk,
       getIndexerURL: async () => INDEXER,
       invalidate: () => {},
+      trashOlderVersions: async () => 0,
     })
     await links.syncLinks({ refresh: true })
 
@@ -501,6 +505,7 @@ describe('the order share views list files in', () => {
       },
       getIndexerURL: async () => INDEXER,
       invalidate: () => {},
+      trashOlderVersions: async () => 0,
     })
 
   async function addFile(id: string, name: string, directoryId: string | null = null) {
@@ -604,5 +609,93 @@ describe('the order share views list files in', () => {
       ['Trips 2', 'a.jpg'],
       ['Trips 2', 'c.jpg'],
     ])
+  })
+})
+
+describe('trashing older versions from the share-link queue', () => {
+  async function addFile(id: string) {
+    await insertFile(db(), {
+      id,
+      name: `${id}.txt`,
+      type: 'text/plain',
+      kind: 'file',
+      size: 10,
+      hash: `sha256:${id}`,
+      createdAt: 1000,
+      updatedAt: 1000,
+      mediaAssetId: null,
+      addedAt: 1000,
+      trashedAt: null,
+      deletedAt: null,
+    })
+  }
+
+  /** An indexer that lists the keys made through it, and a namespace whose trash records what it saw. */
+  function setup(opts: { listingFails?: boolean } = {}) {
+    const calls: string[] = []
+    const made: SharingKeyRecord[] = []
+    let releaseKey: (() => void) | null = null
+    const sdk = {
+      sharingKeys: async (offset: number) => {
+        calls.push('list')
+        if (opts.listingFails) throw new Error('indexer unavailable')
+        return offset === 0 ? made : []
+      },
+      sharedObjects: async () => [],
+      createSharingKey: async (description: string) => {
+        await new Promise<void>((resolve) => {
+          releaseKey = resolve
+        })
+        const key = { publicKey: 'ed25519:made', seed: new Uint8Array(32).fill(3) }
+        made.push({ key, description, createdAt: new Date(), objectCount: 0 })
+        return key
+      },
+    } as unknown as SdkAdapter
+    const links = buildShareLinks({
+      db: db(),
+      requireSdk: () => sdk,
+      getIndexerURL: async () => INDEXER,
+      invalidate: () => {},
+      trashOlderVersions: async (indexerURL) => {
+        const row = await db().getFirstAsync<{ n: number }>(
+          'SELECT count(*) AS n FROM share_link_files',
+        )
+        calls.push(`trash ${indexerURL} with ${row?.n} shared`)
+        return 0
+      },
+    })
+    return { links, calls, releaseKey: () => releaseKey?.() }
+  }
+
+  it('lists the links before trashing, even right after a listing', async () => {
+    const { links, calls } = setup()
+    await links.syncLinks({ refresh: true })
+
+    await links.syncLinksAndTrashOlderVersions()
+
+    expect(calls).toEqual(['list', 'list', `trash ${INDEXER} with 0 shared`])
+  })
+
+  it('trashes nothing when listing the links fails', async () => {
+    const { links, calls } = setup({ listingFails: true })
+
+    await expect(links.syncLinksAndTrashOlderVersions()).rejects.toThrow('indexer unavailable')
+
+    expect(calls).toEqual(['list'])
+  })
+
+  it('waits for a link being made, so the trash sees the files it names', async () => {
+    await addFile('f1')
+    const { links, calls, releaseKey } = setup()
+    const creating = links.createLink(['f1'], { expiresAt: null, mode: 'snapshot' })
+    const trashing = links.syncLinksAndTrashOlderVersions()
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(calls).toEqual([])
+
+    releaseKey()
+    await creating
+    await trashing
+
+    expect(calls).toEqual(['list', `trash ${INDEXER} with 1 shared`])
   })
 })
