@@ -164,3 +164,5 @@ function merge(pr: number, head: string): void {
   else
     console.log(`::warning::#${pr} is ready but didn't merge: ${run.stderr.trim().split('\n')[0]}`)
 }
+
+if (import.meta.main) await main()
