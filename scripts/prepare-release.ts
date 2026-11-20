@@ -14,7 +14,7 @@
 // PR's checks, including its sim runs, so a push that touches nothing a PR
 // depends on leaves it alone.
 
-import { execFileSync } from 'child_process'
+import { execFileSync, spawnSync } from 'child_process'
 import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -27,7 +27,7 @@ import {
 } from '../apps/mobile/scripts/releaseNotes'
 import { writeCandidateNotes, writeFinalNotes } from '../apps/mobile/scripts/writeReleaseNotes'
 import { NOTES_NOT_WRITTEN, closePr, openPr, publishPr } from './create-release-pr'
-import { appStoreLine, headerLine } from './release-header'
+import { type Store, headerLine, storeLine } from './release-header'
 import {
   GATED,
   type PendingChangeset,
@@ -51,8 +51,8 @@ const MAIN = 'origin/main'
 
 type GatedTrain = Train & { app: AppName }
 
-/** An open final PR: its number, the version it releases and its candidate. */
-type Final = { number: number; version: string; candidate: string }
+/** An open final PR: its number, the version it releases, its candidate and its head commit. */
+type Final = { number: number; version: string; candidate: string; head: string }
 
 function git(...args: string[]): string {
   return execFileSync('git', args, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
@@ -94,6 +94,10 @@ function versionNow(app: AppName): string {
 
 function candidateVersions(app: AppName): string[] {
   return lines(git('tag', '--list', `${app}/v*-rc.*`)).map((tag) => tag.replace(`${app}/v`, ''))
+}
+
+function tagExists(tag: string): boolean {
+  return git('tag', '--list', tag) !== ''
 }
 
 function shippedBy(tag: string): Shipped {
@@ -145,15 +149,25 @@ function knope(keep: PendingChangeset[], args: string[]): void {
   }
 }
 
-function commitAndPush(branch: string, message: string): void {
+/**
+ * Commits the cut and force-pushes it to `branch`. With `expected`, the push
+ * goes through only while the branch is still at that commit, and returns
+ * false when it has moved.
+ */
+function commitAndPush(branch: string, message: string, expected?: string): boolean {
   execFileSync('git', ['add', '-A'], { stdio: 'inherit' })
   if (git('diff', '--cached', '--name-only') === '') {
     throw new Error(`knope prepared nothing for ${branch}`)
   }
   execFileSync('git', ['commit', '-m', message], { stdio: 'inherit' })
-  execFileSync('git', ['push', '--force', 'origin', `HEAD:refs/heads/${branch}`], {
-    stdio: 'inherit',
+  const force = expected ? `--force-with-lease=refs/heads/${branch}:${expected}` : '--force'
+  const push = spawnSync('git', ['push', force, 'origin', `HEAD:refs/heads/${branch}`], {
+    encoding: 'utf-8',
   })
+  process.stderr.write(push.stderr)
+  if (push.status === 0) return true
+  if (expected && /stale info|\[rejected\]/.test(push.stderr)) return false
+  throw new Error(`pushing ${branch} failed`)
 }
 
 function openFinals(): Map<AppName, Final> {
@@ -169,6 +183,7 @@ function openFinals(): Map<AppName, Final> {
       number: pr.number,
       version: marketingVersion(candidate.version),
       candidate: candidate.version,
+      head: git('rev-parse', `origin/${finalBranch(app)}`),
     })
   }
   return finals
@@ -215,6 +230,12 @@ function prepareCandidate(train: GatedTrain, final: Final | undefined): void {
   const pending = pendingOn(train)
   const version = versionAt(MAIN, app)
   const newest = isCandidate(version) ? candidateTag(app, version) : null
+  if (newest && !tagExists(newest)) {
+    console.log(
+      `${train.name}: ${newest} isn't tagged yet. Publish Release runs this again once it is`,
+    )
+    return
+  }
   const by = newest ? shippedBy(newest) : null
   const open = openPr(branch)
   if (!pending.some((c) => !by || !wasShipped(c, app, by))) {
@@ -245,10 +266,19 @@ function prepareCandidate(train: GatedTrain, final: Final | undefined): void {
 /**
  * Builds the app's final PR for the candidate `tag`. `submitted` is set when
  * Finalize Release has just sent the candidate to store review, which starts
- * the App Store line over and turns a mobile final PR back into a draft until
- * Apple approves it.
+ * the store lines over and turns a mobile final PR back into a draft until
+ * both stores approve it.
+ *
+ * `rebuilding` is the head of an open final PR being rebuilt against a newer
+ * main. Finalize Release can replace that PR with another candidate meanwhile,
+ * so the rebuild is pushed only while the branch is still at that head.
  */
-function prepareFinal(train: GatedTrain, tag: string, submitted: boolean): void {
+function prepareFinal(
+  train: GatedTrain,
+  tag: string,
+  submitted: boolean,
+  rebuilding?: string,
+): void {
   const { app } = train
   const candidate = parseCandidateTag(tag)
   if (candidate?.app !== app) throw new Error(`${tag} is not a ${app} candidate tag`)
@@ -265,10 +295,13 @@ function prepareFinal(train: GatedTrain, tag: string, submitted: boolean): void 
   knope(releases, ['--override-version', `${app}=${version}`])
   writeFileSync(candidateFile(app), `${tag}\n`)
   writeFinalNotes(app, tag)
-  commitAndPush(branch, `chore: release ${app} ${version}`)
-  const appStore =
-    (!submitted && open && headerLine(open.body, 'App Store:')) ||
-    appStoreLine('Waiting for review', new Date())
+  if (!commitAndPush(branch, `chore: release ${app} ${version}`, rebuilding)) {
+    console.log(`${app} final: ${branch} changed during the rebuild, leaving it`)
+    return
+  }
+  const kept = (store: Store) =>
+    (!submitted && open && headerLine(open.body, `${store}:`)) ||
+    storeLine(store, 'Waiting for review', new Date())
   publishPr(
     branch,
     {
@@ -278,7 +311,8 @@ function prepareFinal(train: GatedTrain, tag: string, submitted: boolean): void 
       version,
       candidate: candidate.version,
       buildNumber: deriveAppVersion(candidate.version).buildNumber,
-      appStore,
+      appStore: kept('App Store'),
+      googlePlay: kept('Google Play'),
       deferred: pending.filter((c) => !releases.includes(c)).map((c) => c.text),
     },
     null,
@@ -348,20 +382,23 @@ if (git('ls-remote', '--heads', 'origin', 'refs/heads/release') !== '') {
   )
 }
 
+// Finalize Release builds only the final. The Prepare Release run it starts
+// after rebuilds the other release PRs, which then keep the final's version.
 const finalApp = process.env.RELEASE_MODE === 'final' ? process.env.RELEASE_APP : undefined
 if (finalApp) {
   const train = gated(finalApp)
-  // Finalizing fails on its own error, since the workflow that asked for it
-  // has already sent the candidate to the stores.
   prepareFinal(train, candidateToFinalize(train.app), true)
+  process.exit(0)
 }
 
 // Every final PR main has moved under is rebuilt first, since the candidate
 // trains read the open finals to keep their versions.
 for (const [app, final] of openFinals()) {
   const train = gated(app)
-  if (app === finalApp || !stale(finalBranch(app), train)) continue
-  step(`${app} final`, () => prepareFinal(train, candidateTag(app, final.candidate), false))
+  if (!stale(finalBranch(app), train)) continue
+  step(`${app} final`, () =>
+    prepareFinal(train, candidateTag(app, final.candidate), false, final.head),
+  )
 }
 const finals = openFinals()
 for (const train of TRAINS) {

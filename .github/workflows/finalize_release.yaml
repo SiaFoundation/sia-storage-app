@@ -70,13 +70,15 @@ jobs:
     # Runs after a successful submission, or straight away for desktop.
     if: ${{ !cancelled() && needs.candidate.result == 'success' && (needs.submit.result == 'success' || needs.submit.result == 'skipped') }}
     runs-on: ubuntu-latest
+    # Its own group, since a waiting run in a shared one can be cancelled by a
+    # newer arrival. The other release PRs are rebuilt by the Prepare Release
+    # run this starts at the end.
     concurrency:
-      group: release-train
+      group: finalize-${{ inputs.app }}
       cancel-in-progress: false
     permissions:
       contents: read
-      # The run also rebuilds the candidate PRs, whose notes Copilot writes.
-      copilot-requests: write
+      actions: write
     steps:
       # An app token: pushes made with GITHUB_TOKEN don't trigger workflows,
       # so the release PR's checks never run and it can't merge.
@@ -114,7 +116,12 @@ jobs:
         run: bun scripts/prepare-release.ts
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
-          COPILOT_GITHUB_TOKEN: ${{ github.token }}
           RELEASE_MODE: final
           RELEASE_APP: ${{ inputs.app }}
           SHIPPED_CANDIDATE: ${{ needs.candidate.outputs.tag }}
+
+      # The candidate PR keeps the final's version while it is open.
+      - name: Rebuild the other release PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run prepare_release.yaml --ref main

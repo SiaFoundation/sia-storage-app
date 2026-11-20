@@ -21,15 +21,13 @@ jobs:
     # subject while explaining something. A dispatch has no head_commit, so it is
     # allowed explicitly rather than relying on coercion of a missing value.
     if: "${{ github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'chore: release') }}"
-    # Shared with the other release workflows: two pushes in quick succession
-    # would otherwise race to force-push the release branches, and a prepare must
-    # not run while a publish is mid-flight and versions disagree with tags.
-    # Set on the job rather than the workflow so the run a release PR's own
-    # merge starts, which the `if` skips, never joins the group. A group holds
-    # one waiting run and a newcomer cancels it, so that skipped run could
-    # cancel the Publish Release run waiting behind another job.
+    # Two pushes in quick succession would otherwise race to force-push the
+    # release branches. A group keeps one waiting run and a newcomer cancels
+    # it, which loses nothing here, since every run rebuilds every train from
+    # main. Publish Release and Finalize Release stay out of this group, so a
+    # waiting run of theirs is never the one cancelled.
     concurrency:
-      group: release-train
+      group: release-prepare
       cancel-in-progress: false
     permissions:
       contents: read

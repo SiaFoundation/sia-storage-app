@@ -2,7 +2,7 @@ name: Sim (macOS)
 
 # The desktop app's sim scenarios on macOS: the installed test app, its
 # Finder folder and its daemon, syncing with CLI devices over the shared mock
-# network. sim.yml calls this when a PR gets the sim label or on demand, and
+# network. sim.yml calls this when a PR gets the sim or sim-desktop label or on demand, and
 # it posts the result as the sim/macos status.
 #
 # A runner is a new Mac every job, and a development profile runs only on

@@ -2,7 +2,7 @@ name: Sim (Android)
 
 # The mobile app's sim scenarios on Android emulators, syncing with CLI
 # devices over the shared mock network. sim.yml calls this when a PR gets the
-# sim label or on demand, and it posts the result as the sim/android status.
+# sim or sim-mobile label or on demand, and it posts the result as the sim/android status.
 
 on:
   workflow_call:

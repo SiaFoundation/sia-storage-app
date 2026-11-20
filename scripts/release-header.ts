@@ -66,8 +66,9 @@ export type MobileFinal = {
   version: string
   candidate: string
   buildNumber: string
-  /** The App Store line, as Store Review last wrote it. */
+  /** The store lines, as Store Review last wrote them. */
   appStore: string
+  googlePlay: string
 }
 
 export function mobileFinalHeader(f: MobileFinal): Header {
@@ -77,15 +78,22 @@ export function mobileFinalHeader(f: MobileFinal): Header {
     current: 2,
     lines: [
       f.appStore,
-      'Google Play: sent for review. Google reports no review state, so check Play Console.',
+      f.googlePlay,
       `Merge once both stores approve. Merging tags ${f.version} and releases it on the App Store, then publish it in Play Console.`,
     ],
   }
 }
 
-export function appStoreLine(label: string, since: Date): string {
+export type Store = 'App Store' | 'Google Play'
+
+export function storeLine(store: Store, label: string, since: Date): string {
   const time = since.toISOString().slice(11, 16)
-  return `App Store: ${label} (since ${since.toISOString().slice(0, 10)} ${time} UTC)`
+  return `${store}: ${label} (since ${since.toISOString().slice(0, 10)} ${time} UTC)`
+}
+
+/** The label of a store line, without the time it was first seen. */
+export function storeLabel(store: Store, line: string | null): string | null {
+  return line?.replace(`${store}: `, '').replace(/ \(since [^)]*\)$/, '') ?? null
 }
 
 export function desktopCandidateHeader(version: string): Header {

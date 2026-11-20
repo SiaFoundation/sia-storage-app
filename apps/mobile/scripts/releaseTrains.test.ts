@@ -97,6 +97,7 @@ describe('release PR headers', () => {
           candidate: '1.15.1-rc.3',
           buildNumber: '1150103',
           appStore,
+          googlePlay: 'Google Play: In review',
         }),
       )
     const body = `${final('App Store: Waiting for review')}\n\n## What's New in 1.15.1\n`

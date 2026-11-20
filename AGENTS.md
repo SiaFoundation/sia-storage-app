@@ -192,8 +192,9 @@ only once `baseline/timing.json` gives it a tolerance, which `bench:calibrate` c
 from the reports of CI runs whose two sides ran the same core.
 
 The native device tier, the phone scenarios and the desktop scenarios run in CI only on
-the `sim` label, so run them, or add the label, before landing anything that
-touches native code, the import flow, the desktop app or its extension.
+a sim label, so run them, or add the label, before landing anything that touches native
+code, the import flow, the desktop app or its extension. `sim` runs every platform,
+`sim-mobile` iOS and Android, and `sim-desktop` macOS.
 
 **Which tier.** Core logic gets a unit test beside it. Behavior crossing upload,
 download, sync, and the database gets an integration test, because a unit test cannot

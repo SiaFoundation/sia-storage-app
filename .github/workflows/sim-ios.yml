@@ -2,7 +2,7 @@ name: Sim (iOS)
 
 # The mobile app's sim scenarios on iOS simulators, syncing with CLI devices
 # over the shared mock network, and the import module's Swift code against
-# the real Photos framework. sim.yml calls this when a PR gets the sim label or
+# the real Photos framework. sim.yml calls this when a PR gets the sim or sim-mobile label or
 # on demand, and it posts the result as the sim/ios status.
 #
 # A smoke test launches one phone before the suite and fails the job within

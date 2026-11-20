@@ -2,13 +2,11 @@
 
 /**
  * Store Review: writes where the open mobile final PR's version is in App
- * Store review into the PR, as its header's App Store line and its
- * `store/app-store` status. The PR is ready to merge only while Apple has
- * approved its candidate's build, and a draft otherwise.
- *
- * Google Play's API reports no review state, so the header leaves that to
- * Play Console. Only the state's name reaches the PR, never what App Store
- * Connect returns.
+ * Store and Google Play review into the PR, as its header's store lines and
+ * its `store/app-store` and `store/google-play` statuses. The PR is ready to
+ * merge only while both stores have approved its candidate's build, and a
+ * draft otherwise. Only each state's name reaches the PR, never anything else
+ * a store returns.
  *
  * Usage:
  *   bun scripts/storeReview.ts
@@ -16,15 +14,19 @@
 
 import { execFileSync } from 'node:child_process'
 import {
-  appStoreLine,
+  type Store,
   headerLine,
   mobileFinalHeader,
   renderHeader,
+  storeLabel,
+  storeLine,
   withHeader,
 } from '../../../scripts/release-header'
 import { candidateFile, finalBranch, parseCandidateTag } from '../../../scripts/release-trains'
 import { buildOf } from './submitStores'
 import { appStoreReviewOf } from './stores/appStore'
+import { playReviewOf } from './stores/googlePlay'
+import type { StoreReview } from './stores/plan'
 
 function gh(...args: string[]): string {
   return execFileSync('gh', args, { encoding: 'utf-8' }).trim()
@@ -48,9 +50,42 @@ function openFinal(): FinalPr | null {
   return list[0] ?? null
 }
 
-/** The label of an App Store line, without the time it was first seen. */
-function labelOf(line: string | null): string | null {
-  return line?.replace(/^App Store: /, '').replace(/ \(since [^)]*\)$/, '') ?? null
+/** Each store's line for the header, keeping the time a state was first seen. */
+function line(store: Store, body: string, review: StoreReview): string {
+  const previous = headerLine(body, `${store}:`)
+  return previous && storeLabel(store, previous) === review.label
+    ? previous
+    : storeLine(store, review.label, new Date())
+}
+
+function postStatus(sha: string, context: string, store: Store, review: StoreReview): void {
+  gh(
+    'api',
+    `repos/{owner}/{repo}/statuses/${sha}`,
+    '-f',
+    `state=${review.status}`,
+    '-f',
+    `context=${context}`,
+    '-f',
+    `description=${store}: ${review.label}`.slice(0, 140),
+  )
+}
+
+/**
+ * A store whose state couldn't be read shows that, and the other store is
+ * still written. The errors name only the request and its HTTP status.
+ */
+async function unlessFailed(review: Promise<StoreReview>): Promise<StoreReview> {
+  try {
+    return await review
+  } catch (error) {
+    console.error(`${error}`)
+    return {
+      label: "Couldn't be read, see the Store Review run",
+      status: 'pending',
+      approved: false,
+    }
+  }
 }
 
 async function main(): Promise<void> {
@@ -65,46 +100,41 @@ async function main(): Promise<void> {
   const candidate = parseCandidateTag(recorded)
   if (candidate?.app !== 'mobile') throw new Error(`#${pr.number} names no mobile candidate`)
   const build = buildOf(candidate.version)
-  const review = await appStoreReviewOf(build)
-  console.log(`#${pr.number}: ${build.version} build ${build.buildNumber} is ${review.label}`)
+  const [apple, google] = await Promise.all([
+    unlessFailed(appStoreReviewOf(build)),
+    unlessFailed(playReviewOf(build.bundleId, build.buildNumber)),
+  ])
+  console.log(
+    `#${pr.number}: ${build.version} build ${build.buildNumber} is ${apple.label} on the App Store and ${google.label} on Google Play`,
+  )
 
-  // Prepare or Finalize Release can rebuild the PR while App Store Connect
-  // answers, even for another candidate, so a PR that changed meanwhile is
-  // left for the next run rather than given this candidate's state.
+  // Prepare or Finalize Release can rebuild the PR while the stores answer,
+  // even for another candidate, so a PR that changed meanwhile is left for the
+  // next run rather than given this candidate's state.
   const now = openFinal()
   if (now?.headRefOid !== pr.headRefOid || now.body !== pr.body) {
-    console.log(
-      `#${pr.number} changed while App Store Connect was read, leaving it for the next run`,
-    )
+    console.log(`#${pr.number} changed while the stores were read, leaving it for the next run`)
     return
   }
 
-  const previous = headerLine(pr.body, 'App Store:')
-  if (labelOf(previous) !== review.label) {
-    const header = renderHeader(
-      mobileFinalHeader({
-        version: build.version,
-        candidate: candidate.version,
-        buildNumber: build.buildNumber,
-        appStore: appStoreLine(review.label, new Date()),
-      }),
-    )
-    gh('pr', 'edit', String(pr.number), '--body', withHeader(pr.body, header))
-  }
-  gh(
-    'api',
-    `repos/{owner}/{repo}/statuses/${pr.headRefOid}`,
-    '-f',
-    `state=${review.status}`,
-    '-f',
-    'context=store/app-store',
-    '-f',
-    `description=App Store: ${review.label}`.slice(0, 140),
+  const header = renderHeader(
+    mobileFinalHeader({
+      version: build.version,
+      candidate: candidate.version,
+      buildNumber: build.buildNumber,
+      appStore: line('App Store', pr.body, apple),
+      googlePlay: line('Google Play', pr.body, google),
+    }),
   )
-  // Back to draft too, as when the approved build is rejected in App Store
-  // Connect, so the PR can merge only while Apple approves this candidate.
-  if (review.approved && pr.isDraft) gh('pr', 'ready', String(pr.number))
-  if (!review.approved && !pr.isDraft) gh('pr', 'ready', String(pr.number), '--undo')
+  const body = withHeader(pr.body, header)
+  if (body !== pr.body) gh('pr', 'edit', String(pr.number), '--body', body)
+  postStatus(pr.headRefOid, 'store/app-store', 'App Store', apple)
+  postStatus(pr.headRefOid, 'store/google-play', 'Google Play', google)
+  // Back to draft too, as when an approved build is rejected later, so the PR
+  // can merge only while both stores approve this candidate.
+  const approved = apple.approved && google.approved
+  if (approved && pr.isDraft) gh('pr', 'ready', String(pr.number))
+  if (!approved && !pr.isDraft) gh('pr', 'ready', String(pr.number), '--undo')
 }
 
 if (import.meta.main) await main()
