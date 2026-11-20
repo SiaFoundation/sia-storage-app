@@ -1,7 +1,7 @@
 [
   {
     "version": "0.0.2",
-    "released": null,
+    "released": "2026-11-20",
     "items": [
       {
         "text": "Clear Local Files now does a better job freeing Mac storage while keeping files you still need.",
