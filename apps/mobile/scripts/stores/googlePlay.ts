@@ -12,6 +12,7 @@ import {
   type PlayReleaseSummary,
   type StoreReview,
   planGooglePlay,
+  playAlreadyLive,
   playReview,
 } from './plan'
 
@@ -20,6 +21,8 @@ export type GooglePlaySubmission = {
   version: string
   versionCode: string
   whatsNew: string
+  /** The notes for users who already have this version, with an earlier build. */
+  updateNotes: string
   dryRun: boolean
 }
 
@@ -29,9 +32,10 @@ function serviceAccount(): { client_email: string; private_key: string; token_ur
   return JSON.parse(json)
 }
 
-/** Where the production release holding `versionCode` is in review. */
-export async function playReviewOf(packageName: string, versionCode: string): Promise<StoreReview> {
-  const token = await googleAccessToken(serviceAccount())
+async function productionReleases(
+  token: string,
+  packageName: string,
+): Promise<PlayReleaseSummary[]> {
   const response = await fetch(
     `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/tracks/production/releases`,
     { headers: { authorization: `Bearer ${token}` } },
@@ -42,7 +46,13 @@ export async function playReviewOf(packageName: string, versionCode: string): Pr
     )
   }
   const { releases = [] } = (await response.json()) as { releases?: PlayReleaseSummary[] }
-  return playReview(releases, versionCode)
+  return releases
+}
+
+/** Where the production release holding `versionCode` is in review. */
+export async function playReviewOf(packageName: string, versionCode: string): Promise<StoreReview> {
+  const token = await googleAccessToken(serviceAccount())
+  return playReview(await productionReleases(token, packageName), versionCode)
 }
 
 export async function submitToGooglePlay(s: GooglePlaySubmission): Promise<void> {
@@ -86,9 +96,17 @@ export async function submitToGooglePlay(s: GooglePlaySubmission): Promise<void>
     if (plan.kind === 'blocked') throw new Error(plan.reason)
 
     const { defaultLanguage } = await call<{ defaultLanguage: string }>('GET', `/${id}/details`)
+    const live = playAlreadyLive(
+      await productionReleases(token, s.packageName),
+      s.version,
+      s.versionCode,
+    )
+    const notes = live ? s.updateNotes : s.whatsNew
+    if (live)
+      console.log(`Google Play: ${s.version} is already live, so this update gets generic notes`)
     if (s.dryRun) {
       console.log(
-        `dry run: would release version code ${s.versionCode} as ${s.version} to production with:\n${s.whatsNew}`,
+        `dry run: would release version code ${s.versionCode} as ${s.version} to production with:\n${notes}`,
       )
       return
     }
@@ -99,7 +117,7 @@ export async function submitToGooglePlay(s: GooglePlaySubmission): Promise<void>
           name: s.version,
           versionCodes: [s.versionCode],
           status: 'completed',
-          releaseNotes: [{ language: defaultLanguage, text: s.whatsNew }],
+          releaseNotes: [{ language: defaultLanguage, text: notes }],
         },
       ],
     })

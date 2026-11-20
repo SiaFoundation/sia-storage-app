@@ -9,9 +9,10 @@ name: Release Stores
 #   with the What's New the candidate carries, and replaces a build of an
 #   earlier candidate still in review.
 # - release: publishing the stable tag `mobile/vX.Y.Z`, which merging the final
-#   PR does, releases the approved App Store version. Google Play's API can't
-#   publish an update managed publishing holds, so that is done in Play
-#   Console.
+#   PR does, releases the approved App Store version when it is still held,
+#   which it is only when set to manual release in App Store Connect. Google
+#   Play's API can't publish an update managed publishing holds, so that is
+#   done in Play Console.
 #
 # Each store is its own job, so re-running a failed job retries that store
 # alone, and submitStores.ts reads what the store already has before changing

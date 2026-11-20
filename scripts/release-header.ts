@@ -79,7 +79,7 @@ export function mobileFinalHeader(f: MobileFinal): Header {
     lines: [
       f.appStore,
       f.googlePlay,
-      `Merge once both stores approve. Merging tags ${f.version} and releases it on the App Store, then publish it in Play Console.`,
+      `Each store releases ${f.version} once it approves it, and this merges itself once both have, which tags ${f.version}.`,
     ],
   }
 }
@@ -111,7 +111,7 @@ export function desktopFinalHeader(version: string, candidate: string): Header {
     title: `Desktop ${version} from ${candidate}`,
     steps: DESKTOP_STEPS,
     current: 2,
-    lines: [`Merging tags ${version} and builds the shipping app.`],
+    lines: [`Finalize Release merges this, which tags ${version} and builds the shipping app.`],
   }
 }
 

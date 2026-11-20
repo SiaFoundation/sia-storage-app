@@ -1,8 +1,8 @@
 /**
  * Submits an existing TestFlight build to App Store review, reads where it is
  * in review, and releases it once approved, through the App Store Connect
- * API. The version is created with manual release, so an approved version
- * waits for the final PR's merge to release it.
+ * API. Apple releases an approved version itself, unless it was switched to
+ * manual release in App Store Connect.
  */
 
 import { readFileSync } from 'node:fs'
@@ -180,7 +180,14 @@ export async function submitToAppStore(s: AppStoreSubmission): Promise<void> {
           await call('POST', '/v1/appStoreVersions', {
             data: {
               type: 'appStoreVersions',
-              attributes: { platform: 'IOS', versionString: s.version, releaseType: 'MANUAL' },
+              // A new version releases as soon as Apple approves it. An existing
+              // one keeps its release option, so a version someone switched to
+              // manual release in App Store Connect stays held when resubmitted.
+              attributes: {
+                platform: 'IOS',
+                versionString: s.version,
+                releaseType: 'AFTER_APPROVAL',
+              },
               relationships: { app: { data: { type: 'apps', id: appId } }, build: buildRef },
             },
           }),
@@ -191,7 +198,6 @@ export async function submitToAppStore(s: AppStoreSubmission): Promise<void> {
       data: {
         type: 'appStoreVersions',
         id: versionId,
-        attributes: { releaseType: 'MANUAL' },
         relationships: { build: buildRef },
       },
     })

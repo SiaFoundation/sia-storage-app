@@ -4,15 +4,15 @@
  * Store Review: writes where the open mobile final PR's version is in App
  * Store and Google Play review into the PR, as its header's store lines and
  * its `store/app-store` and `store/google-play` statuses. The PR is ready to
- * merge only while both stores have approved its candidate's build, and a
- * draft otherwise. Only each state's name reaches the PR, never anything else
- * a store returns.
+ * merge while both stores have approved its candidate's build, and a draft
+ * otherwise, and it merges the PR once both have the build live. Only each
+ * state's name reaches the PR, never anything else a store returns.
  *
  * Usage:
  *   bun scripts/storeReview.ts
  */
 
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import {
   type Store,
   headerLine,
@@ -84,6 +84,7 @@ async function unlessFailed(review: Promise<StoreReview>): Promise<StoreReview> 
       label: "Couldn't be read, see the Store Review run",
       status: 'pending',
       approved: false,
+      live: false,
     }
   }
 }
@@ -135,6 +136,31 @@ async function main(): Promise<void> {
   const approved = apple.approved && google.approved
   if (approved && pr.isDraft) gh('pr', 'ready', String(pr.number))
   if (!approved && !pr.isDraft) gh('pr', 'ready', String(pr.number), '--undo')
+  // A store holding an approved build keeps the PR open, as the reminder that
+  // it still has to be released there.
+  if (apple.live && google.live) merge(pr.number, pr.headRefOid)
 }
 
-if (import.meta.main) await main()
+/**
+ * Merges the final PR at `head`, the commit whose candidate the stores were
+ * read for, which tags the release. GitHub refuses the merge if Finalize
+ * Release has since replaced the PR with another candidate, and the next run
+ * reads the stores again. It needs the release bot's token, since only a
+ * merge by the bot starts Publish Release and the bot may merge past main's
+ * review rule. A merge GitHub refuses leaves the PR ready for someone to merge.
+ */
+function merge(pr: number, head: string): void {
+  const token = process.env.BOT_TOKEN
+  if (!token) {
+    console.log(`#${pr} is ready, and merges once BOT_TOKEN is set`)
+    return
+  }
+  const run = spawnSync(
+    'gh',
+    ['pr', 'merge', String(pr), '--rebase', '--match-head-commit', head],
+    { encoding: 'utf-8', env: { ...process.env, GH_TOKEN: token } },
+  )
+  if (run.status === 0) console.log(`merged #${pr}`)
+  else
+    console.log(`::warning::#${pr} is ready but didn't merge: ${run.stderr.trim().split('\n')[0]}`)
+}

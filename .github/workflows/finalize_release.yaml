@@ -3,9 +3,10 @@
 #
 # Mobile: submits the candidate's build to App Store and Google Play review
 # with the What's New it carries (release-stores.yml), then opens the final PR
-# as a draft. Store Review marks it ready once Apple approves.
+# as a draft. Store Review marks it ready once both stores approve, and merges
+# it once both have the build live.
 #
-# Desktop: opens the final PR.
+# Desktop: opens the final PR and merges it.
 #
 # Merging a final PR tags X.Y.Z on the candidate's commit (Publish Release).
 # Run this again after a fixed candidate merges, and the stores and the final
@@ -119,6 +120,14 @@ jobs:
           RELEASE_MODE: final
           RELEASE_APP: ${{ inputs.app }}
           SHIPPED_CANDIDATE: ${{ needs.candidate.outputs.tag }}
+
+      # A desktop final has no store to wait for. A merge GitHub refuses leaves
+      # the PR ready for someone to merge.
+      - name: Merge the desktop final
+        if: ${{ inputs.app == 'desktop' }}
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+        run: gh pr merge release/desktop-final --rebase || echo "::warning::the desktop final is ready but didn't merge"
 
       # The candidate PR keeps the final's version while it is open.
       - name: Rebuild the other release PRs

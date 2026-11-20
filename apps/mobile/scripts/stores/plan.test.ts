@@ -5,6 +5,7 @@ import {
   planAppStore,
   planAppStoreRelease,
   planGooglePlay,
+  playAlreadyLive,
   playReview,
 } from './plan'
 import { requestShape } from './appStore'
@@ -105,6 +106,7 @@ describe('an App Store review state', () => {
         label: 'Waiting for review',
         status: 'pending',
         approved: false,
+        live: false,
       },
     )
     expect(appStoreReview([version('1.15.1', 'IN_REVIEW', 'b2')], '1.15.1', 'b2').label).toBe(
@@ -118,13 +120,20 @@ describe('an App Store review state', () => {
     expect(review.approved).toBe(false)
   })
 
-  test('is approved once Apple accepts the version', () => {
+  test('is approved but not live while the version is held for a manual release', () => {
     const review = appStoreReview(
       [version('1.15.1', 'PENDING_DEVELOPER_RELEASE', 'b2')],
       '1.15.1',
       'b2',
     )
-    expect(review).toEqual({ label: 'Approved', status: 'success', approved: true })
+    expect(review).toMatchObject({ status: 'success', approved: true, live: false })
+    expect(review.label).toContain('Release it in App Store Connect')
+  })
+
+  test('is live once Apple releases the version', () => {
+    expect(
+      appStoreReview([version('1.15.1', 'READY_FOR_DISTRIBUTION', 'b2')], '1.15.1', 'b2'),
+    ).toEqual({ label: 'Released', status: 'success', approved: true, live: true })
   })
 
   test("fails when the version carries another candidate's build", () => {
@@ -138,6 +147,7 @@ describe('an App Store review state', () => {
       label: 'In state SOMETHING_NEW',
       status: 'pending',
       approved: false,
+      live: false,
     })
   })
 })
@@ -192,14 +202,23 @@ describe('a Google Play review state', () => {
       label: 'In review',
       status: 'pending',
       approved: false,
+      live: false,
     })
   })
 
-  test('is approved once Google accepts the release, which still waits to be published', () => {
+  test('is approved but not live while managed publishing holds the release', () => {
     expect(playReview([release('APPROVED_NOT_PUBLISHED')], '1150103')).toEqual({
-      label: 'Approved, publish it in Play Console',
+      label: 'Approved and held by managed publishing. Publish it in Play Console',
       status: 'success',
       approved: true,
+      live: false,
+    })
+  })
+
+  test('is live once the release is published', () => {
+    expect(playReview([release('PUBLISHED')], '1150103')).toMatchObject({
+      approved: true,
+      live: true,
     })
   })
 
@@ -209,5 +228,38 @@ describe('a Google Play review state', () => {
 
   test("fails when production has no release with the candidate's build", () => {
     expect(playReview([release('IN_REVIEW', 1150104)], '1150103').status).toBe('failure')
+  })
+})
+
+describe('a version one store released before the other approved it', () => {
+  test('stays on the App Store with its build when a later candidate is submitted', () => {
+    const live = version('1.15.1', 'READY_FOR_DISTRIBUTION', 'b3')
+    expect(planAppStore([live], '1.15.1', 'b4')).toEqual({
+      kind: 'done',
+      reason: "1.15.1 is already released with an earlier candidate's build, which stays",
+    })
+    expect(planAppStoreRelease([live], '1.15.1', 'b4')).toEqual({
+      kind: 'done',
+      reason: '1.15.1 is already READY_FOR_DISTRIBUTION',
+    })
+    expect(appStoreReview([live], '1.15.1', 'b4')).toEqual({
+      label: "Released with an earlier candidate's build",
+      status: 'success',
+      approved: true,
+      live: true,
+    })
+  })
+
+  test('is live on Google Play when production published it with another build', () => {
+    const published = {
+      releaseName: '1.15.1',
+      activeArtifacts: [{ versionCode: 1150103 }],
+      releaseLifecycleState: 'RELEASE_LIFECYCLE_STATE_PUBLISHED',
+    }
+    expect(playAlreadyLive([published], '1.15.1', '1150104')).toBe(true)
+    expect(playAlreadyLive([published], '1.15.1', '1150103')).toBe(false)
+    expect(playAlreadyLive([published], '1.15.2', '1150200')).toBe(false)
+    const inReview = { ...published, releaseLifecycleState: 'RELEASE_LIFECYCLE_STATE_IN_REVIEW' }
+    expect(playAlreadyLive([inReview], '1.15.1', '1150104')).toBe(false)
   })
 })

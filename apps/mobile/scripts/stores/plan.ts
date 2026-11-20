@@ -50,6 +50,10 @@ const REVIEWING = new Set(['WAITING_FOR_REVIEW', 'IN_REVIEW'])
 
 const APPROVED = new Set(['ACCEPTED', 'PENDING_DEVELOPER_RELEASE', 'PENDING_APPLE_RELEASE'])
 
+// Released, or being released. A version here is on sale or about to be, and
+// Apple takes no other build for it.
+const RELEASED = new Set([...LIVE, 'PROCESSING_FOR_DISTRIBUTION', 'PENDING_APPLE_RELEASE'])
+
 // Apple allows one version in progress at a time, so an older one that is not
 // yet live keeps a new one from being created or submitted.
 const IN_PROGRESS = new Set([...EDITABLE, ...SUBMITTED].filter((s) => !LIVE.has(s)))
@@ -71,10 +75,18 @@ export function planAppStore(
       return { kind: 'done', reason: `${versionString} is already ${target.state}` }
     }
     if (REVIEWING.has(target.state)) return { kind: 'replace', versionId: target.id }
+    // After the other store rejected the version, its fix goes to that store
+    // alone: users here already have the version, with an earlier build.
+    if (RELEASED.has(target.state)) {
+      return {
+        kind: 'done',
+        reason: `${versionString} is already released with an earlier candidate's build, which stays`,
+      }
+    }
     return {
       kind: 'blocked',
       reason: APPROVED.has(target.state)
-        ? `${versionString} is approved with another build, and the API can't change it. Reject that build in App Store Connect, then run this again`
+        ? `${versionString} is approved and held for release with another build, and the API can't change it. Reject that build in App Store Connect, then run this again`
         : `${versionString} is ${target.state} with another build`,
     }
   }
@@ -121,10 +133,13 @@ export function planGooglePlay(releases: PlayRelease[], versionCode: string): Pl
 export type StoreReview = {
   label: string
   status: 'pending' | 'success' | 'failure'
+  /** The store approved the build. */
   approved: boolean
+  /** The build is out to the store's users, or on its way out. */
+  live: boolean
 }
 
-const REVIEW_LABELS: Record<string, Omit<StoreReview, 'approved'>> = {
+const REVIEW_LABELS: Record<string, Omit<StoreReview, 'approved' | 'live'>> = {
   PREPARE_FOR_SUBMISSION: { label: 'Not submitted yet', status: 'pending' },
   READY_FOR_REVIEW: { label: 'Not submitted yet', status: 'pending' },
   WAITING_FOR_EXPORT_COMPLIANCE: { label: 'Waiting for export compliance', status: 'pending' },
@@ -141,36 +156,48 @@ const REVIEW_LABELS: Record<string, Omit<StoreReview, 'approved'>> = {
 
 /**
  * The review state of `versionString` with `buildId`. Only the state's name is
- * read, so nothing a reviewer wrote reaches the public PR.
+ * read, so nothing a reviewer wrote reaches the public PR. A version set to
+ * manual release in App Store Connect is approved but not live until someone
+ * releases it, there or by merging the final PR.
  */
 export function appStoreReview(
   versions: AppStoreVersion[],
   versionString: string,
   buildId: string,
 ): StoreReview {
+  const no = { approved: false, live: false }
   const target = versions.find((v) => v.versionString === versionString)
   if (!target) {
-    return {
-      label: 'Not on the App Store. Run Finalize Release',
-      status: 'failure',
-      approved: false,
-    }
+    return { label: 'Not on the App Store. Run Finalize Release', status: 'failure', ...no }
   }
+  const released = RELEASED.has(target.state)
   if (target.buildId !== null && target.buildId !== buildId) {
-    return {
-      label: 'Has another build. Run Finalize Release for this candidate',
-      status: 'failure',
-      approved: false,
-    }
+    return released
+      ? {
+          label: "Released with an earlier candidate's build",
+          status: 'success',
+          approved: true,
+          live: true,
+        }
+      : {
+          label: 'Has another build. Run Finalize Release for this candidate',
+          status: 'failure',
+          ...no,
+        }
   }
-  if (APPROVED.has(target.state)) return { label: 'Approved', status: 'success', approved: true }
-  if (LIVE.has(target.state) || target.state === 'PROCESSING_FOR_DISTRIBUTION') {
-    return { label: 'Released', status: 'success', approved: true }
+  if (released) return { label: 'Released', status: 'success', approved: true, live: true }
+  if (APPROVED.has(target.state)) {
+    return {
+      label: 'Approved and held for release. Release it in App Store Connect, or merge this PR',
+      status: 'success',
+      approved: true,
+      live: false,
+    }
   }
   const known = REVIEW_LABELS[target.state]
   return known
-    ? { ...known, approved: false }
-    : { label: `In state ${target.state}`, status: 'pending', approved: false }
+    ? { ...known, ...no }
+    : { label: `In state ${target.state}`, status: 'pending', ...no }
 }
 
 export type AppStoreReleasePlan =
@@ -186,18 +213,16 @@ export function planAppStoreRelease(
 ): AppStoreReleasePlan {
   const target = versions.find((v) => v.versionString === versionString)
   if (!target) return { kind: 'blocked', reason: `the App Store has no ${versionString}` }
+  // Checked before the build: a version Apple released with an earlier
+  // candidate's build, before the other store rejected it, stays that way.
+  if (RELEASED.has(target.state)) {
+    return { kind: 'done', reason: `${versionString} is already ${target.state}` }
+  }
   if (target.buildId !== buildId) {
     return { kind: 'blocked', reason: `${versionString} has another build than the candidate's` }
   }
   if (target.state === 'PENDING_DEVELOPER_RELEASE') {
     return { kind: 'release', versionId: target.id }
-  }
-  if (
-    LIVE.has(target.state) ||
-    target.state === 'PROCESSING_FOR_DISTRIBUTION' ||
-    target.state === 'PENDING_APPLE_RELEASE'
-  ) {
-    return { kind: 'done', reason: `${versionString} is already ${target.state}` }
   }
   return { kind: 'blocked', reason: `${versionString} is ${target.state}, not approved yet` }
 }
@@ -209,7 +234,7 @@ export type PlayReleaseSummary = {
   releaseLifecycleState?: string
 }
 
-const PLAY_LABELS: Record<string, Omit<StoreReview, 'approved'>> = {
+const PLAY_LABELS: Record<string, Omit<StoreReview, 'approved' | 'live'>> = {
   RELEASE_LIFECYCLE_STATE_DRAFT: { label: 'Draft, not sent for review', status: 'pending' },
   RELEASE_LIFECYCLE_STATE_NOT_SENT_FOR_REVIEW: { label: 'Not sent for review', status: 'pending' },
   RELEASE_LIFECYCLE_STATE_IN_REVIEW: { label: 'In review', status: 'pending' },
@@ -217,34 +242,54 @@ const PLAY_LABELS: Record<string, Omit<StoreReview, 'approved'>> = {
 }
 
 /**
- * The review state of the production release holding `versionCode`. An
- * approved release waits under managed publishing for someone to publish it
+ * The review state of the production release holding `versionCode`. With
+ * managed publishing on, an approved release waits for someone to publish it
  * in Play Console, since the API has no call that publishes it.
  */
 export function playReview(releases: PlayReleaseSummary[], versionCode: string): StoreReview {
+  const no = { approved: false, live: false }
   const release = releases.find((r) =>
     (r.activeArtifacts ?? []).some((a) => String(a.versionCode) === versionCode),
   )
   if (!release) {
-    return {
-      label: 'Not on the production track. Run Finalize Release',
-      status: 'failure',
-      approved: false,
-    }
+    return { label: 'Not on the production track. Run Finalize Release', status: 'failure', ...no }
   }
   const state = release.releaseLifecycleState ?? 'RELEASE_LIFECYCLE_STATE_UNSPECIFIED'
   if (state === 'RELEASE_LIFECYCLE_STATE_APPROVED_NOT_PUBLISHED') {
-    return { label: 'Approved, publish it in Play Console', status: 'success', approved: true }
+    return {
+      label: 'Approved and held by managed publishing. Publish it in Play Console',
+      status: 'success',
+      approved: true,
+      live: false,
+    }
   }
   if (state === 'RELEASE_LIFECYCLE_STATE_PUBLISHED') {
-    return { label: 'Published', status: 'success', approved: true }
+    return { label: 'Published', status: 'success', approved: true, live: true }
   }
   const known = PLAY_LABELS[state]
   return known
-    ? { ...known, approved: false }
+    ? { ...known, ...no }
     : {
         label: `In state ${state.replace('RELEASE_LIFECYCLE_STATE_', '')}`,
         status: 'pending',
-        approved: false,
+        ...no,
       }
+}
+
+/**
+ * Whether production already published `version` with another build, as when
+ * Google approved it before the App Store rejected it. Its users then get the
+ * fix as an update of a version they have, so its notes are generic.
+ */
+export function playAlreadyLive(
+  releases: PlayReleaseSummary[],
+  version: string,
+  versionCode: string,
+): boolean {
+  return releases.some(
+    (r) =>
+      r.releaseName === version &&
+      r.releaseLifecycleState === 'RELEASE_LIFECYCLE_STATE_PUBLISHED' &&
+      !(r.activeArtifacts ?? []).some((a) => String(a.versionCode) === versionCode),
+  )
 }
