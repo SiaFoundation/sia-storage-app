@@ -282,8 +282,11 @@ The description is one line in the present tense, for whoever reads the changelo
 packages (`mobile`, `web`, `desktop`, `cli`) cover user-facing changes only, in the words
 a user would use for what they now see or can do. Library packages (`core`, `logger`)
 cover any API or behavior change, in the words a caller needs to act on it. One changeset
-may name several packages; never bullet-list one line per package. In a stack, only the
-final PR's changeset carries `Closes`.
+may name several packages of one release train; never bullet-list one line per package.
+The trains are `mobile`, `desktop`, and `packages` (`cli`, `core`, `logger`, `web`), and
+each releases on its own, so a change that reaches two of them gets a changeset for each.
+`RELEASING.md` describes the trains. In a stack, only the final PR's changeset carries
+`Closes`.
 
 ## Prose and comments
 

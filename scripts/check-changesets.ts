@@ -16,6 +16,7 @@
 import { readFileSync, readdirSync } from 'fs'
 import { join } from 'path'
 import { APPS, APP_NAMES, parsePlatforms } from '../apps/mobile/scripts/releaseNotes'
+import { changesetTrain, trainOf } from './release-trains'
 
 const bumps = new Set(['patch', 'minor', 'major'])
 const kebabFileName = /^[a-z0-9]+(?:-[a-z0-9]+)*\.md$/
@@ -100,6 +101,12 @@ function validate(fileName: string, content: string, packages: string[]): string
     }
   }
   if (platforms !== null) problems.push(...platformProblems(platforms, named))
+  // Each train runs knope with only its own changesets in the tree, and a
+  // stable release deletes the files it consumes, so a changeset naming two
+  // trains would vanish from the train that releases second.
+  const known = named.filter((name) => packages.includes(name))
+  const train = known.length > 0 ? changesetTrain(known) : null
+  if (typeof train === 'string') problems.push(train)
 
   const summary = lines
     .slice(close + 1)
@@ -121,6 +128,13 @@ try {
 }
 
 const packages = knopePackages()
+const untrained = packages.filter((name) => !trainOf(name))
+if (untrained.length > 0) {
+  console.error(
+    `knope.toml declares ${untrained.join(', ')}, which no release train in scripts/release-trains.ts releases`,
+  )
+  process.exit(1)
+}
 let failed = 0
 for (const fileName of fileNames) {
   const problems = validate(fileName, readFileSync(join('.changeset', fileName), 'utf-8'), packages)

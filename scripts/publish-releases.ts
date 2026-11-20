@@ -31,6 +31,13 @@ import { execFileSync } from 'child_process'
 import { readFileSync, unlinkSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import {
+  GATED,
+  candidateFile,
+  parseCandidateTag,
+  releaseBranch,
+  trainNamed,
+} from './release-trains'
 
 const RC_SUFFIX = /-rc\.\d+$/
 
@@ -45,9 +52,6 @@ const ASSET_WORKFLOWS: Record<string, { file: string; inputs: (tag: string) => s
     inputs: (tag) => ['tag=' + tag, 'upload_to_latest_release=true'],
   },
 }
-
-// Written by a graduating cut (see prepare-release.ts) and read back here.
-const CANDIDATE_FILE = '.release-candidate'
 
 type Package = { name: string; versionedFile: string; changelog: string }
 
@@ -237,10 +241,16 @@ function withNotes(body: string, use: (notesFile: string) => void): void {
 function resolveInputs(): { ref: string; mode: 'publish' | 'promote' } {
   const explicitRef = process.env.PUBLISH_REF
   if (explicitRef) {
-    return {
-      ref: explicitRef,
-      mode: process.env.PUBLISH_MODE === 'promote' ? 'promote' : 'publish',
+    const mode = process.env.PUBLISH_MODE === 'promote' ? 'promote' : 'publish'
+    // A final's merge commit is main's tip, not the candidate users got, so
+    // publishing it would tag untested source.
+    const final = GATED.find(({ app }) => changedIn(explicitRef, candidateFile(app)))
+    if (mode === 'publish' && final) {
+      throw new Error(
+        `${explicitRef} is a ${final.app} final release. Run promote with its candidate tag, the one in ${candidateFile(final.app)}`,
+      )
     }
+    return { ref: explicitRef, mode }
   }
 
   const mergeCommit = process.env.MERGE_COMMIT_SHA
@@ -248,26 +258,39 @@ function resolveInputs(): { ref: string; mode: 'publish' | 'promote' } {
     throw new Error('set PUBLISH_REF, or MERGE_COMMIT_SHA when running from a merged release PR')
   }
 
-  // Two signals, because the title is editable by hand and mistaking a
+  // Three signals, because the title is editable by hand and mistaking a
   // graduation for an ordinary cut would tag main's tip, the bug this exists to
-  // prevent. Recording the candidate is the other half: a graduation always
-  // writes it, and only an identical re-graduation leaves it unchanged.
+  // prevent. Recording the candidate is the last: a graduation always writes
+  // it, and only an identical re-graduation leaves it unchanged.
+  const branch = releaseBranch(process.env.HEAD_REF ?? '')
+  const app = branch?.train.app ?? null
+  const file = app && candidateFile(app)
   const graduation =
-    (process.env.PR_TITLE ?? '').includes('(final)') || changedIn(mergeCommit, CANDIDATE_FILE)
+    branch?.final === true ||
+    (process.env.PR_TITLE ?? '').includes('(final)') ||
+    (file !== null && changedIn(mergeCommit, file))
   if (!graduation) {
     return { ref: mergeCommit, mode: 'publish' }
   }
 
   // A finalize cut records which candidate it graduated, so the commit to tag
   // survives the rebase that rewrites the release commit onto main.
-  const candidate = fileAt(mergeCommit, CANDIDATE_FILE)?.trim()
+  const candidate = file && fileAt(mergeCommit, file)?.trim()
   if (!candidate) {
-    throw new Error(`${CANDIDATE_FILE} is missing at ${mergeCommit}; re-run with PUBLISH_REF set`)
+    throw new Error(`no candidate is recorded at ${mergeCommit}, re-run with PUBLISH_REF set`)
   }
   return { ref: candidate, mode: 'promote' }
 }
 
 const { ref, mode } = resolveInputs()
+// The packages a promotion graduates: those of the train its candidate is from.
+function promotedPackages(): readonly string[] {
+  if (mode !== 'promote') return []
+  const train = releaseBranch(process.env.HEAD_REF ?? '')?.train.name ?? parseCandidateTag(ref)?.app
+  if (!train) throw new Error(`promote needs a candidate tag as PUBLISH_REF, got ${ref}`)
+  return trainNamed(train).packages
+}
+const promoting = promotedPackages()
 let target: string
 try {
   target = git(['rev-parse', `${ref}^{commit}`])
@@ -288,9 +311,11 @@ function releaseFor({ name, versionedFile, changelog }: Package): Release | null
   if (!manifest) return null
   const version: string = JSON.parse(manifest).version
 
-  // Promoting graduates only what the gate held back. A package the cut released
-  // outright already carries its stable tag from the publish that merged it.
-  if (mode === 'promote' && !RC_SUFFIX.test(version)) return null
+  // Promoting graduates only what the gate held back, and only the app's own
+  // package: a candidate cut before the apps had separate trains carries every
+  // package's candidate version. A package the cut released outright already
+  // carries its stable tag from the publish that merged it.
+  if (mode === 'promote' && (!RC_SUFFIX.test(version) || !promoting.includes(name))) return null
   const tagVersion = mode === 'promote' ? version.replace(RC_SUFFIX, '') : version
 
   const entry = latestEntry(fileAt(ref, changelog) ?? '')

@@ -65,7 +65,7 @@ apps. Knope skips the line, and `bun run check-changesets` checks it.
 
 What people testing a release candidate read: TestFlight and Google Play internal testing for
 the mobile app, and the beta desktop app. They know the app well and want to know what to try.
-Each app in the round gets its own lists, from its own changelog.
+Each app has its own `testing.json` in its `release-notes` folder, written from its own changelog.
 
 - **Since the last candidate:** two to four items on what changed since the previous
   candidate, such as the fix for a problem found in it. A feature the previous candidate

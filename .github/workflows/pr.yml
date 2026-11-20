@@ -26,7 +26,7 @@ jobs:
       - run: bun run check-changesets
       - run: bun run check-release-notes
         env:
-          RELEASE_PR: ${{ github.head_ref == 'release' }}
+          RELEASE_BRANCH: ${{ github.head_ref }}
 
   knip:
     runs-on: ubuntu-latest
@@ -204,10 +204,12 @@ jobs:
           retention-days: 7
 
   # Each platform the apps run on has a sim/<platform> status: ios, android
-  # and macos. On the release PR this job leaves them pending until sim.yml
-  # on a PR labelled sim, or `bun sim attest <platform>`, posts a result for
-  # that commit. On any other PR it posts them as passed, so a rule requiring
-  # them holds back only the release PR.
+  # and macos. On a candidate PR this job leaves its app's pending, ios and
+  # android on release/mobile and macos on release/desktop, until sim.yml on a
+  # PR labelled sim, or `bun sim attest <platform>`, posts a result for that
+  # commit. On any other PR it posts them as passed, so a rule requiring them
+  # holds back only the candidate PRs. A final PR releases a candidate already
+  # tested, so it needs none.
   sim-status:
     runs-on: ubuntu-latest
     # A fork's token cannot post statuses, so a fork PR gets none from here.
@@ -222,15 +224,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          RELEASE: ${{ github.head_ref == 'release' }}
+          HEAD_REF: ${{ github.head_ref }}
         run: |
+          case "$HEAD_REF" in
+            release/mobile) required="ios android" ;;
+            release/desktop) required="macos" ;;
+            *) required="" ;;
+          esac
           # A status already on this commit stays, other than the placeholder
           # below, so reopening the release PR or running this workflow again
           # does not put a posted result back to pending.
           posted=$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/status" \
             --jq '.statuses[] | select(.description != "Not required for this PR") | .context')
           for platform in ios android macos; do
-            if [ "$RELEASE" = true ]; then
+            if [[ " $required " == *" $platform "* ]]; then
               grep -qx "sim/$platform" <<< "$posted" && continue
               state=pending description="Waiting for a sim run: add the sim label or run bun sim attest $platform"
             else

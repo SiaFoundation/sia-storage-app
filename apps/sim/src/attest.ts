@@ -2,8 +2,8 @@
  * What `sim attest` posts: the suite each platform runs, the counts read back
  * from the summary line `sim run` prints last, and the commit status built
  * from them. Each platform the apps run on has one status, `sim/<platform>`.
- * pr.yml leaves them pending on the release PR until a run posts a result
- * for its head commit.
+ * pr.yml leaves an app's pending on its candidate PR until a run posts a
+ * result for its head commit.
  */
 import type { Progress } from './report'
 

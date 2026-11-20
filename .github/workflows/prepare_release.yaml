@@ -1,30 +1,28 @@
-# Creates/updates a release PR on every push to main.
-# The PR bumps package.json version and updates CHANGELOG.md based on changesets.
-#
-# Trains carrying mobile or desktop changes are versioned X.Y.Z-rc.N (see
-# scripts/prepare-release.ts); once a candidate has been tested, the Finalize
-# Release workflow regenerates the PR as the final stable release. A mobile
-# candidate's release commit also carries its release notes, which
-# prepare-release.ts writes with Copilot (apps/mobile/scripts/writeReleaseNotes.ts).
+# Builds each release train's PR from main: release/mobile and release/desktop
+# for candidates (X.Y.Z-rc.N), release/packages for the CLI and libraries, and
+# rebuilds an open final PR that main has moved under. Runs on every push to
+# main, and Publish Release runs it after every release so the other release
+# PRs are rebuilt against it. A candidate's release commit also carries its
+# release notes, which prepare-release.ts writes with Copilot
+# (apps/mobile/scripts/writeReleaseNotes.ts). RELEASING.md has the whole flow.
 name: Prepare Release
 
 on:
   push:
     branches: [main]
-  # Regenerating on demand is the way back after closing a final cut: the guard
-  # in prepare-release.ts clears when that PR closes, but the release branch
-  # still holds the graduation until a run overwrites it.
   workflow_dispatch:
 
 jobs:
   prepare-release:
+    # A release PR's own merge is skipped: the candidate tags this reads don't
+    # exist until Publish Release has run, and Publish Release runs this after.
     # Matches the subject only. head_commit.message carries the body too, so
     # contains() skipped this job for any commit that merely quoted a release
     # subject while explaining something. A dispatch has no head_commit, so it is
     # allowed explicitly rather than relying on coercion of a missing value.
     if: "${{ github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'chore: release') }}"
     # Shared with the other release workflows: two pushes in quick succession
-    # would otherwise race to force-push the release branch, and a prepare must
+    # would otherwise race to force-push the release branches, and a prepare must
     # not run while a publish is mid-flight and versions disagree with tags.
     # Set on the job rather than the workflow so the run a release PR's own
     # merge starts, which the `if` skips, never joins the group. A group holds
@@ -36,7 +34,7 @@ jobs:
     permissions:
       contents: read
       # Lets the workflow token call Copilot, billed to the organization, for
-      # the mobile release notes.
+      # the mobile and desktop release notes.
       copilot-requests: write
     runs-on: ubuntu-latest
     steps:

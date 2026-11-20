@@ -5,11 +5,13 @@
 # tag while main has moved on, so HEAD-tagging would put the stable tag on work
 # that never shipped; release-cli.yml then builds whatever the tag points at.
 #
-# The merged PR's title says which kind of cut it is, and a final cut carries a
-# committed .release-candidate naming the commit to tag, so nothing depends on
-# state that disappears when the release commit is rebased onto main. Re-run any
-# failed publish from the dispatch below with the same ref: publish-releases.ts
-# converges rather than duplicating.
+# The merged PR's branch and title say which kind of cut it is, and a final cut
+# carries a committed apps/<app>/.release-candidate naming the commit to tag,
+# so nothing depends on state that disappears when the release commit is
+# rebased onto main. Re-run any failed publish from the dispatch below with the
+# same ref: publish-releases.ts converges rather than duplicating. After
+# publishing, it runs Prepare Release, which rebuilds the other release PRs
+# against the new main.
 name: Publish Release
 
 on:
@@ -44,7 +46,7 @@ concurrency:
 
 jobs:
   publish:
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.head_ref == 'release' && github.event.pull_request.merged == true) }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (startsWith(github.head_ref, 'release/') && github.event.pull_request.merged == true) }}
     runs-on: ubuntu-latest
     # actions: write lets the workflow's own token start the desktop and CLI
     # builds, which attach their files to a draft and then publish it.
@@ -78,4 +80,12 @@ jobs:
           PUBLISH_MODE: ${{ inputs.mode }}
           DRY_RUN: ${{ inputs.dry_run }}
           PR_TITLE: ${{ github.event.pull_request.title }}
+          HEAD_REF: ${{ github.head_ref }}
           MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+
+      # Waits behind this run in the release-train group.
+      - name: Rebuild the other release PRs
+        if: ${{ inputs.dry_run != true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run prepare_release.yaml --ref main

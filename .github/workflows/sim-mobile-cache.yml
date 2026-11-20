@@ -5,7 +5,7 @@ name: Sim (mobile) cache
 # the same keys. A push that arrives while one builds cancels it, so a hash
 # main passes straight through is never built. A PR can restore caches saved
 # on its base branch and on the default branch, but never ones saved by
-# another PR, so a build cached here is the one every PR, the release PR
+# another PR, so a build cached here is the one every PR, the release PRs
 # included, starts from instead of spending its run on a native build.
 
 permissions:

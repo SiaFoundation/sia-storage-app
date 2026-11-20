@@ -167,14 +167,14 @@ jobs:
             -f state="$STATE" -f context=sim/android -f description="${description:0:139}" \
             -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > /dev/null
       # A cancelled run leaves its last pending status on the commit. On a PR
-      # other than the release PR that would block a merge nothing requires, so
+      # other than its candidate PR that would block a merge nothing requires, so
       # the status goes back to what the PR workflow posts.
       - if: cancelled() && github.event_name == 'pull_request'
         name: Restore sim/android after a cancel
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.pull_request.head.sha }}
-          RELEASE: ${{ github.head_ref == 'release' }}
+          RELEASE: ${{ github.head_ref == 'release/mobile' }}
         run: |
           if [ "$RELEASE" = true ]; then
             state=pending description='Waiting for a sim run: the labelled run was cancelled or timed out'

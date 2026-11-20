@@ -1,32 +1,82 @@
-# The manual step of a mobile or desktop release: run once the chosen release
-# candidate has been tested in TestFlight, Play internal testing and the beta
-# desktop app. Regenerates the release PR as the stable version (X.Y.Z-rc.N
-# becomes X.Y.Z) and records which candidate it graduated. Merging it
-# brings main's versions and changelogs forward, and Publish Release then tags
-# the candidate's own commit, so the stable tag names the source that shipped
-# rather than main's tip. That tag submits the candidate's mobile build to App
-# Store and Google Play review (release-stores.yml). Safe to run after newer changes have merged: it
-# finalizes from the shipped candidate's tag, and the newer work starts the next
-# train. While the PR it opens is unmerged, Prepare Release leaves the release
-# branch alone, so a push to main can no longer replace the graduation with an rc.
-# Gated apps promote together: every app ships the same cut before finalizing.
+# The manual step of a mobile or desktop release: run it with the app once one
+# of its candidates has been tested.
+#
+# Mobile: submits the candidate's build to App Store and Google Play review
+# with the What's New it carries (release-stores.yml), then opens the final PR
+# as a draft. Store Review marks it ready once Apple approves.
+#
+# Desktop: opens the final PR.
+#
+# Merging a final PR tags X.Y.Z on the candidate's commit (Publish Release).
+# Run this again after a fixed candidate merges, and the stores and the final
+# PR take the new one. RELEASING.md has the whole flow.
 name: Finalize Release
 
 on:
   workflow_dispatch:
     inputs:
+      app:
+        description: 'App to finalize'
+        required: true
+        type: choice
+        options: [mobile, desktop]
       candidate:
-        description: "Tag of the cut that shipped, named by any gated app's tag (e.g. mobile/v1.14.0-rc.3); defaults to the latest cut"
+        description: 'Candidate tag (e.g. mobile/v1.15.1-rc.3). Defaults to the newest one on main'
         required: false
         type: string
 
-concurrency:
-  group: release-train
-  cancel-in-progress: false
+permissions:
+  contents: read
 
 jobs:
-  finalize-release:
+  candidate:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Resolve the candidate
+        id: tag
+        env:
+          APP: ${{ inputs.app }}
+          NAMED: ${{ inputs.candidate }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -n "$NAMED" ]; then
+            tag="$NAMED"
+          else
+            version=$(gh api "repos/$GITHUB_REPOSITORY/contents/apps/$APP/package.json?ref=main" --jq '.content' | base64 -d | jq -r .version)
+            tag="$APP/v$version"
+          fi
+          if ! [[ "$tag" =~ ^$APP/v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
+            echo "$tag is not a $APP candidate. Name one, such as $APP/v1.2.3-rc.0" >&2
+            exit 1
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" > /dev/null
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "finalizing $tag"
+
+  submit:
+    needs: candidate
+    if: ${{ inputs.app == 'mobile' }}
+    uses: ./.github/workflows/release-stores.yml
+    with:
+      candidate: ${{ needs.candidate.outputs.tag }}
+    secrets:
+      APP_STORE_CONNECT_API_KEY_JSON: ${{ secrets.APP_STORE_CONNECT_API_KEY_JSON }}
+      GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_KEY_JSON }}
+
+  final-pr:
+    needs: [candidate, submit]
+    # Runs after a successful submission, or straight away for desktop.
+    if: ${{ !cancelled() && needs.candidate.result == 'success' && (needs.submit.result == 'success' || needs.submit.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-train
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      # The run also rebuilds the candidate PRs, whose notes Copilot writes.
+      copilot-requests: write
     steps:
       # An app token: pushes made with GITHUB_TOKEN don't trigger workflows,
       # so the release PR's checks never run and it can't merge.
@@ -41,8 +91,9 @@ jobs:
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          ref: main
           fetch-depth: 0
-          # prepare-release.ts force-pushes the release branch later in the
+          # prepare-release.ts force-pushes the release branches later in the
           # run, using the credentials that checkout saves here.
           token: ${{ steps.bot-token.outputs.token }}
 
@@ -59,9 +110,11 @@ jobs:
         with:
           version: 0.22.2
 
-      - name: Prepare Final Release
+      - name: Open the final PR
         run: bun scripts/prepare-release.ts
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
+          COPILOT_GITHUB_TOKEN: ${{ github.token }}
           RELEASE_MODE: final
-          SHIPPED_CANDIDATE: ${{ inputs.candidate }}
+          RELEASE_APP: ${{ inputs.app }}
+          SHIPPED_CANDIDATE: ${{ needs.candidate.outputs.tag }}

@@ -158,11 +158,8 @@ describe("What's New", () => {
   test('the checked-in files are valid', () => {
     expect(readWhatsNew('mobile').length).toBeGreaterThan(0)
     expect(() => readWhatsNew('desktop')).not.toThrow()
-  })
-
-  test("a tree from before an app had a What's New file reads as no entries", () => {
-    expect(readWhatsNew('desktop', '/nonexistent/whats-new.json')).toEqual([])
-    expect(() => readTesting()).not.toThrow()
+    expect(() => readTesting('mobile')).not.toThrow()
+    expect(() => readTesting('desktop')).not.toThrow()
   })
 })
 
@@ -242,22 +239,22 @@ describe('tester notes', () => {
   })
 
   test('notes left from an earlier candidate are not used for the next one', () => {
-    expect(notesFor({ mobile: testing }, 'mobile', '1.16.0-rc.1')).toBe(testing)
-    expect(notesFor({ mobile: testing }, 'mobile', '1.16.0-rc.2')).toBeNull()
-    expect(notesFor({ mobile: testing }, 'desktop', '0.0.3-rc.0')).toBeNull()
+    expect(notesFor(testing, '1.16.0-rc.1')).toBe(testing)
+    expect(notesFor(testing, '1.16.0-rc.2')).toBeNull()
   })
 
   test('a desktop item for a platform the desktop release does not build is refused', () => {
     const desktop = { ...testing, version: '0.0.3-rc.0', sinceCandidate: null }
     expect(() =>
-      parseTesting({
-        desktop: {
+      parseTesting(
+        {
           ...desktop,
           sinceRelease: { from: null, items: [{ text: 'x', platforms: ['windows'] }] },
         },
-      }),
+        'desktop',
+      ),
     ).toThrow('needs platforms from macos')
-    expect(() => parseTesting({ web: desktop })).toThrow('unknown apps web')
+    expect(() => parseTesting({ ...desktop, app: 'web' }, 'desktop')).toThrow('unknown fields')
   })
 })
 

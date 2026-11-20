@@ -192,14 +192,14 @@ jobs:
             -f state="$STATE" -f context=sim/macos -f description="${description:0:139}" \
             -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > /dev/null
       # A cancelled run leaves its last pending status on the commit. Only the
-      # release PR requires one, so on any other the status goes back to what
-      # pr.yml posts.
+      # desktop candidate PR requires one, so on any other the status goes
+      # back to what pr.yml posts.
       - if: cancelled() && github.event_name == 'pull_request'
         name: Restore sim/macos after a cancel
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.pull_request.head.sha }}
-          RELEASE: ${{ github.head_ref == 'release' }}
+          RELEASE: ${{ github.head_ref == 'release/desktop' }}
         run: |
           if [ "$RELEASE" = true ]; then
             state=pending description='Waiting for a sim run: the labelled run was cancelled or timed out'

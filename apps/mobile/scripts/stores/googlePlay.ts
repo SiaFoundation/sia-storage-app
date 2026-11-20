@@ -32,7 +32,9 @@ export async function submitToGooglePlay(s: GooglePlaySubmission): Promise<void>
       body: body === undefined ? undefined : JSON.stringify(body),
     })
     if (!response.ok) {
-      throw new Error(`Google Play ${method} ${path} failed with HTTP ${response.status}`)
+      // The edit's id is left out, since workflow logs in a public repo are public.
+      const shape = path.replace(/^\/[^/:]+/, '/{edit}')
+      throw new Error(`Google Play ${method} edits${shape} failed with HTTP ${response.status}`)
     }
     return (response.status === 204 ? {} : await response.json()) as T
   }
