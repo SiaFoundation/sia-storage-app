@@ -32,7 +32,26 @@ function gh(...args: string[]): string {
   return execFileSync('gh', args, { encoding: 'utf-8' }).trim()
 }
 
-type FinalPr = { number: number; body: string; headRefOid: string; isDraft: boolean }
+/**
+ * Runs gh as the release bot. GITHUB_TOKEN can edit the PR and post statuses
+ * but GitHub refuses it for marking a PR ready or back to draft, and only a
+ * merge by the bot starts Publish Release and may pass main's review rule.
+ */
+function bot(...args: string[]) {
+  const token = process.env.BOT_TOKEN
+  if (!token) throw new Error('BOT_TOKEN is not set')
+  return spawnSync('gh', args, {
+    encoding: 'utf-8',
+    env: { ...process.env, GH_TOKEN: token },
+  })
+}
+
+type FinalPr = {
+  number: number
+  body: string
+  headRefOid: string
+  isDraft: boolean
+}
 
 function openFinal(): FinalPr | null {
   const list = JSON.parse(
@@ -134,32 +153,28 @@ async function main(): Promise<void> {
   // Back to draft too, as when an approved build is rejected later, so the PR
   // can merge only while both stores approve this candidate.
   const approved = apple.approved && google.approved
-  if (approved && pr.isDraft) gh('pr', 'ready', String(pr.number))
-  if (!approved && !pr.isDraft) gh('pr', 'ready', String(pr.number), '--undo')
+  if (approved && pr.isDraft) ready(pr.number, [])
+  if (!approved && !pr.isDraft) ready(pr.number, ['--undo'])
   // A store holding an approved build keeps the PR open, as the reminder that
   // it still has to be released there.
   if (apple.live && google.live) merge(pr.number, pr.headRefOid)
+}
+
+export function ready(pr: number, flags: string[]): void {
+  const run = bot('pr', 'ready', String(pr), ...flags)
+  if (run.status !== 0)
+    throw new Error(`gh pr ready ${flags.join(' ')} failed: ${run.stderr.trim()}`)
 }
 
 /**
  * Merges the final PR at `head`, the commit whose candidate the stores were
  * read for, which tags the release. GitHub refuses the merge if Finalize
  * Release has since replaced the PR with another candidate, and the next run
- * reads the stores again. It needs the release bot's token, since only a
- * merge by the bot starts Publish Release and the bot may merge past main's
- * review rule. A merge GitHub refuses leaves the PR ready for someone to merge.
+ * reads the stores again. A merge GitHub refuses leaves the PR ready for
+ * someone to merge.
  */
 function merge(pr: number, head: string): void {
-  const token = process.env.BOT_TOKEN
-  if (!token) {
-    console.log(`#${pr} is ready, and merges once BOT_TOKEN is set`)
-    return
-  }
-  const run = spawnSync(
-    'gh',
-    ['pr', 'merge', String(pr), '--rebase', '--match-head-commit', head],
-    { encoding: 'utf-8', env: { ...process.env, GH_TOKEN: token } },
-  )
+  const run = bot('pr', 'merge', String(pr), '--rebase', '--match-head-commit', head)
   if (run.status === 0) console.log(`merged #${pr}`)
   else
     console.log(`::warning::#${pr} is ready but didn't merge: ${run.stderr.trim().split('\n')[0]}`)
