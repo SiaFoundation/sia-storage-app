@@ -360,6 +360,7 @@ bun sim device expect phone --label Menu
   `desktop/finder-rename-and-delete-reach-peer`, `desktop/file-types`,
   `desktop/finder-save-types`, `desktop/finder-save-unicode-names`,
   `desktop/finder-folder-stays-online-when-the-app-reopens`,
+  `desktop/finder-folder-comes-back-after-the-service-restarts`,
   `finder/concurrent-opens`, `finder/stale-base-save`,
   `finder/edit-against-remote-trash`, `finder/offline-edit-not-stranded`,
   `finder/rename-and-edit-elsewhere`, `finder/same-name-create`,
@@ -373,6 +374,12 @@ bun sim device expect phone --label Menu
   Finder shows for a file, `download` reads a cloud-only file through Finder,
   and `show` opens the folder in Finder. Only desktop devices run the Swift
   extension, Finder and macOS's File Provider framework.
+- Online: the extension disconnects the folder, and Finder shows "Sia Storage
+  isn't running" at its top, once nothing has listened on the provider socket
+  for five seconds. A slow reply does not count. A desktop device's
+  `folderDisconnected()` reads the state from `fileproviderctl`, which keeps it
+  after the system has ended the extension, and `pauseApp()` with
+  `killDaemon()` keeps the daemon down long enough to cross that line.
 
 ### The desktop app's windows
 

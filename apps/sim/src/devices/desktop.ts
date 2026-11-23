@@ -32,7 +32,8 @@ import { basename, dirname, join } from 'node:path'
 import { sendIpcCommand } from '@siastorage/node-adapters/ipc'
 import { allowDatalessDownloads } from '../dataless'
 import { desktopHold, leaseHolder, releaseLease, takeLease } from '../desktop-lock'
-import { freePort } from '../process'
+import { readDaemonPid } from '@siastorage/node-adapters/lock'
+import { freePort, isCliDaemon } from '../process'
 import { REPO_ROOT } from '../session'
 import { waitFor } from '../wait'
 import { CLI_ENTRY, CliDevice } from './cli'
@@ -49,6 +50,8 @@ export type DesktopIdentity = {
    * extension's container. Null for a context whose env names no extension.
    */
   providerSocket: string | null
+  /** The File Provider extension's bundle id, which names its provider to `fileproviderctl`. */
+  extensionBundleId: string | null
 }
 
 /** `KEY=value` lines, skipping comments and blanks, as the build's env files are written. */
@@ -97,6 +100,7 @@ export function desktopIdentity(
     providerSocket: values.SIA_EXT_BUNDLE_ID
       ? join(homedir(), 'Library', 'Containers', values.SIA_EXT_BUNDLE_ID, 'Data', 'provider.sock')
       : null,
+    extensionBundleId: values.SIA_EXT_BUNDLE_ID || null,
   }
 }
 
@@ -230,6 +234,37 @@ export function isPreservedCopy(
   return (
     dirname(path) === root && basename(path).includes(`-${domainDisplay.replace(/\s+/g, '')} (`)
   )
+}
+
+/**
+ * Reads the disconnect reason from `fileproviderctl dump <provider>`, or null
+ * when the provider's domain is listed with none. A dump that failed, or that
+ * does not list the domain, throws: either would otherwise read as a
+ * connected folder and pass a check it never made.
+ */
+export function folderDisconnectedReason(
+  provider: string,
+  stdout: string,
+  exitCode: number,
+  stderr = '',
+): string | null {
+  if (exitCode !== 0) {
+    throw new Error(`fileproviderctl dump exited ${exitCode}: ${stderr.trim().slice(0, 200)}`)
+  }
+  // The provider's state lines are coloured even when not on a terminal.
+  const text = stdout.replace(/\x1b\[[0-9;]*m/g, '')
+  if (!text.includes(`domain: ${provider}/`)) {
+    throw new Error(`fileproviderctl dump lists no domain for ${provider}`)
+  }
+  return /temporarily disconnected: ([^)\n]*)\)/.exec(text)?.[1] ?? null
+}
+
+/** Whether `pid` exists and is not a zombie waiting for its parent to reap it. */
+function stillRunning(pid: number): boolean {
+  const stat = Bun.spawnSync(['ps', '-o', 'stat=', '-p', String(pid)])
+    .stdout.toString()
+    .trim()
+  return stat !== '' && !stat.startsWith('Z')
 }
 
 function appPids(identity: DesktopIdentity): number[] {
@@ -549,6 +584,59 @@ export class DesktopDevice extends CliDevice {
     const pids = out.stdout.toString().split('\n').filter(Boolean).map(Number)
     for (const pid of pids) process.kill(pid, 'SIGKILL')
     return pids.length
+  }
+
+  /**
+   * Stops the app's processes where they stand, so it cannot notice its
+   * daemon going away or start another. Pair with `resumeApp`, in a
+   * `finally`: a paused app cannot answer the quit that stopping the device
+   * sends.
+   */
+  pauseApp(): void {
+    for (const pid of appPids(this.identity)) process.kill(pid, 'SIGSTOP')
+  }
+
+  resumeApp(): void {
+    for (const pid of appPids(this.identity)) process.kill(pid, 'SIGCONT')
+  }
+
+  /**
+   * Kills the daemon alone and leaves the app running, as a daemon crash
+   * would. The daemon is the app's child, so while the app is paused it stays
+   * a zombie nobody reaps, and the wait ends once it stops running rather
+   * than once its pid is gone.
+   */
+  async killDaemon(): Promise<void> {
+    const pid = readDaemonPid(this.paths.pidPath)
+    if (pid === null || !isCliDaemon(pid, this.paths.dataDir)) {
+      throw new Error(`${this.name} has no daemon running to kill`)
+    }
+    process.kill(pid, 'SIGKILL')
+    await waitFor(`${this.name} daemon to die`, () => !stillRunning(pid), {
+      timeoutMs: 5_000,
+      intervalMs: 100,
+    })
+  }
+
+  /**
+   * The reason the system shows at the top of the Finder folder while the
+   * extension has it disconnected, or null while it is connected. Read from
+   * `fileproviderd`, which keeps the state after the extension has exited.
+   */
+  async folderDisconnected(): Promise<string | null> {
+    const provider = this.identity.extensionBundleId
+    if (!provider) return null
+    const dump = Bun.spawn(['fileproviderctl', 'dump', '-l', provider], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+      timeout: 30_000,
+    })
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(dump.stdout).text(),
+      new Response(dump.stderr).text(),
+      dump.exited,
+    ])
+    return folderDisconnectedReason(provider, stdout, exitCode, stderr)
   }
 
   /**

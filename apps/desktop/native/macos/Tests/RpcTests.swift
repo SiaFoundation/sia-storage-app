@@ -277,6 +277,33 @@ final class StreamLifecycleTests: XCTestCase {
         XCTAssertEqual(Self.receiveTimeoutSeconds(stream), 0)
     }
 
+    func testADaemonThatNeverRepliesStillCountsAsListening() throws {
+        let path = NSTemporaryDirectory() + "sia-busy-\(getpid()).sock"
+        unlink(path)
+        // Bound and listening but never accepting, as a daemon whose event loop
+        // is busy is: the kernel completes the connect and queues it.
+        let listener = try Self.listen(at: path)
+        defer {
+            close(listener)
+            unlink(path)
+        }
+
+        XCTAssertTrue(Rpc(socketPath: path).listening())
+    }
+
+    func testASocketNothingIsBoundToIsNotListening() throws {
+        let path = NSTemporaryDirectory() + "sia-stale-\(getpid()).sock"
+        unlink(path)
+        // A crashed daemon leaves its socket file behind with no listener.
+        let listener = try Self.listen(at: path)
+        close(listener)
+        defer { unlink(path) }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: path))
+        XCTAssertFalse(Rpc(socketPath: path).listening())
+        XCTAssertFalse(Rpc(socketPath: path + ".missing").listening())
+    }
+
     private static func receiveTimeoutSeconds(_ fd: Int32) -> Int {
         var value = timeval()
         var length = socklen_t(MemoryLayout<timeval>.size)

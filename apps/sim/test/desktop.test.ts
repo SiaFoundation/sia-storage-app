@@ -7,6 +7,7 @@ import {
   desktopIdentity,
   desktopUnavailable,
   findMount,
+  folderDisconnectedReason,
   folderTimeoutMessage,
   isPreservedCopy,
   parseEnvFile,
@@ -35,6 +36,7 @@ describe('desktop devices', () => {
         homedir(),
         'Library/Containers/sia.storage.desktop.test.file-provider/Data/provider.sock',
       ),
+      extensionBundleId: 'sia.storage.desktop.test.file-provider',
     })
   })
 
@@ -147,5 +149,41 @@ describe('a desktop device added signed out', () => {
       'Only a desktop device can start signed out',
     )
     expect(session.state.devices.laptop).toBeUndefined()
+  })
+})
+
+describe("reading the Finder folder's state from fileproviderd", () => {
+  const provider = 'sia.storage.desktop.test.file-provider'
+  // The lines `fileproviderctl dump <provider>` prints for the domain, colours included.
+  const dump = (state: string) =>
+    [
+      '-----------------------------------------------------',
+      'domain: s{6}t (S{14}t)',
+      '-----------------------------------------------------',
+      state,
+      '  + features: repl,syncTrash,',
+      `domain: ${provider}/s{6}t`,
+    ].join('\n')
+
+  test('a disconnected folder gives the reason Finder shows', () => {
+    const state =
+      "\x1b[33m  +  (⏹  temporarily disconnected: Sia Storage isn't running. Open it and try again.)\x1b[0m"
+    expect(folderDisconnectedReason(provider, dump(state), 0)).toBe(
+      "Sia Storage isn't running. Open it and try again.",
+    )
+  })
+
+  test('a connected folder gives null', () => {
+    expect(folderDisconnectedReason(provider, dump('  + root: <FPFS>/S{27}t'), 0)).toBeNull()
+  })
+
+  test('a dump that failed throws rather than reading as connected', () => {
+    expect(() => folderDisconnectedReason(provider, '', 1, 'timed out')).toThrow('exited 1')
+  })
+
+  test('a dump that lists no domain for the provider throws rather than reading as connected', () => {
+    expect(() => folderDisconnectedReason(provider, 'domain: (default) (hidden)', 0)).toThrow(
+      'lists no domain',
+    )
   })
 })

@@ -93,6 +93,22 @@ public final class Rpc: @unchecked Sendable {
         }
     }
 
+    /// Whether a process is listening on the socket now, by connecting and
+    /// hanging up without a request.
+    ///
+    /// The kernel completes a connect(2) for a listener whose event loop is
+    /// busy and queues it until the listener accepts, so this is true for a
+    /// daemon that is slow to reply and false only when the socket file is
+    /// missing or nothing is bound to it. A round trip, such as a `hello`
+    /// with a short timeout, cannot tell those apart.
+    public func listening() -> Bool {
+        guard let fd = try? Self.openSocket(at: socketPath, receiveTimeout: nil) else {
+            return false
+        }
+        close(fd)
+        return true
+    }
+
     private func roundTrip(_ body: Data, receiveTimeout: timeval) throws -> Any? {
         let fd = try Self.openSocket(at: socketPath, receiveTimeout: receiveTimeout)
         defer { close(fd) }
