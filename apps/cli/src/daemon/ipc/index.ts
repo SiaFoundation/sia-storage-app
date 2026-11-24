@@ -4,6 +4,7 @@ import type { ChangeEvent } from '@siastorage/core/types'
 import type { CliApp } from '../../app'
 import { createMaterializing, type Materializing } from '../materializing'
 import { createShareRequests, type ShareRequests } from '../shareRequests'
+import { createSignIn, type SignIn } from '../signIn'
 import { registerDownloadHandlers } from './download'
 import { registerStatusHandlers } from './status'
 import { registerUploadHandlers } from './upload'
@@ -25,10 +26,11 @@ export function buildHandlerMap(
   onShutdown: () => void,
   broadcast?: (message: unknown) => void,
   materializing: Materializing = createMaterializing(),
+  signIn: SignIn = createSignIn(app),
 ): IpcHandlerMap {
   const handlers: IpcHandlerMap = new Map()
 
-  registerStatusHandlers(handlers, app, onShutdown, materializing)
+  registerStatusHandlers(handlers, app, onShutdown, materializing, signIn)
   registerUploadHandlers(handlers, app)
   registerDownloadHandlers(handlers, app)
 
@@ -121,11 +123,15 @@ export type IpcSurface = {
   shareRequests: ShareRequests
 }
 
-export function buildIpcSurface(app: CliApp, onShutdown: () => void): IpcSurface {
+export function buildIpcSurface(
+  app: CliApp,
+  onShutdown: () => void,
+  signIn: SignIn = createSignIn(app),
+): IpcSurface {
   const subscribers = createSubscribers()
   const materializing = createMaterializing()
   return {
-    handlers: buildHandlerMap(app, onShutdown, subscribers.broadcast, materializing),
+    handlers: buildHandlerMap(app, onShutdown, subscribers.broadcast, materializing, signIn),
     subscribers,
     materializing,
     shareRequests: createShareRequests({

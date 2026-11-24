@@ -52,7 +52,7 @@ export function createTestBootstrap(): Bootstrap {
     authAdapters,
     sdkAuth: { adapters: authAdapters, getLastSdk: () => null },
     testSdkAdapter: sdkAdapter,
-    async connect(app) {
+    async connect(app, signal) {
       // On the mock network a device with no account stays disconnected, as it
       // does against a real indexer, which is what puts its sign-in on screen.
       // The key itself is not sent for checking: a device restarted while a
@@ -70,6 +70,7 @@ export function createTestBootstrap(): Bootstrap {
       }
       // The mock SDK was attached in createCliAppService, so connecting is the
       // flag plus the uploader the real path starts.
+      if (signal?.aborted) return false
       app.service.connection.setState({ isConnected: true, connectionError: null })
       app.internal.initUploader()
       return true

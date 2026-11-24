@@ -19,15 +19,20 @@ function stripAnsi(s: string): string {
 
 const BINARY_PATH = path.resolve(__dirname, '../../dist/sia')
 
-export function createE2eContext() {
+/**
+ * A data directory and the binary pointed at it. `testMode: false` runs the
+ * real SDK, for a test that brings its own indexer.
+ */
+export function createE2eContext(opts: { testMode?: boolean } = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sia-e2e-'))
   const p = getPaths(dataDir)
   const env: Record<string, string> = {
     ...(process.env as Record<string, string>),
     SIA_DATA_DIR: dataDir,
-    SIA_TEST_MODE: '1',
     NO_COLOR: '1',
   }
+  if (opts.testMode === false) delete env.SIA_TEST_MODE
+  else env.SIA_TEST_MODE = '1'
 
   async function sia(...args: string[]): Promise<ExecResult> {
     return new Promise((resolve) => {
