@@ -2,6 +2,15 @@
 
 All notable changes to Sia Storage will be documented in this file.
 
+## 1.15.2-rc.0 (2026-11-24)
+
+### Fixes
+
+- Renaming a folder or a tag, or deleting a tag, no longer brings back an older version of a file, and renaming a file from its details screen renames every version.
+- A snapshot link made before a file finished uploading shows the version that was shared, even when the file was saved again before that version uploaded.
+- Older versions of a file move to the Trash a day after a newer version replaces them on the device, once both have uploaded, and are deleted for good 30 days later like anything else in the Trash. A version restored from the Trash comes back as the current version.
+- A version saved on this device that a newer version replaced before it uploaded now uploads and joins the file's version history on every device, and the status counts it as waiting to upload, or as failed while it cannot be read.
+
 ## 1.15.1 (2026-11-20)
 
 ### Fixes
