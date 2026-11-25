@@ -159,19 +159,34 @@ if (platform === 'ios') {
   run(['xcrun', 'simctl', 'terminate', udid, appHostBundleId], appRoot)
   run(['xcrun', 'simctl', 'privacy', udid, 'reset', 'all', appHostBundleId], appRoot)
   if (run(['pod', 'install'], iosDir) !== 0) process.exit(1)
-  // TCC terminates a process that touches Photos with no usage string, and the
-  // app host CocoaPods generates has none. A testspec's `info_plist` configures
-  // the test bundle, not the host, so the host's plist is patched after install.
+  // The app host CocoaPods generates lacks two keys, and a testspec's
+  // `info_plist` configures the test bundle, not the host, so the host's plist
+  // is patched after install. TCC terminates a process that touches Photos with
+  // no usage string. And an app built with the iOS 27 SDK that declares no
+  // scene manifest fails to launch ("UIScene life cycle is required"), which
+  // xcodebuild reports as the test runner crashing. A manifest alone does not
+  // count, it needs one application-role configuration. That configuration
+  // names no delegate, since the tests never draw anything.
   const hostPlist = path.join(iosDir, 'Pods', `AppHost-${scheme}`, `AppHost-${scheme}-Info.plist`)
   if (!existsSync(hostPlist)) {
     console.error(`generated app host plist missing at ${hostPlist}`)
     process.exit(1)
   }
-  for (const [key, value] of [
-    ['NSPhotoLibraryUsageDescription', 'Reads the assets these tests seed.'],
-    ['NSPhotoLibraryAddUsageDescription', 'Seeds the assets these tests read back.'],
+  for (const [key, type, value] of [
+    ['NSPhotoLibraryUsageDescription', '-string', 'Reads the assets these tests seed.'],
+    ['NSPhotoLibraryAddUsageDescription', '-string', 'Seeds the assets these tests read back.'],
+    [
+      'UIApplicationSceneManifest',
+      '-json',
+      JSON.stringify({
+        UIApplicationSupportsMultipleScenes: false,
+        UISceneConfigurations: {
+          UIWindowSceneSessionRoleApplication: [{ UISceneConfigurationName: 'Default' }],
+        },
+      }),
+    ],
   ]) {
-    if (run(['plutil', '-replace', key, '-string', value, hostPlist], iosDir) !== 0) {
+    if (run(['plutil', '-replace', key, type, value, hostPlist], iosDir) !== 0) {
       process.exit(1)
     }
   }

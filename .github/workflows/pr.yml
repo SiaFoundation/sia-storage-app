@@ -80,11 +80,15 @@ jobs:
   # no prebuild and no simulator. The simulator tier (Photos-framework behavior)
   # runs in sim-ios.yml, with the phone suites.
   test-native-ios:
-    runs-on: macos-latest
+    runs-on: xcode-27
     if: github.event.action != 'closed'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/setup
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: '27.2'
       - run: bun run mobile:test:native:ios
 
   # The Kotlin half. Unlike iOS this needs a prebuild first, because

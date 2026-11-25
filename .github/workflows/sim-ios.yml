@@ -29,7 +29,7 @@ jobs:
     permissions:
       contents: read
       statuses: write
-    runs-on: tenki-macos-26-large
+    runs-on: xcode-27-xlarge
     timeout-minutes: 90
     steps:
       - if: github.event_name == 'pull_request'
@@ -51,20 +51,23 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: '26.2'
+          xcode-version: '27.2'
       # sim boots the newest runtime that runs its model, and this runner's set
       # differs from a laptop's, so the log records which ones it had.
       - name: List simulator runtimes
         run: xcrun simctl list runtimes available
       # The simulator build depends only on native inputs, which this hash
-      # covers, so most runs reuse it and only rebuild the JavaScript.
+      # covers, so most runs reuse it and only rebuild the JavaScript. The hash
+      # leaves out the Xcode version, so the key names it, or a change of Xcode
+      # would restore an app built with the old SDK. sim-mobile-cache.yml uses
+      # the same key.
       - id: native
         run: echo "hash=$(bun -e "import { computeBuildHash } from './apps/mobile/scripts/buildCache.ts'; console.log(computeBuildHash())")" >> "$GITHUB_OUTPUT"
       - id: cache
         uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: apps/mobile/.build-cache/ios-sim
-          key: ios-sim-${{ steps.native.outputs.hash }}
+          key: ios-sim-xcode-27.2-${{ steps.native.outputs.hash }}
       - if: steps.cache.outputs.cache-hit != 'true'
         run: bun run mobile:dev:ios:simulator -- --no-run
         # CocoaPods needs a UTF-8 locale and this runner sets none, so pod
@@ -77,7 +80,7 @@ jobs:
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: apps/mobile/.build-cache/ios-sim
-          key: ios-sim-${{ steps.native.outputs.hash }}
+          key: ios-sim-xcode-27.2-${{ steps.native.outputs.hash }}
       # `down --clean` hands the phone back to the pool still booted, so the
       # suite leases it rather than booting another. A failed launch keeps the
       # session directory, with the launch screenshots and the mock network's
@@ -91,13 +94,14 @@ jobs:
         run: |
           bun sim up --cli= --ios phone 2>&1 | tee /tmp/sim-smoke.out
           bun sim down --clean
-      # The runner runs nothing else, so both phones can boot at once where the
-      # default budget, sized for a laptop, would boot one at a time.
+      # The runner runs nothing else, so phones get 8 of its 14 GB rather than
+      # the 40% default, sized for a laptop. An iPhone simulator counts as
+      # 1.5 GB, so two scenarios at once can each have two or three.
       - id: suite
         shell: bash
         env:
           SCENARIOS: ${{ inputs.scenarios || 'mobile/ photos/' }}
-          SIM_PHONE_MEMORY_GB: '12'
+          SIM_PHONE_MEMORY_GB: '8'
           SIM_PROGRESS_FILE: /tmp/sim-progress.json
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.pull_request.head.sha }}
@@ -124,7 +128,7 @@ jobs:
           if [ "$SMOKE" = failure ]; then
             summary="Launch smoke test failed: $(grep -v '^error: script' /tmp/sim-smoke.out 2>/dev/null | tail -n 1)"
           fi
-          description="${summary:-The run failed before the suite finished} on tenki-macos-26-large"
+          description="${summary:-The run failed before the suite finished} on xcode-27-xlarge"
           gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
             -f state="$STATE" -f context=sim/ios -f description="${description:0:139}" \
             -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > /dev/null
@@ -172,7 +176,7 @@ jobs:
       cancel-in-progress: true
     permissions:
       contents: read
-    runs-on: tenki-macos-26-large
+    runs-on: xcode-27-xlarge
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -182,7 +186,7 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: '26.2'
+          xcode-version: '27.2'
       - run: bunx expo prebuild --platform ios --no-install
         working-directory: apps/mobile
       - run: bun run mobile:test:native:ios:sim
