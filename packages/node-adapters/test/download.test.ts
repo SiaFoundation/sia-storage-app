@@ -104,6 +104,17 @@ describe('a download the caller aborted', () => {
   })
 })
 
+/** Runs `fn` as if on `platform`, since where a range is written depends on it. */
+async function onPlatform<T>(platform: NodeJS.Platform, fn: () => Promise<T>): Promise<T> {
+  const actual = process.platform
+  Object.defineProperty(process, 'platform', { value: platform })
+  try {
+    return await fn()
+  } finally {
+    Object.defineProperty(process, 'platform', { value: actual })
+  }
+}
+
 describe('a ranged download', () => {
   /*
    * The system reads an extent's position from where its bytes sit in the
@@ -118,20 +129,44 @@ describe('a ranged download', () => {
     })
     const dest = path.join(filesDir, 'ranged.bin')
 
-    const bytes = await download.downloadRangeToPath!({
-      object: { indexerURL: 'https://indexer.test', id: 'obj1' } as never,
-      sdk: sdkYielding([payload]),
-      destPath: dest,
-      offset: 1024,
-      length: 256,
-      signal: new AbortController().signal,
-      maxBufferedChunks: 8,
-    })
+    const bytes = await onPlatform('darwin', () =>
+      download.downloadRangeToPath!({
+        object: { indexerURL: 'https://indexer.test', id: 'obj1' } as never,
+        sdk: sdkYielding([payload]),
+        destPath: dest,
+        offset: 1024,
+        length: 256,
+        signal: new AbortController().signal,
+        maxBufferedChunks: 8,
+      }),
+    )
 
     expect(bytes).toBe(256)
     const written = fs.readFileSync(dest)
     expect(written.length).toBe(1280)
     expect(written.subarray(1024, 1280)).toEqual(Buffer.from(payload))
+  })
+
+  it('writes the bytes at the front on Windows, where the hole before them would be written as zeros', async () => {
+    const payload = new Uint8Array(256).fill(7)
+    const download = createNodeDownloadAdapter({
+      fsIO,
+      getAppKey: async () => new Uint8Array([1, 2, 3]),
+    })
+    const dest = path.join(filesDir, 'ranged-windows.bin')
+    await onPlatform('win32', () =>
+      download.downloadRangeToPath!({
+        object: { indexerURL: 'https://indexer.test', id: 'obj1' } as never,
+        sdk: sdkYielding([payload]),
+        destPath: dest,
+        offset: 1024,
+        length: 256,
+        signal: new AbortController().signal,
+        maxBufferedChunks: 8,
+      }),
+    )
+
+    expect(fs.readFileSync(dest)).toEqual(Buffer.from(payload))
   })
 
   it('asks the SDK for the read-ahead the caller gave it', async () => {

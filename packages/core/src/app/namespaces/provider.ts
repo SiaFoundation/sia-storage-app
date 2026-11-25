@@ -701,7 +701,8 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
     }
     const resolved = normalizePath(candidate)
     const root = normalizePath(handoffDir)
-    if (resolved !== root && !resolved.startsWith(`${root}/`)) {
+    const [path, under] = [comparable(resolved), comparable(root)]
+    if (path !== under && !path.startsWith(`${under}/`)) {
       throw new Error(`Handoff path is outside ${root}`)
     }
     return resolved
@@ -1500,11 +1501,20 @@ export function buildProviderNamespace(deps: ProviderNamespaceDeps): AppService[
  *
  * Text only, because a fetch names a destination that does not exist yet and
  * there is nothing on disk to resolve. Nothing here follows a link.
+ *
+ * A Windows path, told by its drive letter, is read with either separator and
+ * comes back with forward slashes, which Windows takes as well. Read as one
+ * segment, as a path with only backslashes would be, it could never sit under
+ * the handoff directory, and its `..` would go unresolved.
  */
 function normalizePath(input: string): string {
-  const isAbsolute = input.startsWith('/')
+  const windows = /^[a-zA-Z]:[\\/]/.test(input)
+  // The drive, which `..` can never climb past.
+  const prefix = windows ? input.slice(0, 2) : ''
+  const rest = windows ? input.slice(2).replace(/\\/g, '/') : input
+  const isAbsolute = rest.startsWith('/')
   const parts: string[] = []
-  for (const segment of input.split('/')) {
+  for (const segment of rest.split('/')) {
     if (segment === '' || segment === '.') continue
     if (segment === '..') {
       if (parts.length > 0 && parts[parts.length - 1] !== '..') parts.pop()
@@ -1513,6 +1523,15 @@ function normalizePath(input: string): string {
     }
     parts.push(segment)
   }
-  const joined = parts.join('/')
-  return isAbsolute ? `/${joined}` : joined
+  return `${prefix}${isAbsolute ? '/' : ''}${parts.join('/')}`
+}
+
+/**
+ * A path as it compares. A Windows drive letter folds, since Windows reads it
+ * in either case. The rest compares exactly, because JavaScript's case folding
+ * matches names NTFS keeps apart, such as `İ` and `i̇`, and a provider builds
+ * its paths from the same handoff directory the daemon is given.
+ */
+function comparable(path: string): string {
+  return /^[a-zA-Z]:\//.test(path) ? path[0].toLowerCase() + path.slice(1) : path
 }
