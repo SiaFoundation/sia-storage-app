@@ -2,11 +2,12 @@
 applyTo: 'apps/desktop/**'
 ---
 
-# macOS desktop app
+# Desktop app
 
-Three processes: the Electron app, the daemon the app starts, and the sandboxed
-File Provider extension the system loads. They cannot log to the same place, so
-the rules differ by destination.
+On macOS, three processes: the Electron app, the daemon the app starts, and the
+sandboxed File Provider extension the system loads. They cannot log to the same
+place, so the rules differ by destination. On Windows the third process is the
+provider described under [The Windows folder](#the-windows-folder).
 
 ## Logging from the app and the daemon
 
@@ -61,6 +62,30 @@ no entitlements, as the Finder agent the daemon runs to evict Finder's copies,
 read which files Finder holds and have Finder hand a file's bytes back, since
 per-domain calls work only from a process whose main bundle is the app.
 New surface goes in TypeScript.
+
+## The Windows folder
+
+On Windows the folder in File Explorer is a Cloud Files sync root, and Windows
+loads nothing to serve one, so the app runs a provider process of its own for
+as long as it runs. The provider is a Bun
+program in `native/windows/provider`, run under the daemon's runtime. It
+reaches Windows through Bun's FFI and a C shim Bun compiles when it connects,
+so it has no build step. It calls `app.provider` on the daemon's provider
+socket, holds the daemon's mount link open, and logs to `provider.log` in the
+data directory through `@siastorage/logger`.
+
+`folder.ts` decides everything, against the `CloudFiles` interface, and its
+tests run on any platform with Windows stood in for. `cloudFiles.ts`,
+`shim.c` and `syncRoot.ts` run only on Windows.
+
+Opening a placeholder to read its data makes Windows fetch the whole file
+first, through the provider. From the provider's own thread that open waits on
+itself until the fetch times out after 60 seconds. So the provider opens a
+file in the folder for its data only once its attributes say the bytes are on
+disk. A Cloud Files call takes a handle that asks for no data. One that drops
+a file's bytes, or gives it another version's, takes a handle shared with
+nobody, which asks to delete rather than to read, since Windows checks sharing
+only for a handle asking to read, write or delete.
 
 ## Releases
 
