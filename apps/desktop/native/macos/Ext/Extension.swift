@@ -276,35 +276,30 @@ public final class FileProviderExtension: NSObject, NSFileProviderReplicatedExte
             // back since the last retry has not been reported yet, and settling
             // without asking would disconnect it while it is listening.
             let action =
-                await self.daemonAnswers()
+                self.daemonListening()
                 ? await self.availability.succeeded()
                 : await self.availability.settle(at: Self.now())
             await self.apply(action)
             // fileproviderd tears this process down once the domain is
             // disconnected, so no later stream connect is left to reconnect it.
-            // The app's register at launch clears a disconnect, and it runs as
-            // soon as the new daemon listens. One that ran between the check
-            // above and the disconnect would leave the folder offline until the
-            // next launch, so the daemon is asked once more.
-            if action == .disconnect, await self.daemonAnswers() {
+            // The app registers the folder again when it sees its daemon come
+            // back, which clears a disconnect. A register that ran between the
+            // check above and the disconnect would leave the folder offline,
+            // so the daemon is asked once more.
+            if action == .disconnect, self.daemonListening() {
                 await self.apply(self.availability.succeeded())
             }
         }
     }
 
-    /// Whether a daemon is listening on the socket now. A refused hello still
-    /// counts, because a version mismatch is not an outage. The next
-    /// callback's handshake reports it with its own banner.
-    private func daemonAnswers() async -> Bool {
-        do {
-            _ = try await rpc.call(
-                Channel.hello, [version], receiveTimeout: timeval(tv_sec: 2, tv_usec: 0))
-            return true
-        } catch RpcError.remote {
-            return true
-        } catch {
-            return false
-        }
+    /// Whether a daemon is listening on the socket now. Only a socket nothing
+    /// is bound to counts as an outage. A daemon busy with a large import
+    /// still accepts the connection, and treating a slow reply as absence
+    /// would disconnect the folder from under a daemon that is running. A
+    /// daemon of another version counts too, because a mismatch is not an
+    /// outage. The next callback's handshake reports it with its own banner.
+    private func daemonListening() -> Bool {
+        rpc.listening()
     }
 
     /// Tells the system the mount is not being served, or that it is again.

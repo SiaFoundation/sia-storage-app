@@ -28,6 +28,7 @@ import {
   windowChrome,
 } from './platform'
 import type { StopOptions } from './platform/types'
+import { createRemount } from './remount'
 import { call, DaemonStream } from './rpc'
 import { receiveShareRequest } from './share'
 import { createTray, destroyTray } from './tray'
@@ -335,12 +336,13 @@ if (!app.requestSingleInstanceLock()) {
         if (has !== true && !quitting && !openedAtLogin) showMainWindow()
       })
 
+      const mountConfig = {
+        shellSocket,
+        domainId: config.domainId,
+        displayName: config.displayName,
+      }
       try {
-        await platform.start({
-          shellSocket,
-          domainId: config.domainId,
-          displayName: config.displayName,
-        })
+        await platform.start(mountConfig)
         log.info('mount', 'state', { state: platform.status() })
         await recordMount()
       } catch (e) {
@@ -348,6 +350,18 @@ if (!app.requestSingleInstanceLock()) {
         // the status surface reads the mount state itself through `shellStatus`.
         log.error('mount', 'unavailable', { error: e as Error })
       }
+
+      // Without it a daemon that crashed and was revived leaves Finder saying
+      // "Sia Storage isn't running" over a working daemon until the next launch.
+      let daemonWentAway = false
+      const remount = createRemount(
+        () =>
+          platform
+            .start(mountConfig)
+            .then(() => log.info('mount', 'remounted', { state: platform.status() }))
+            .catch((e) => log.error('mount', 'remount_failed', { error: e as Error })),
+        () => quitting !== null,
+      )
 
       changes = new DaemonStream(
         (event) => {
@@ -361,6 +375,7 @@ if (!app.requestSingleInstanceLock()) {
           // The window has no other way to learn the daemon went: its reads
           // keep answering from cache, and no change signal is coming.
           broadcast('change', { event: 'change', scope: 'connection' })
+          daemonWentAway = true
           void reviveDaemon()
         },
         () => {
@@ -377,8 +392,14 @@ if (!app.requestSingleInstanceLock()) {
           broadcast('change', { event: 'change', scope: 'connection' })
           // Again on every connect: at launch the daemon can still be
           // migrating after an update and miss the first call, and a daemon
-          // restarted under a new library has none recorded.
-          void recordMount()
+          // restarted under a new library has none recorded. After the
+          // register, which leaves no mount to record while it runs.
+          if (daemonWentAway) {
+            daemonWentAway = false
+            void remount().then(recordMount)
+          } else {
+            void recordMount()
+          }
         },
         (fileIds) => void app.whenReady().then(() => receiveShareRequest(fileIds)),
       )
