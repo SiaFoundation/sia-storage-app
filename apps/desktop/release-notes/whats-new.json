@@ -1,5 +1,31 @@
 [
   {
+    "version": "0.0.3",
+    "released": null,
+    "items": [
+      {
+        "text": "Uploads now focus on your latest edits, so frequent saves do not flood the upload queue.",
+        "platforms": ["macos"]
+      },
+      {
+        "text": "Moving or renaming folders no longer brings back older file versions on this Mac or your other devices.",
+        "platforms": ["macos"]
+      },
+      {
+        "text": "Snapshot links now open the exact file version you shared.",
+        "platforms": ["macos"]
+      },
+      {
+        "text": "When a newer file version replaces an older one, the older one now moves to Trash later and can be restored as the current version.",
+        "platforms": ["macos"]
+      },
+      {
+        "text": "Version history is more complete across devices, including versions saved during quick rounds of edits.",
+        "platforms": ["macos"]
+      }
+    ]
+  },
+  {
     "version": "0.0.2",
     "released": "2026-11-20",
     "items": [
