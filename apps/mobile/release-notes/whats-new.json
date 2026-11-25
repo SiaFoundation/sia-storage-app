@@ -1,5 +1,27 @@
 [
   {
+    "version": "1.15.2",
+    "released": null,
+    "items": [
+      {
+        "text": "Renaming files, folders, and tags is now more reliable, and renaming from file details updates every version.",
+        "platforms": ["ios", "android"]
+      },
+      {
+        "text": "Shared snapshot links now always open the exact version you shared.",
+        "platforms": ["ios", "android"]
+      },
+      {
+        "text": "When a newer version replaces one on your device, the older version now moves to Trash automatically and is permanently removed after 30 days.",
+        "platforms": ["ios", "android"]
+      },
+      {
+        "text": "If you save a new version before an older one finishes uploading, the older version still uploads and appears in your version history.",
+        "platforms": ["ios", "android"]
+      }
+    ]
+  },
+  {
     "version": "1.15.1",
     "released": "2026-11-20",
     "items": [

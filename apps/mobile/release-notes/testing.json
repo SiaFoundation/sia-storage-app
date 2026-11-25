@@ -1,34 +1,19 @@
 {
-  "version": "1.15.1-rc.3",
-  "sinceCandidate": {
-    "from": "1.15.1-rc.2",
-    "items": []
-  },
+  "version": "1.15.2-rc.0",
+  "sinceCandidate": null,
   "sinceRelease": {
-    "from": "1.15.0",
+    "from": "1.15.1",
     "items": [
       {
-        "text": "Imports and cleanup now free device space sooner and more reliably, including faster Clear local files with accurate freed-space reporting and better cleanup after sign-out or reset.",
+        "text": "Improved renaming and tag changes so file versions stay consistent, including renaming every version from file details.",
         "platforms": ["ios", "android"]
       },
       {
-        "text": "Deleting and restoring folders now behaves more predictably, and share links stay accurate when files move to and from trash.",
+        "text": "Snapshot links now stay tied to the exact version that was shared.",
         "platforms": ["ios", "android"]
       },
       {
-        "text": "Uploads now show clearer states for waiting, full storage, and failed files, and retries back off instead of looping continuously.",
-        "platforms": ["ios", "android"]
-      },
-      {
-        "text": "Files moved to trash before upload now leave the upload queue, and restored files rejoin upload normally.",
-        "platforms": ["ios", "android"]
-      },
-      {
-        "text": "Library browsing is faster and steadier in large libraries, including load-more behavior and photo viewer recovery after a failed load.",
-        "platforms": ["ios", "android"]
-      },
-      {
-        "text": "Switching to a different file source now keeps files available on device until the new source can provide them.",
+        "text": "Version history is smoother: replaced versions still upload into history, older uploaded versions move to Trash after a day, and restoring one makes it current again.",
         "platforms": ["ios", "android"]
       }
     ]
