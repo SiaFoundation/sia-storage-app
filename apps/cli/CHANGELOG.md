@@ -1,3 +1,10 @@
+## 0.0.9 (2026-11-25)
+
+### Fixes
+
+- `mv` on a folder no longer brings back an older version of a file in it on this or other devices.
+- Older versions of a file move to the Trash a day after a newer version replaces them on the device, once both have uploaded, and are deleted for good 30 days later like anything else in the Trash. A version restored from the Trash comes back as the current version.
+
 ## 0.0.8 (2026-11-20)
 
 ### Features
