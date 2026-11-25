@@ -293,6 +293,12 @@ if (!app.requestSingleInstanceLock()) {
         shellSocket,
         handoffDir,
       }
+      const shell = {
+        shellSocket,
+        runtime: spawn.runtime,
+        domainId: config.domainId,
+        displayName: config.displayName,
+      }
       // A source build and an installed one each pick these for themselves, so
       // a mismatch here is how the extension ends up served by the wrong daemon.
       log.info('app', 'library', { path: dataDir() })
@@ -308,7 +314,7 @@ if (!app.requestSingleInstanceLock()) {
       // CLI started has already rebuilt by the time the app attaches, so its
       // Finder copy is not discarded here.
       if (!(await Daemon.isReachable()) && (await forcedResetPending())) {
-        const discarded = await platform.discard(config.domainId)
+        const discarded = await platform.discard(shell)
         log.info('app', 'forced_reset', { folderDiscarded: discarded })
       }
       const hadSocket = shellSocket !== undefined && existsSync(endpointMarker(shellSocket))
@@ -336,11 +342,7 @@ if (!app.requestSingleInstanceLock()) {
       })
 
       try {
-        await platform.start({
-          shellSocket,
-          domainId: config.domainId,
-          displayName: config.displayName,
-        })
+        await platform.start(shell)
         log.info('mount', 'state', { state: platform.status() })
         await recordMount()
       } catch (e) {

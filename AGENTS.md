@@ -16,7 +16,7 @@ this file. Review calibration is in `REVIEW.md`.
 | `apps/integration`        | Cross-package tests only, no shipped code.                     |
 | `apps/benchmark`          | Query benchmarks and `EXPLAIN QUERY PLAN` reports.             |
 | `apps/sim`                | Runs real app processes as devices over a shared mock network. |
-| `apps/desktop`            | Electron macOS app with a Swift File Provider extension.       |
+| `apps/desktop`            | Electron app, with its macOS and Windows folder integrations.  |
 | `apps/web`                | A `package.json` stub with no source. Do not assume it builds. |
 | `packages/core`           | Shared TS core: DB, sync, services, stores, AppService facade. |
 | `packages/logger`         | Logging package.                                               |

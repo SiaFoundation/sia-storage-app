@@ -159,7 +159,13 @@ export function Setup({ onDone }: { onDone: () => void }) {
 
   return (
     <Shell
-      stage={mountable ? <FinderMock finderName={finderName} /> : <PhotoPile mode="preview" />}
+      stage={
+        mountable && terms.folderArt ? (
+          <FinderMock finderName={finderName} />
+        ) : (
+          <PhotoPile mode="preview" />
+        )
+      }
       caption={
         mountable
           ? `Sia Storage stays in the ${terms.iconArea}. Your files are under ${finderName} in ${terms.fileManager}.`

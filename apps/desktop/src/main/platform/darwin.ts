@@ -248,7 +248,7 @@ export function createDarwinIntegration(
       confirmed = true
     },
 
-    discard: async (id) => agentInstalled() && (await removeDomain(id)),
+    discard: async ({ domainId: id }) => agentInstalled() && (await removeDomain(id)),
 
     /**
      * Re-reads the mount rather than trusting the last answer. The system

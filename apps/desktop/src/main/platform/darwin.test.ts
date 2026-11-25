@@ -38,7 +38,7 @@ mock.module('./agent', () => ({
 
 const { createDarwinIntegration } = await import('./darwin')
 
-const config = { domainId: 'sia-dev', displayName: 'Sia', shellSocket: '' }
+const config = { domainId: 'sia-dev', displayName: 'Sia', shellSocket: '', runtime: '' }
 
 async function mounted() {
   const platform = createDarwinIntegration()
@@ -72,7 +72,7 @@ describe('stopping the mount', () => {
   it('removes a mount it is not serving yet when discarding it before a reset', async () => {
     const platform = createDarwinIntegration()
 
-    expect(await platform.discard('sia-dev')).toBe(true)
+    expect(await platform.discard({ domainId: 'sia-dev' } as never)).toBe(true)
     expect(calls).toEqual([['unregister', 'sia-dev']])
   })
 
