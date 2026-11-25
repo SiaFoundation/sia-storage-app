@@ -1,3 +1,19 @@
+## 0.0.23 (2026-11-25)
+
+### Features
+
+- A file saved again and again in the Finder folder while offline or behind on uploads uploads only its newest save, instead of every save in turn. A save that a share link names, or that has started uploading, still uploads. `app.uploader.withdraw` takes a file off the upload queue unless a batch holds it and says which, `app.files.deleteIfUnsentOlderVersion` deletes an older version that never left this device, and `app.thumbnails.createForLiveFile` records a thumbnail only while its file is live.
+- A file saved again within 30 seconds in the Finder folder waits to upload until the saves stop for 30 seconds, or for at most 2 minutes, so an app that saves every few seconds uploads a few versions instead of hundreds. A file's first save, a save after a longer pause and a newly added file upload at once as before, and sharing a waiting file uploads it at once. `app.uploader.enqueueSave` queues a Finder save, holding it after a recent save of the same file.
+- Older versions of a file move to the Trash a day after a newer version replaces them on the device, once both have uploaded, and are deleted for good 30 days later like anything else in the Trash. A version restored from the Trash comes back as the current version. `app.shares.syncLinksAndTrashOlderVersions` runs the pass after listing the account's share links, and `app.files.trashOlderVersions` runs it without the listing.
+
+### Fixes
+
+- `MountAdapter.changes` may resolve `null` while the integration it reads from is not connected, and the mount service then leaves its record of downloaded files as it is.
+- Adds `@siastorage/core/lib/ipcEndpoint`, which says where a daemon socket is reached, and on Windows names the daemon's pipe at random and has a client check the daemon's secret before sending anything.
+- A snapshot link made before a file finished uploading shows the version that was shared, even when the file was saved again before that version uploaded.
+- Tag changes, favorites and folder renames and moves stamp each changed file without reordering the versions of any file, and restamp a newer version only when an older one has no room left below it, so an older version no longer becomes the file the library shows and an edit another device made to the newer version is kept. `files.renameFile` refreshes the cached row of every version it renames.
+- A version saved on this device that a newer version replaced before it uploaded now uploads and joins the file's version history on every device, and the status counts it as waiting to upload, or as failed while it cannot be read.
+
 ## 0.0.22 (2026-11-20)
 
 ### Features
