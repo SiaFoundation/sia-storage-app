@@ -56,8 +56,12 @@ export type Bootstrap = {
   sdkAuth: NodeSdkAuthResult
   /** Set only when running with `SIA_TEST_MODE=1` — pre-attached during bootstrap. */
   testSdkAdapter?: SdkAdapter
-  /** Performs the SDK connection (real handshake or test-mode short-circuit). */
-  connect: (app: CliApp) => Promise<boolean>
+  /**
+   * Performs the SDK connection (real handshake or test-mode short-circuit).
+   * Once `signal` is aborted, a connect still waiting on the indexer returns
+   * false without attaching the SDK or starting the uploader.
+   */
+  connect: (app: CliApp, signal?: AbortSignal) => Promise<boolean>
 }
 
 async function buildBootstrap(): Promise<Bootstrap> {
@@ -73,7 +77,7 @@ function createRealBootstrap(): Bootstrap {
   return {
     authAdapters: sdkAuth.adapters,
     sdkAuth,
-    async connect(app) {
+    async connect(app, signal) {
       const indexerURL = await app.service.settings.getIndexerURL()
       // Each failure records why, so a client can tell a connection still being
       // attempted from one that never will be.
@@ -89,6 +93,9 @@ function createRealBootstrap(): Bootstrap {
       await sdkAuth.adapters.createBuilder(indexerURL, JSON.stringify(APP_META))
 
       const connected = await sdkAuth.adapters.connectWithKey(keyHex)
+      // Shutdown aborts the signal after the uploader has drained and before
+      // the database closes, and starting the uploader here would race both.
+      if (signal?.aborted) return false
       // Host only: this text reaches the desktop tray verbatim, and a custom
       // indexer URL can carry credentials.
       if (!connected) return fail(`Could not reach ${hostOf(indexerURL)}`)
@@ -176,6 +183,6 @@ export async function createCliAppService(
 }
 
 /** Performs the SDK connection chosen at bootstrap (real or test-mode). */
-export function connectSdk(app: CliApp): Promise<boolean> {
-  return app.bootstrap.connect(app)
+export function connectSdk(app: CliApp, signal?: AbortSignal): Promise<boolean> {
+  return app.bootstrap.connect(app, signal)
 }

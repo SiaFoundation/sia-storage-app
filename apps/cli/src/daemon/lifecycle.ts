@@ -10,6 +10,8 @@ export type ShutdownContext = {
   /** Present only when a storage-provider shell is being served. */
   providerServer?: { close(): void }
   lock: LockHandle
+  /** Retries the indexer sign-in in the background until one attempt decides. */
+  signIn?: { stop(): void }
 }
 
 /**
@@ -67,6 +69,8 @@ export function executeShutdown(ctx: ShutdownContext): Promise<void> {
 
 async function runShutdown(ctx: ShutdownContext): Promise<void> {
   logger.info('daemon', 'shutting_down')
+  // First, so a retry cannot start the uploader again after it has drained.
+  ctx.signIn?.stop()
   await ctx.app.service.uploader.shutdown()
   ctx.app.internal.events.dispose()
   await ctx.scheduler.shutdown()

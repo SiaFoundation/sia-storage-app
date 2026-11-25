@@ -1,7 +1,7 @@
-import { readState, writeState } from '@siastorage/node-adapters'
-import { connectSdk, type CliApp } from '../../app'
+import type { CliApp } from '../../app'
 import { cliVersion, daemonBuild } from '../../lib/version'
 import type { Materializing } from '../materializing'
+import { createSignIn, type SignIn } from '../signIn'
 import type { IpcHandlerMap } from './index'
 
 /**
@@ -19,6 +19,7 @@ export function registerStatusHandlers(
   app: CliApp,
   onShutdown: () => void,
   materializing: Materializing,
+  signIn: SignIn = createSignIn(app),
 ): void {
   handlers.set('ping', async () => ({ ok: true }))
 
@@ -43,25 +44,13 @@ export function registerStatusHandlers(
   /**
    * Wires the SDK from a key stored since the daemon came up.
    *
-   * On its own, `connectSdk` runs only at boot, and it is the only thing that hands the
-   * service an SDK. A client that signs in afterwards stores the key through
-   * the facade but leaves the daemon holding nothing, so it asks for this.
+   * The daemon's own sign-in stops once an attempt finds no account. A client
+   * that signs in afterwards stores the key through the facade but leaves the
+   * daemon holding nothing, so it asks for this.
    */
   handlers.set('connect', async () => {
     if (app.service.connection.getState().isConnected) return { connected: true }
-    const connected = await connectSdk(app)
-    // A sign-in after boot starts this library's first sync. An empty account
-    // never sets `isSyncingDown`, so from that flag a client cannot tell the
-    // first sync having finished from it not having run. The gate says which:
-    // `syncDownEventsBatch` moves it to 'dismissed' when the catch-up ends.
-    if (connected) app.service.sync.setState({ syncGateStatus: 'pending' })
-    // The state file is what `sia status` prints, and boot is its only other
-    // writer, so without this a post-sign-in daemon reads as disconnected
-    // until it restarts.
-    if (connected) {
-      const state = readState(app.paths.statePath)
-      if (state) writeState(app.paths.statePath, { ...state, connected: true })
-    }
+    const connected = await signIn.attempt({ firstSync: true })
     return { connected }
   })
 

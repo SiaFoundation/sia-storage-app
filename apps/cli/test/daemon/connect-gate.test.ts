@@ -8,6 +8,7 @@ import type { CliApp } from '../../src/app'
 import type { IpcHandlerMap } from '../../src/daemon/ipc/index'
 import { registerStatusHandlers } from '../../src/daemon/ipc/status'
 import { createMaterializing } from '../../src/daemon/materializing'
+import { createSignIn } from '../../src/daemon/signIn'
 import { createTestApp } from '../helpers'
 
 /*
@@ -25,7 +26,13 @@ describe('signing in to a running daemon', () => {
     app = await createTestApp(tempDir)
     app.internal.setSdk(new MockSdk())
     const handlers: IpcHandlerMap = new Map()
-    registerStatusHandlers(handlers, app, () => {}, createMaterializing())
+    registerStatusHandlers(
+      handlers,
+      app,
+      () => {},
+      createMaterializing(),
+      createSignIn(app, { delaysMs: [10] }),
+    )
     connect = () => handlers.get('connect')!({}, {} as IpcConnection)
   })
 
@@ -58,6 +65,24 @@ describe('signing in to a running daemon', () => {
 
     expect(app.service.sync.getState().isSyncingDown).toBe(false)
     expect(app.service.sync.getState().syncGateStatus).toBe('dismissed')
+  })
+
+  it('raises the gate when the first attempt could not reach the indexer and a retry connects', async () => {
+    let attempts = 0
+    app.bootstrap.connect = async (cli) => {
+      attempts += 1
+      if (attempts === 1) throw new Error('error sending request: connection refused')
+      cli.service.connection.setState({ isConnected: true })
+      return true
+    }
+
+    expect(await connect()).toEqual({ connected: false })
+    const deadline = Date.now() + 2_000
+    while (!app.service.connection.getState().isConnected && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 5))
+    }
+
+    expect(app.service.sync.getState().syncGateStatus).toBe('pending')
   })
 
   it('leaves the gate down when the connection fails', async () => {

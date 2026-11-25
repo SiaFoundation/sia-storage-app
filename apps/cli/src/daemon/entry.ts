@@ -1,7 +1,7 @@
 import { addAppender, createConsoleAppender, logger } from '@siastorage/logger'
 import packageJson from '../../package.json'
 import { ensureDataDir, getDataDir, getPaths, writeState } from '@siastorage/node-adapters'
-import { connectSdk, createCliAppService } from '../app'
+import { createCliAppService } from '../app'
 import { applyForcedReset } from './forcedReset'
 import { buildIpcSurface, startIpcDispatcher } from './ipc'
 import { startProviderListener } from './ipc/provider'
@@ -13,6 +13,7 @@ import {
   type ShutdownContext,
 } from './lifecycle'
 import { initializeScheduler } from './scheduler'
+import { createSignIn } from './signIn'
 import { cliVariant } from '../lib/variant'
 import { daemonBuild } from '../lib/version'
 
@@ -26,13 +27,20 @@ import { daemonBuild } from '../lib/version'
 const DAEMON_VERSION = packageJson.version
 
 export type DaemonContext = ShutdownContext & {
-  connected: boolean
   shutdown: () => Promise<void>
 }
 
 /**
- * Boots the daemon end-to-end: app service, single-instance lock, SDK
- * connection, scheduled background services, IPC server, signal handlers.
+ * Boots the daemon end-to-end: app service, single-instance lock, scheduled
+ * background services, IPC servers, signal handlers, then the indexer
+ * sign-in.
+ *
+ * The sockets come before the sign-in. Reaching the indexer takes as long as
+ * the network does, which is the SDK's request timeout when packets go
+ * unanswered, and the Finder extension takes the folder offline once nothing
+ * has listened on its socket for five seconds. A daemon that signed in first
+ * could restart into an offline folder.
+ *
  * Booted by `sia daemon start`, detached by default or in the terminal with
  * `--foreground`.
  */
@@ -53,20 +61,15 @@ export async function startServices(dataDir?: string): Promise<DaemonContext> {
   const lock = acquireLockOrExit(getPaths(dir))
   await applyForcedReset(getPaths(dir), cliVariant())
   const app = await createCliAppService(dir, { handoffDir })
-
-  let connected = false
-  try {
-    connected = await connectSdk(app)
-  } catch (e) {
-    logger.warn('daemon', 'sdk_connect_failed', { error: e as Error })
-  }
+  const signIn = createSignIn(app)
 
   const { scheduler } = initializeScheduler(app)
 
+  // Connected is false until the sign-in below succeeds, which rewrites it.
   writeState(app.paths.statePath, {
     pid: process.pid,
     startedAt: Date.now(),
-    connected,
+    connected: false,
   })
 
   // Declared before either is built because the IPC server's `shutdown` calls
@@ -78,9 +81,13 @@ export async function startServices(dataDir?: string): Promise<DaemonContext> {
   }
   // Cache mutations reach this socket only. A storage-provider shell holds no
   // caches, so the provider socket carries the change signal alone.
-  const surface = buildIpcSurface(app, () => {
-    void shutdown()
-  })
+  const surface = buildIpcSurface(
+    app,
+    () => {
+      void shutdown()
+    },
+    signIn,
+  )
   const ipcServer = startIpcDispatcher(app, app.paths.sockPath, surface)
   const providerServer = providerSocket
     ? startProviderListener(
@@ -95,18 +102,18 @@ export async function startServices(dataDir?: string): Promise<DaemonContext> {
         surface.shareRequests,
       )
     : undefined
-  ctx = { app, scheduler, ipcServer, providerServer, lock }
+  ctx = { app, scheduler, ipcServer, providerServer, lock, signIn }
 
   attachSignalHandlers(shutdown)
+  signIn.start()
 
-  return { ...ctx, connected, shutdown }
+  return { ...ctx, shutdown }
 }
 
 export async function startDaemon(dataDir?: string): Promise<void> {
-  const ctx = await startServices(dataDir)
+  await startServices(dataDir)
   logger.info('daemon', 'started', {
     pid: process.pid,
-    connected: ctx.connected,
     build: daemonBuild() ?? 'unstamped',
     startedBy: daemonStarter(),
   })
