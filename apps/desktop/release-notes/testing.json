@@ -1,51 +1,19 @@
 {
-  "version": "0.0.2-rc.3",
-  "sinceCandidate": {
-    "from": "0.0.2-rc.2",
-    "items": [
-      {
-        "text": "The Activity tab now shows each recent file with its thumbnail or file type icon.",
-        "platforms": ["macos"]
-      },
-      {
-        "text": "The status line and setup now use one shared progress ring instead of mixed loading indicators.",
-        "platforms": ["macos"]
-      }
-    ]
-  },
+  "version": "0.0.3-rc.0",
+  "sinceCandidate": null,
   "sinceRelease": {
-    "from": "0.0.1",
+    "from": "0.0.2",
     "items": [
       {
-        "text": "Local file management is much stronger, with better cleanup timing, safer removal behavior, and clearer totals for what is stored on this Mac.",
+        "text": "Adjusted upload behavior for repeated saves so quick edit bursts send far fewer intermediate versions while still prioritizing your latest work.",
         "platforms": ["macos"]
       },
       {
-        "text": "Startup and availability are more reliable, including opening at login, Finder folder recovery at launch, and smoother behavior while services are still starting.",
+        "text": "Fixed version consistency problems after folder renames or moves and improved snapshot links so they keep pointing to the version that was shared.",
         "platforms": ["macos"]
       },
       {
-        "text": "The Activity tab now supports faster file follow-up, including Finder reveal, one-click sharing, and consistent file ordering on shared links.",
-        "platforms": ["macos"]
-      },
-      {
-        "text": "Finder presentation is improved with file thumbnails, upload status visibility, and window colors that match light and dark mode.",
-        "platforms": ["macos"]
-      },
-      {
-        "text": "Folder trash and restore behavior is now consistent across devices, including restoring files back into their original folder paths.",
-        "platforms": ["macos"]
-      },
-      {
-        "text": "Files replaced from another device no longer mix old and new content while being read.",
-        "platforms": ["macos"]
-      },
-      {
-        "text": "Updates and upload progress are more dependable, with clearer progress display, fresher downloaded updates, storage-full handling, and retry behavior that backs off before trying again.",
-        "platforms": ["macos"]
-      },
-      {
-        "text": "Files moved to trash before upload now leave the upload queue and stay unshared until restored.",
+        "text": "Updated replaced-version handling so older local saves are tracked in history, reflected in status, moved to Trash after replacement, and restorable as the current file.",
         "platforms": ["macos"]
       }
     ]

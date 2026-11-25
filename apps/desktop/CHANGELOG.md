@@ -1,3 +1,14 @@
+## 0.0.3-rc.0 (2026-11-25)
+
+### Fixes
+
+- A file saved again and again in the Finder folder while offline or behind on uploads uploads only its newest save, instead of every save in turn. A save that a share link names, or that has started uploading, still uploads.
+- Renaming or moving a folder in Finder no longer brings back an older version of a file in it on this Mac or your other devices.
+- A file saved again within 30 seconds in the Finder folder waits to upload until the saves stop for 30 seconds, or for at most 2 minutes, so an app that saves every few seconds uploads a few versions instead of hundreds. A file's first save, a save after a longer pause and a newly added file upload at once as before, and sharing a waiting file uploads it at once.
+- A snapshot link made before a file finished uploading shows the version that was shared, even when the file was saved again before that version uploaded.
+- Older versions of a file move to the Trash a day after a newer version replaces them on the device, once both have uploaded, and are deleted for good 30 days later like anything else in the Trash. A version restored from the Trash comes back as the current version.
+- A version saved on this device that a newer version replaced before it uploaded now uploads and joins the file's version history on every device, and the status counts it as waiting to upload, or as failed while it cannot be read.
+
 ## 0.0.2 (2026-11-20)
 
 ### Features

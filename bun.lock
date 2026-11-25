@@ -55,7 +55,7 @@
     },
     "apps/desktop": {
       "name": "@siastorage/desktop",
-      "version": "0.0.2",
+      "version": "0.0.3-rc.0",
       "dependencies": {
         "@scure/bip39": "2.4.0",
         "@siastorage/core": "workspace:*",
