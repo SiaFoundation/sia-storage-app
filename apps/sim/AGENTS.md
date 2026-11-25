@@ -152,21 +152,31 @@ checks it out in a worktree of its own on the VM's Dev Drive, installs and
 builds whatever changed, and launches Electron and its daemon from source in
 the VM's signed-in desktop session. `up` on a Windows device that is already
 running starts it again only when the checkout has changed, so running `up`
-after an edit is how a change reaches the VM. The app has no Explorer folder
-yet and runs as the Mac app does from source.
+after an edit is how a change reaches the VM. The app serves its File Explorer
+folder as it does for a person, through the provider process it starts.
 
 The VM reaches the session's network at this Mac's address on Parallels'
 shared network, where the network serves the app's routes only. The device
 signs in through the network's account like a CLI device, and its calls,
 queries, logs and screenshots go through the VM's agent. `device open` shows
 the app's window, and `device screenshot` saves the VM's screen. The window
-cannot be driven yet, and `addFile` and scenarios do not take Windows devices.
+cannot be driven yet, and `addFile` does not take a Windows device, so a
+scenario adds files through the folder or on another device. Each start waits
+until the provider it started serves the folder and the app has told the
+daemon of it. Its library is in the test account's profile on `C:`, which is
+NTFS as a person's PC is, and not on the Dev Drive, which is ReFS and hides
+what a write costs on NTFS.
 
 The VM's desktop session runs one copy of the app, so one Windows device runs
 at a time across every checkout on this Mac, and a second waits for the first,
 the way the macOS test build is leased. A device's first start clears its
-folder in the VM, and `down --clean` deletes it, and `prune --all` stops an
-app a Windows device left running when no session holds the VM.
+folder in the VM and removes the app's File Explorer folder, with everything
+Windows listed or downloaded for it. `down --clean` does both again, and
+`prune --all` stops an app a Windows device left running when no session
+holds the VM. Handing a device back deletes its folder in the VM, so a failed
+run first copies the app's, the daemon's and the provider's logs, a copy of
+the app's database, an `explorer.json` of the folder and a screenshot into
+the device's directory in the session.
 
 ### The Windows VM
 
@@ -248,7 +258,10 @@ bun sim device tray mac                 # the status popover
 bun sim device finder-state mac a.png   # downloaded, extension, type
 bun sim device download mac a.png       # reads it through Finder
 bun sim up --cli= --windows win         # the desktop app in the Windows VM, again after an edit
+bun sim device explorer-state win a.bin # size, cloud-only, pinned, in sync
+bun sim device show win                 # its File Explorer folder in an Explorer window
 bun sim device screenshot win shot.png  # the VM's screen
+bun sim run windows/                    # the File Explorer folder's scenarios, in the VM
 bun sim down --clean
 ```
 
@@ -298,11 +311,22 @@ The kill itself needs a real phone.
 ## Scenarios
 
 A scenario is a file in `scenarios/` ending `.scenario.ts`. It declares its
-devices as `cli`, `phone`, `desktop` or `desktop-signed-out`, runs steps, and
-records checks. Each device arrives typed by its kind, so a `cli` device has
+devices as `cli`, `phone`, `desktop`, `desktop-signed-out` or `windows`, runs
+steps, and records checks. Each device arrives typed by its kind, so a `cli` device has
 `cli()`, `stage()` and `mount()`, a `phone` has `ui()` and `importFiles()`, and a `desktop`
 device has `finderList()`, `finderRead()`, `finderWrite()`, `finderRename()`,
-`finderRemove()`, `isCloudOnly()` and `extensionLog()`.
+`finderRemove()`, `isCloudOnly()` and `extensionLog()`. A `windows` device has
+the same for its File Explorer folder, `explorerList()`, `explorerRead()`,
+`explorerWrite()`, `explorerRename()`, `explorerRemove()` and `isCloudOnly()`,
+with `freeUpSpace()` and `keepOnDevice()`, which choose those commands from
+File Explorer's own menu for the file, `explorerHash()` and `diskWritten()`
+for a file too large to bring to this Mac, and `killDaemon()`. Each is an
+ordinary file operation made in the VM by the agent, which reaches the app's
+provider through Windows. `explorerState()` is its `finderState()`. It reads
+what File Explorer draws a file's status icon from, whether the file is
+cloud-only, pinned or unpinned and whether its placeholder is in sync, which
+is the tick against the sync-pending arrows. `providerLog()` is its
+`extensionLog()`.
 
 A `cli` device's `mount()` stands in for a file manager's folder, which a
 daemon alone does not have. It keeps a copy of each file opened or created
@@ -333,6 +357,7 @@ an upload being in flight before a kill, so a missed window reads as ERROR
 rather than as a product failure.
 A scenario with a `desktop` device on a machine that cannot run one, off macOS
 or without the test build installed, is a SKIP, which does not fail the run.
+So is one with a `windows` device where Parallels or the VM is missing.
 
 A failed scenario keeps its session directory, with every device's database,
 log and a screenshot per phone, and the report names it. A phone's `ui.log`
@@ -494,4 +519,6 @@ report that exists only on the machine that ran it, so it stays out of the
 description.
 
 Screenshots come from phones and the desktop app's windows, never from Finder,
-whose window shows every other folder on the Mac.
+whose window shows every other folder on the Mac. The Windows VM is a test
+machine with nothing else on it, so a screenshot of its File Explorer window,
+opened with `device show`, is fine.
