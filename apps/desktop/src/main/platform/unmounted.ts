@@ -1,5 +1,5 @@
 /*
- * The integration for an OS with no storage-provider shell yet, Windows and
+ * The integration for an OS with no storage-provider shell yet, which is
  * Linux today. The app runs as it does from source on macOS: the tray, the
  * window and the daemon work, and the status view reports the file manager
  * folder as unsupported rather than failed. With no shell there is no shell

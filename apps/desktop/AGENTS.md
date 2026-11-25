@@ -67,7 +67,7 @@ New surface goes in TypeScript.
 
 On Windows the folder in File Explorer is a Cloud Files sync root, and Windows
 loads nothing to serve one, so the app runs a provider process of its own for
-as long as it runs. The provider is a Bun
+as long as it runs (`src/main/platform/win32.ts`). The provider is a Bun
 program in `native/windows/provider`, run under the daemon's runtime. It
 reaches Windows through Bun's FFI and a C shim Bun compiles when it connects,
 so it has no build step. It calls `app.provider` on the daemon's provider

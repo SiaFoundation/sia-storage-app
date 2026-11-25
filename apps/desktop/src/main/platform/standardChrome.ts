@@ -25,12 +25,14 @@ const BACKGROUND = { dark: '#202020', light: '#f3f3f3' }
 
 const background = () => (nativeTheme.shouldUseDarkColors ? BACKGROUND.dark : BACKGROUND.light)
 
-/** An icon in `assets/icons`, with `-beta` before `.ico` for the beta build. None off Windows. */
-function icon(name: string): string | undefined {
-  if (process.platform !== 'win32') return undefined
+/** A Windows icon in `assets/icons`, with `-beta` before `.ico` for the beta build. */
+export function windowsIcon(name: string): string {
   const suffix = buildVariant() === 'beta' ? '-beta' : ''
   return join(__dirname, '../../assets/icons', `${name}${suffix}.ico`)
 }
+
+/** None off Windows, where Electron loads no .ico file. */
+const icon = (name: string) => (process.platform === 'win32' ? windowsIcon(name) : undefined)
 
 export const standardChrome: WindowChrome = {
   mainWindow: () => ({

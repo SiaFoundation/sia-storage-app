@@ -54,7 +54,7 @@ export function slides(finderName: string): Slide[] {
       caption: 'The same folders, wherever you sign in.',
     },
   ]
-  return terms.hasFolder ? all : all.filter((slide) => slide.id !== 'finder')
+  return terms.folderArt ? all : all.filter((slide) => slide.id !== 'finder')
 }
 
 /** The slide `step` away from `index`, held within the tour. */
